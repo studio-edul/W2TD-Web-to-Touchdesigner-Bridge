@@ -45,6 +45,13 @@ const Visualization = (() => {
         { key: 'orient_g', label: 'γ', color: '#ff55aa', axis: 'gamma', norm: v => v / 90 },
       ],
     },
+    {
+      key: 'mic',
+      label: 'Mic\nlevel',
+      channels: [
+        { key: 'mic_level', label: 'L', color: '#ff66aa', axis: 'level', norm: v => (v - 0.5) * 2 }, // 0→bottom, 1→top
+      ],
+    },
   ];
 
   // Init history buffers
@@ -82,13 +89,20 @@ const Visualization = (() => {
   function update(sensorData) {
     if (!ctx) return;
 
-    const activeGroups = groups.filter(g => sensorData[g.key] != null);
+    const activeGroups = groups.filter(g => {
+      if (g.key === 'mic') return sensorData.micLevel != null;
+      return sensorData[g.key] != null;
+    });
 
     activeGroups.forEach(g => {
       g.channels.forEach(ch => {
         const buf = history[ch.key];
         buf.copyWithin(0, 1);
-        buf[HISTORY_LENGTH - 1] = sensorData[g.key][ch.axis] || 0;
+        if (g.key === 'mic') {
+          buf[HISTORY_LENGTH - 1] = sensorData.micLevel ?? 0;
+        } else {
+          buf[HISTORY_LENGTH - 1] = sensorData[g.key][ch.axis] || 0;
+        }
       });
     });
 

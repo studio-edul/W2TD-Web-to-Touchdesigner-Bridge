@@ -169,7 +169,6 @@
 
     const startSensorsAndBroadcast = () => {
       if (!SensorModule.isEnabled()) SensorModule.startListening();
-      if (WSClient.isConnected() && !broadcasting) startBroadcast();
     };
 
     if (SensorModule.needsPermissionRequest()) {
@@ -205,14 +204,6 @@
     initLogViewer();
     renderSensorList();
     SensorModule.setDebugCallback((msg) => updateDebug(msg));
-
-    // Periodically ensure broadcast is running when conditions are met
-    setInterval(() => {
-      if (WSClient.isConnected() && SensorModule.isEnabled() && !broadcasting) {
-        addLog('Auto-starting broadcast (retry)', 'info');
-        startBroadcast();
-      }
-    }, 2000);
 
     const td = new URLSearchParams(window.location.search).get('td');
     if (td) {
@@ -349,11 +340,8 @@
         if (status === 'connected') {
           WSClient.send({ type: 'hello' });
           addLog('Hello sent to TD', 'info');
-          if (SensorModule.isEnabled() && !broadcasting) {
-            addLog('Auto-starting broadcast', 'info');
-            startBroadcast();
-          } else if (!SensorModule.isEnabled() && devMode) {
-            addLog('Sensors not enabled - tap Enable Sensors', 'warn');
+          if (!SensorModule.isEnabled() && devMode) {
+            addLog('Enable Sensors 후 Start Broadcast를 눌러 전송 시작', 'warn');
           }
           if (SensorModule.isEnabled() && micEnabled && !WebRTCModule.isMicActive()) {
             _startWebRTC();
@@ -458,10 +446,6 @@
       }
     }
 
-    if (WSClient.isConnected() && !broadcasting) {
-      startBroadcast();
-    }
-
     if (SensorModule.isSimulating()) {
       els.btnEnableSensors.textContent = 'Deactivate (Simulating)';
     } else {
@@ -478,6 +462,7 @@
     if (vizLoopId) return;
     function loop() {
       const data = SensorModule.getData();
+      if (WebRTCModule.isMicActive()) data.micLevel = WebRTCModule.getMicLevel();
       Visualization.update(data);
       vizLoopId = requestAnimationFrame(loop);
     }

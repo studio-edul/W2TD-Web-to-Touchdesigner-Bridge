@@ -26,6 +26,8 @@ const WebRTCModule = (() => {
   let micActive = false;
   let _onStateChange = null; // callback(state) where state = 'connecting'|'connected'|'failed'|'closed'
   let _lastError = null;   // last getUserMedia error name (e.g. 'NotAllowedError')
+  let _audioCtx = null;
+  let _analyser = null;
 
   // ── Public API ─────────────────────────────────────────────────────────────
 
@@ -53,6 +55,18 @@ const WebRTCModule = (() => {
 
     // 2. Show local preview if camera is active
     _updatePreview(localStream);
+
+    // 2b. Set up audio analyser for mic level visualization
+    if (micActive && localStream.getAudioTracks().length > 0) {
+      try {
+        _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const source = _audioCtx.createMediaStreamSource(localStream);
+        _analyser = _audioCtx.createAnalyser();
+        _analyser.fftSize = 256;
+        _analyser.smoothingTimeConstant = 0.8;
+        source.connect(_analyser);
+      } catch (e) { console.warn('[WOB WebRTC] Audio analyser setup failed:', e); }
+    }
 
     // 3. Create peer connection
     pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
@@ -98,6 +112,8 @@ const WebRTCModule = (() => {
 
   /** Stop all streams and close peer connection. */
   async function stop() {
+    if (_audioCtx) { _audioCtx.close(); _audioCtx = null; }
+    _analyser = null;
     if (localStream) {
       localStream.getTracks().forEach(t => t.stop());
       localStream = null;
@@ -146,6 +162,20 @@ const WebRTCModule = (() => {
   function isCameraActive() { return cameraActive; }
   function isMicActive() { return micActive; }
 
+  /** Get current mic level (0–1) for visualization. */
+  function getMicLevel() {
+    if (!_analyser || !_audioCtx) return 0;
+    if (_audioCtx.state === 'suspended') _audioCtx.resume();
+    const data = new Uint8Array(_analyser.fftSize);
+    _analyser.getByteTimeDomainData(data);
+    let sum = 0;
+    for (let i = 0; i < data.length; i++) {
+      const n = (data[i] - 128) / 128;
+      sum += n * n;
+    }
+    return Math.min(1, Math.sqrt(sum / data.length));
+  }
+
   // ── Private helpers ────────────────────────────────────────────────────────
 
   function _setState(state) {
@@ -165,5 +195,5 @@ const WebRTCModule = (() => {
   }
 
   return { start, stop, handleAnswer, handleIce, onStateChange, isActive, isCameraActive, isMicActive,
-           getLastError: () => _lastError };
+           getMicLevel, getLastError: () => _lastError };
 })();
