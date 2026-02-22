@@ -659,6 +659,27 @@ input[type="checkbox"] {
   color: var(--primary);
 }
 
+/* ===== Toast (quick disappearing message) ===== */
+.wob-toast {
+  position: fixed;
+  bottom: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 16px;
+  background: rgba(255, 70, 85, 0.95);
+  color: #fff;
+  font-size: 13px;
+  border-radius: 8px;
+  z-index: 9998;
+  animation: wob-toast-fade 2.8s ease-out forwards;
+  max-width: 85%;
+  text-align: center;
+}
+@keyframes wob-toast-fade {
+  0%, 70% { opacity: 1; }
+  100% { opacity: 0; visibility: hidden; }
+}
+
 /* ===== Safe area (notch) ===== */
 @supports (padding-top: env(safe-area-inset-top)) {
   #top-bar {

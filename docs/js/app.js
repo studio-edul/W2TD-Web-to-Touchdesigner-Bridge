@@ -328,6 +328,9 @@
           } else if (!SensorModule.isEnabled() && devMode) {
             addLog('Sensors not enabled - tap Enable Sensors', 'warn');
           }
+          if (SensorModule.isEnabled() && micEnabled && !WebRTCModule.isMicActive()) {
+            _startWebRTC();
+          }
         }
         // If connection fails while loading screen is up, fall back to modal
         if ((status === 'error' || status === 'rejected' || status === 'disconnected') &&
@@ -389,9 +392,11 @@
 
     if (SensorModule.isEnabled()) {
       SensorModule.stopListening();
+      if (WebRTCModule.isMicActive()) await WebRTCModule.stop();
       els.btnEnableSensors.textContent = 'Enable Sensors';
       els.btnEnableSensors.classList.remove('btn-active');
       updateDebug('Sensors deactivated');
+      micEnabled = false;
       renderSensorList();
       return;
     }
@@ -409,6 +414,22 @@
     }
 
     SensorModule.startListening();
+    micEnabled = true;
+
+    if (WSClient.isConnected() && !WebRTCModule.isMicActive()) {
+      const ok = await WebRTCModule.start({ camera: cameraEnabled, mic: true });
+      if (ok === false) {
+        micEnabled = false;
+        const err = WebRTCModule.getLastError();
+        if (err === 'NotAllowedError' || err === 'PermissionDeniedError') {
+          showToast('마이크 권한 거부 — 브라우저 설정에서 허용해주세요');
+        } else if (err === 'NotFoundError') {
+          showToast('마이크를 찾을 수 없습니다');
+        } else {
+          showToast('마이크 활성화 실패');
+        }
+      }
+    }
 
     if (WSClient.isConnected() && !broadcasting) {
       startBroadcast();
@@ -625,6 +646,19 @@
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
   }
 
+  function showToast(msg, duration = 2800) {
+    let el = document.getElementById('wob-toast');
+    if (el) el.remove();
+    el = document.createElement('div');
+    el.id = 'wob-toast';
+    el.className = 'wob-toast';
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => {
+      if (el.parentNode) el.remove();
+    }, duration);
+  }
+
   function updateDebug(msg) {
     addLog(msg, 'info');
   }
@@ -660,7 +694,14 @@
 
   async function _startWebRTC() {
     if (!WSClient.isConnected()) return;
-    await WebRTCModule.start({ camera: cameraEnabled, mic: micEnabled });
+    const ok = await WebRTCModule.start({ camera: cameraEnabled, mic: micEnabled });
+    if (ok === false && micEnabled) {
+      const err = WebRTCModule.getLastError();
+      let msg = '마이크 활성화 실패';
+      if (err === 'NotAllowedError' || err === 'PermissionDeniedError') msg = '마이크 권한 거부';
+      else if (err === 'NotFoundError') msg = '마이크를 찾을 수 없습니다';
+      showToast(msg);
+    }
   }
 
   async function handleCameraToggle() {
@@ -693,13 +734,17 @@
     if (ok === false) {
       micEnabled = false;
       const err = WebRTCModule.getLastError();
+      let toastMsg = '마이크 활성화 실패';
       if (err === 'NotAllowedError' || err === 'PermissionDeniedError') {
+        toastMsg = '마이크 권한 거부 — 브라우저 설정에서 허용해주세요';
         addLog('마이크 권한 거부됨 — 브라우저 설정에서 이 사이트의 마이크 권한을 허용해주세요', 'error');
       } else if (err === 'NotFoundError') {
+        toastMsg = '마이크를 찾을 수 없습니다';
         addLog('마이크를 찾을 수 없습니다 (장치 없음)', 'error');
       } else {
         addLog('마이크 시작 실패: ' + (err || 'unknown'), 'error');
       }
+      showToast(toastMsg);
       renderSensorList();
     }
   }
