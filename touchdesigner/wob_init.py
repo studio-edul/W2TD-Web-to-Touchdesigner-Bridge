@@ -76,23 +76,10 @@ def generate():
 		print('[WOB] qrcode not installed. Run op("wob_setup").module.install() first.')
 		return
 
-	# 2. Start Cloudflare tunnel
-	url = None
-	try:
-		from pycloudflared import try_cloudflare
-		print('[WOB] Starting Cloudflare tunnel... (no signup required)')
-		result = try_cloudflare(port=9980)
-		url = result.tunnel  # e.g. "https://xxxx.trycloudflare.com"
-		print(f'[WOB] Cloudflare URL: {url}')
-	except ImportError:
-		print('[WOB] pycloudflared not installed. Run op("wob_setup").module.install() first.')
-	except Exception as e:
-		print(f'[WOB] Cloudflare tunnel failed: {e} — falling back to local HTTPS')
-
-	if url is None:
-		ip = get_local_ip()
-		url = f'https://{ip}:9980'
-		print(f'[WOB] Local URL: {url}')
+	# 2. 내부 네트워크 전용 — 로컬 IP만 사용 (cloudflared 비활성화)
+	ip = get_local_ip()
+	url = f'https://{ip}:9980'
+	print(f'[WOB] Local URL (내부 네트워크): {url}')
 
 	op('/').store('wob_url', url)  # Store URL internally for callbacks.py
 

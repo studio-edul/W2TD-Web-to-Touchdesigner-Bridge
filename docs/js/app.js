@@ -118,7 +118,6 @@
     if (cfg.sensor_microphone != null) {
       micEnabled = !!parseInt(cfg.sensor_microphone);
       renderSensorList();
-      if (micEnabled && !WebRTCModule.isMicActive()) _startWebRTC();
     }
     let audioProcChanged = false;
     if (cfg.audio_echo_cancellation != null) {
@@ -383,9 +382,6 @@
           if (!SensorModule.isEnabled() && devMode) {
             addLog('Enable Sensors 후 Start Broadcast를 눌러 전송 시작', 'warn');
           }
-          if (SensorModule.isEnabled() && micEnabled && !WebRTCModule.isMicActive()) {
-            _startWebRTC();
-          }
         }
         // If connection fails while loading screen is up, fall back to modal
         if ((status === 'error' || status === 'rejected' || status === 'disconnected') &&
@@ -472,6 +468,7 @@
     micEnabled = true;
 
     if (WSClient.isConnected() && !WebRTCModule.isMicActive()) {
+      showToast('마이크는 TouchDesigner와 같은 내부 네트워크(같은 Wi‑Fi)에서만 사용 가능합니다.', 4000);
       const ok = await WebRTCModule.start(_webrtcStartOpts({
         camera: cameraEnabled, mic: true,
         echoCancellation: audioEchoCancellation,
@@ -794,6 +791,7 @@
     micEnabled = true;
     renderSensorList();
 
+    showToast('마이크는 TouchDesigner와 같은 내부 네트워크(같은 Wi‑Fi)에서만 사용 가능합니다.', 4000);
     const ok = await WebRTCModule.start(_webrtcStartOpts({
       camera: cameraEnabled, mic: true,
       echoCancellation: audioEchoCancellation,
