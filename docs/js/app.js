@@ -105,12 +105,12 @@
       localStorage.setItem('wob-dev-mode', String(cfg.dev_mode));
       applyDevMode(!!parseInt(cfg.dev_mode));
     }
-    if (cfg.camera != null) {
-      cameraEnabled = !!parseInt(cfg.camera);
-      if (cameraEnabled && !WebRTCModule.isCameraActive()) _startWebRTC();
+    if (cfg.sensor_camera != null) {
+      cameraEnabled = !!parseInt(cfg.sensor_camera);
     }
-    if (cfg.microphone != null) {
-      micEnabled = !!parseInt(cfg.microphone);
+    if (cfg.sensor_microphone != null) {
+      micEnabled = !!parseInt(cfg.sensor_microphone);
+      renderSensorList();
       if (micEnabled && !WebRTCModule.isMicActive()) _startWebRTC();
     }
   }
@@ -680,23 +680,26 @@
     if (WebRTCModule.isMicActive()) {
       await WebRTCModule.stop();
       micEnabled = false;
-    } else {
-      const ok = await WebRTCModule.start({ camera: cameraEnabled, mic: true });
-      if (ok === false) {
-        micEnabled = false;
-        const err = WebRTCModule.getLastError();
-        if (err === 'NotAllowedError' || err === 'PermissionDeniedError') {
-          addLog('마이크 권한 거부됨 — 브라우저 설정에서 이 사이트의 마이크 권한을 허용해주세요', 'error');
-        } else if (err === 'NotFoundError') {
-          addLog('마이크를 찾을 수 없습니다 (장치 없음)', 'error');
-        } else {
-          addLog('마이크 시작 실패: ' + (err || 'unknown'), 'error');
-        }
-      } else {
-        micEnabled = true;
-      }
+      renderSensorList();
+      return;
     }
+    // Mark as enabled immediately so UI turns green right away
+    micEnabled = true;
     renderSensorList();
+
+    const ok = await WebRTCModule.start({ camera: cameraEnabled, mic: true });
+    if (ok === false) {
+      micEnabled = false;
+      const err = WebRTCModule.getLastError();
+      if (err === 'NotAllowedError' || err === 'PermissionDeniedError') {
+        addLog('마이크 권한 거부됨 — 브라우저 설정에서 이 사이트의 마이크 권한을 허용해주세요', 'error');
+      } else if (err === 'NotFoundError') {
+        addLog('마이크를 찾을 수 없습니다 (장치 없음)', 'error');
+      } else {
+        addLog('마이크 시작 실패: ' + (err || 'unknown'), 'error');
+      }
+      renderSensorList();
+    }
   }
 
   document.addEventListener('DOMContentLoaded', init);

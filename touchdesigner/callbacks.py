@@ -110,8 +110,8 @@ def _config_msg(cfg):
 		'sensor_geolocation': int(cfg.get('sensor_geolocation', 0)),
 		'sensor_touch':       int(cfg.get('sensor_touch', 1)),
 		'dev_mode':           int(cfg.get('dev_mode', 1)),
-		'camera':             int(cfg.get('camera', 0)),
-		'microphone':         int(cfg.get('microphone', 0)),
+		'sensor_camera':      int(cfg.get('sensor_camera', 0)),
+		'sensor_microphone':  int(cfg.get('sensor_microphone', 0)),
 	}
 
 
