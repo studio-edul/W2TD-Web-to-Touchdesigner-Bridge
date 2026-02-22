@@ -476,6 +476,11 @@ input[type="checkbox"] {
   font-weight: 400;
 }
 
+.sensor-list li.available.selected.rtc-connected {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
 .sensor-icon {
   margin-right: 4px;
 }

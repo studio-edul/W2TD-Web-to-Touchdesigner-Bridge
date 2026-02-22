@@ -51,8 +51,6 @@
     els.userStartOverlay = $('user-start-overlay');
     els.btnUserStart = $('btn-user-start');
     els.wobLoading = $('wob-loading');
-    els.btnCamera = $('btn-camera');
-    els.btnMic = $('btn-mic');
   }
 
   function loadSettings() {
@@ -236,20 +234,9 @@
     els.btnTrigger.addEventListener('pointerdown', () => els.btnTrigger.classList.add('triggered'));
     els.btnTrigger.addEventListener('pointerup', sendTrigger);
     els.btnTrigger.addEventListener('pointercancel', () => els.btnTrigger.classList.remove('triggered'));
-    if (els.btnCamera) els.btnCamera.addEventListener('click', handleCameraToggle);
-    if (els.btnMic) els.btnMic.addEventListener('click', handleMicToggle);
-
-    // WebRTC state changes → update button styles
+    // WebRTC state changes → re-render sensor list to reflect mic state
     WebRTCModule.onStateChange((state) => {
-      const connected = state === 'connected';
-      if (els.btnCamera && !els.btnCamera.disabled) {
-        els.btnCamera.classList.toggle('rtc-connected', connected && WebRTCModule.isCameraActive());
-        els.btnCamera.classList.toggle('btn-active', WebRTCModule.isCameraActive() && !connected);
-      }
-      if (els.btnMic) {
-        els.btnMic.classList.toggle('rtc-connected', connected && WebRTCModule.isMicActive());
-        els.btnMic.classList.toggle('btn-active', WebRTCModule.isMicActive() && !connected);
-      }
+      renderSensorList();
       addLog('WebRTC: ' + state, state === 'connected' ? 'info' : state === 'failed' ? 'error' : 'warn');
     });
 
@@ -287,6 +274,35 @@
 
       els.sensorList.appendChild(li);
     });
+
+    // Camera item — Pro license required, always shown as unavailable
+    {
+      const li = document.createElement('li');
+      li.className = 'unavailable';
+      li.innerHTML = `<span class="sensor-icon">&#x1F4F7;</span> Camera <small>(Pro)</small>`;
+      els.sensorList.appendChild(li);
+    }
+
+    // Mic item — toggleable via WebRTC
+    {
+      const li = document.createElement('li');
+      const micAvail = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+      if (!micAvail) {
+        li.className = 'unavailable';
+      } else if (micEnabled) {
+        li.className = 'available selected' + (WebRTCModule.isMicActive() ? ' rtc-connected' : '');
+      } else {
+        li.className = 'available deselected';
+      }
+      li.innerHTML = `<span class="sensor-icon">&#x1F3A4;</span> Microphone`;
+      if (micAvail) {
+        li.addEventListener('click', () => {
+          handleMicToggle();
+          haptic(15);
+        });
+      }
+      els.sensorList.appendChild(li);
+    }
   }
 
   function handleConnect(autoConnect = false) {
@@ -653,12 +669,11 @@
     if (WebRTCModule.isCameraActive()) {
       await WebRTCModule.stop();
       cameraEnabled = false;
-      els.btnCamera.classList.remove('btn-active', 'rtc-connected');
     } else {
       cameraEnabled = true;
-      els.btnCamera.classList.add('btn-active');
       await WebRTCModule.start({ camera: true, mic: micEnabled });
     }
+    renderSensorList();
   }
 
   async function handleMicToggle() {
@@ -666,12 +681,11 @@
     if (WebRTCModule.isMicActive()) {
       await WebRTCModule.stop();
       micEnabled = false;
-      els.btnMic.classList.remove('btn-active', 'rtc-connected');
     } else {
       micEnabled = true;
-      els.btnMic.classList.add('btn-active');
       await WebRTCModule.start({ camera: cameraEnabled, mic: true });
     }
+    renderSensorList();
   }
 
   document.addEventListener('DOMContentLoaded', init);
