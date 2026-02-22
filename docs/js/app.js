@@ -236,13 +236,13 @@
     els.btnTrigger.addEventListener('pointerdown', () => els.btnTrigger.classList.add('triggered'));
     els.btnTrigger.addEventListener('pointerup', sendTrigger);
     els.btnTrigger.addEventListener('pointercancel', () => els.btnTrigger.classList.remove('triggered'));
-    els.btnCamera.addEventListener('click', handleCameraToggle);
-    els.btnMic.addEventListener('click', handleMicToggle);
+    if (els.btnCamera) els.btnCamera.addEventListener('click', handleCameraToggle);
+    if (els.btnMic) els.btnMic.addEventListener('click', handleMicToggle);
 
     // WebRTC state changes → update button styles
     WebRTCModule.onStateChange((state) => {
       const connected = state === 'connected';
-      if (els.btnCamera) {
+      if (els.btnCamera && !els.btnCamera.disabled) {
         els.btnCamera.classList.toggle('rtc-connected', connected && WebRTCModule.isCameraActive());
         els.btnCamera.classList.toggle('btn-active', WebRTCModule.isCameraActive() && !connected);
       }

@@ -283,6 +283,12 @@ input[type="checkbox"] {
   background: var(--border);
 }
 
+.btn-small:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .btn-trigger {
   flex-shrink: 0;
   padding: 18px 24px;
