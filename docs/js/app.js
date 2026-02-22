@@ -13,7 +13,7 @@
   let devMode = true; // true = full UI, false = minimal/auto mode
   let vizInitialized = false;
   let cameraEnabled = false; // config: auto-enable camera on connect
-  let micEnabled = false;    // config: auto-enable mic on connect
+  let micEnabled = false;    // config: wob_config sensor_microphone에서 로드
   let audioEchoCancellation = false;  // config: 0=raw, 1=on
   let audioNoiseSuppression = false;
   let audioAutoGain = false;
@@ -447,7 +447,6 @@
       els.btnEnableSensors.textContent = 'Enable Sensors';
       els.btnEnableSensors.classList.remove('btn-active');
       updateDebug('Sensors deactivated');
-      micEnabled = false;
       renderSensorList();
       return;
     }
@@ -465,12 +464,11 @@
     }
 
     SensorModule.startListening();
-    micEnabled = true;
 
-    if (WSClient.isConnected() && !WebRTCModule.isMicActive()) {
+    if (WSClient.isConnected() && micEnabled && !WebRTCModule.isMicActive()) {
       showToast('마이크는 TouchDesigner와 같은 내부 네트워크(같은 Wi‑Fi)에서만 사용 가능합니다.', 4000);
       const ok = await WebRTCModule.start(_webrtcStartOpts({
-        camera: cameraEnabled, mic: true,
+        camera: cameraEnabled, mic: micEnabled,
         echoCancellation: audioEchoCancellation,
         noiseSuppression: audioNoiseSuppression,
         autoGainControl: audioAutoGain,
@@ -787,32 +785,34 @@
       renderSensorList();
       return;
     }
-    // Enable path: show green immediately, then start stream
+    // Enable path: 선택만 변경. WebRTC는 Enable Sensors 시에만 시작 (권한 팝업은 그때만)
     micEnabled = true;
     renderSensorList();
 
-    showToast('마이크는 TouchDesigner와 같은 내부 네트워크(같은 Wi‑Fi)에서만 사용 가능합니다.', 4000);
-    const ok = await WebRTCModule.start(_webrtcStartOpts({
-      camera: cameraEnabled, mic: true,
-      echoCancellation: audioEchoCancellation,
-      noiseSuppression: audioNoiseSuppression,
-      autoGainControl: audioAutoGain,
-    }));
-    if (ok === false) {
-      micEnabled = false;
-      const err = WebRTCModule.getLastError();
-      let toastMsg = '마이크 활성화 실패';
-      if (err === 'NotAllowedError' || err === 'PermissionDeniedError') {
-        toastMsg = '마이크 권한 거부 — 브라우저 설정에서 허용해주세요';
-        addLog('마이크 권한 거부됨 — 브라우저 설정에서 이 사이트의 마이크 권한을 허용해주세요', 'error');
-      } else if (err === 'NotFoundError') {
-        toastMsg = '마이크를 찾을 수 없습니다';
-        addLog('마이크를 찾을 수 없습니다 (장치 없음)', 'error');
-      } else {
-        addLog('마이크 시작 실패: ' + (err || 'unknown'), 'error');
+    if (SensorModule.isEnabled() && WSClient.isConnected() && !WebRTCModule.isMicActive()) {
+      showToast('마이크는 TouchDesigner와 같은 내부 네트워크(같은 Wi‑Fi)에서만 사용 가능합니다.', 4000);
+      const ok = await WebRTCModule.start(_webrtcStartOpts({
+        camera: cameraEnabled, mic: true,
+        echoCancellation: audioEchoCancellation,
+        noiseSuppression: audioNoiseSuppression,
+        autoGainControl: audioAutoGain,
+      }));
+      if (ok === false) {
+        micEnabled = false;
+        const err = WebRTCModule.getLastError();
+        let toastMsg = '마이크 활성화 실패';
+        if (err === 'NotAllowedError' || err === 'PermissionDeniedError') {
+          toastMsg = '마이크 권한 거부 — 브라우저 설정에서 허용해주세요';
+          addLog('마이크 권한 거부됨 — 브라우저 설정에서 이 사이트의 마이크 권한을 허용해주세요', 'error');
+        } else if (err === 'NotFoundError') {
+          toastMsg = '마이크를 찾을 수 없습니다';
+          addLog('마이크를 찾을 수 없습니다 (장치 없음)', 'error');
+        } else {
+          addLog('마이크 시작 실패: ' + (err || 'unknown'), 'error');
+        }
+        showToast(toastMsg);
+        renderSensorList();
       }
-      showToast(toastMsg);
-      renderSensorList();
     }
   }
 

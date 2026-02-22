@@ -111,7 +111,7 @@ def _config_msg(cfg):
 		'sensor_touch':       int(cfg.get('sensor_touch', 1)),
 		'dev_mode':           int(cfg.get('dev_mode', 1)),
 		'sensor_camera':      int(cfg.get('sensor_camera', 0)),
-		'sensor_microphone':  int(cfg.get('sensor_microphone', 0)),
+		'sensor_microphone':  int(cfg.get('sensor_microphone', 1)),
 		'audio_echo_cancellation':  int(cfg.get('audio_echo_cancellation', 0)),
 		'audio_noise_suppression':  int(cfg.get('audio_noise_suppression', 0)),
 		'audio_auto_gain':          int(cfg.get('audio_auto_gain', 0)),

@@ -49,7 +49,7 @@ const Visualization = (() => {
       key: 'mic',
       label: 'Mic\nlevel',
       channels: [
-        { key: 'mic_level', label: 'L', color: '#ff66aa', axis: 'level', norm: v => (v - 0.5) * 2 }, // 0→bottom, 1→top
+        { key: 'mic_level', label: 'L', color: '#ff66aa', axis: 'level', norm: v => (v - 0.5) * 2, decimals: 3 }, // 0→bottom, 1→top, 소수 3자리로 미세 변화 가시화
       ],
     },
   ];
@@ -198,7 +198,8 @@ const Visualization = (() => {
         const lineY = rowTop + spacing * (ci + 1);
         ctx.fillStyle = ch.color;
         const sign = val >= 0 ? ' ' : '';
-        ctx.fillText(`${ch.label}:${sign}${val.toFixed(1)}`, graphLeft + graphWidth + 4, lineY + 3);
+        const decimals = ch.decimals != null ? ch.decimals : 1;
+        ctx.fillText(`${ch.label}:${sign}${val.toFixed(decimals)}`, graphLeft + graphWidth + 4, lineY + 3);
       });
     });
   }
