@@ -25,6 +25,7 @@ const WebRTCModule = (() => {
   let cameraActive = false;
   let micActive = false;
   let _onStateChange = null; // callback(state) where state = 'connecting'|'connected'|'failed'|'closed'
+  let _lastError = null;   // last getUserMedia error name (e.g. 'NotAllowedError')
 
   // ── Public API ─────────────────────────────────────────────────────────────
 
@@ -33,6 +34,7 @@ const WebRTCModule = (() => {
    * @param {object} opts - { camera: bool, mic: bool }
    */
   async function start({ camera = true, mic = true } = {}) {
+    _lastError = null;
     if (pc) await stop();
 
     // 1. Get user media
@@ -43,9 +45,10 @@ const WebRTCModule = (() => {
       micActive = mic && localStream.getAudioTracks().length > 0;
       console.log('[WOB WebRTC] getUserMedia OK — camera:', cameraActive, 'mic:', micActive);
     } catch (e) {
-      console.error('[WOB WebRTC] getUserMedia failed:', e);
+      _lastError = e.name || 'unknown';
+      console.error('[WOB WebRTC] getUserMedia failed:', e.name, e.message);
       _setState('failed');
-      return;
+      return false;
     }
 
     // 2. Show local preview if camera is active
@@ -161,5 +164,6 @@ const WebRTCModule = (() => {
     }
   }
 
-  return { start, stop, handleAnswer, handleIce, onStateChange, isActive, isCameraActive, isMicActive };
+  return { start, stop, handleAnswer, handleIce, onStateChange, isActive, isCameraActive, isMicActive,
+           getLastError: () => _lastError };
 })();

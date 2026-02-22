@@ -251,7 +251,7 @@ const Visualization = (() => {
         tCtx.fillStyle = color;
         tCtx.font = '12px monospace';
         tCtx.textAlign = 'left';
-        tCtx.fillText(`#${touch.id} (${touch.x.toFixed(2)}, ${touch.y.toFixed(2)})`, px + 36, py - 4);
+        tCtx.fillText(`#${idx + 1} (${touch.x.toFixed(2)}, ${touch.y.toFixed(2)})`, px + 36, py - 4);
       }
     });
 

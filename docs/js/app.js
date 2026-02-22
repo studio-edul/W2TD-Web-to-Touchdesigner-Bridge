@@ -296,9 +296,8 @@
       }
       li.innerHTML = `<span class="sensor-icon">&#x1F3A4;</span> Microphone`;
       if (micAvail) {
-        li.addEventListener('click', () => {
-          handleMicToggle();
-          haptic(15);
+        li.addEventListener('click', async () => {
+          await handleMicToggle();
         });
       }
       els.sensorList.appendChild(li);
@@ -682,8 +681,20 @@
       await WebRTCModule.stop();
       micEnabled = false;
     } else {
-      micEnabled = true;
-      await WebRTCModule.start({ camera: cameraEnabled, mic: true });
+      const ok = await WebRTCModule.start({ camera: cameraEnabled, mic: true });
+      if (ok === false) {
+        micEnabled = false;
+        const err = WebRTCModule.getLastError();
+        if (err === 'NotAllowedError' || err === 'PermissionDeniedError') {
+          addLog('마이크 권한 거부됨 — 브라우저 설정에서 이 사이트의 마이크 권한을 허용해주세요', 'error');
+        } else if (err === 'NotFoundError') {
+          addLog('마이크를 찾을 수 없습니다 (장치 없음)', 'error');
+        } else {
+          addLog('마이크 시작 실패: ' + (err || 'unknown'), 'error');
+        }
+      } else {
+        micEnabled = true;
+      }
     }
     renderSensorList();
   }
