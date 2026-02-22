@@ -233,10 +233,6 @@
       els.tdAddress.value = td;
       history.replaceState(null, '', window.location.pathname);
       handleConnect(true); // autoConnect=true → use loading screen on first QR-scan
-      // In dev_mode=1 non-iOS: auto-enable sensors. In dev_mode=0: _showTouchPadDirectly handles it.
-      if (devMode && !SensorModule.needsPermissionRequest()) {
-        handleEnableSensors();
-      }
     } else {
       addLog('No ?td= param - enter address manually', 'warn');
     }
