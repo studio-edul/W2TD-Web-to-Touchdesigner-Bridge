@@ -677,13 +677,15 @@
 
   async function handleMicToggle() {
     haptic();
-    if (WebRTCModule.isMicActive()) {
-      await WebRTCModule.stop();
+    // Toggle direction based on micEnabled (user intent), not isMicActive() (stream state).
+    // Using isMicActive() causes wrong direction when config auto-start failed (micEnabled=true but no stream).
+    if (micEnabled) {
       micEnabled = false;
+      if (WebRTCModule.isMicActive()) await WebRTCModule.stop();
       renderSensorList();
       return;
     }
-    // Mark as enabled immediately so UI turns green right away
+    // Enable path: show green immediately, then start stream
     micEnabled = true;
     renderSensorList();
 
