@@ -18,6 +18,7 @@
   let audioNoiseSuppression = false;
   let audioAutoGain = false;
   let iceServersFromConfig = null;   // from wob_config ice_servers (JSON)
+  let iceTransportPolicyFromConfig = null;  // 'relay' | 'all' | null
 
   const $ = (id) => document.getElementById(id);
   const els = {};
@@ -141,12 +142,18 @@
           ? JSON.parse(cfg.ice_servers) : cfg.ice_servers;
       } catch (e) { iceServersFromConfig = null; }
     }
+    if (cfg.ice_transport_policy != null) {
+      iceTransportPolicyFromConfig = cfg.ice_transport_policy === 'relay' ? 'relay' : null;
+    }
   }
 
   function _webrtcStartOpts(opts) {
     const o = { ...opts };
     if (iceServersFromConfig && Array.isArray(iceServersFromConfig) && iceServersFromConfig.length) {
       o.iceServers = iceServersFromConfig;
+    }
+    if (iceTransportPolicyFromConfig) {
+      o.iceTransportPolicy = iceTransportPolicyFromConfig;
     }
     return o;
   }

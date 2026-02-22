@@ -48,12 +48,12 @@ def _init_webrtc_ice():
 		w = op('webrtc_dat')
 		if w is None:
 			return
-		w.par.turn0server = 'turn:openrelay.metered.ca:80'
-		w.par.username = 'openrelayproject'
-		w.par.password = 'openrelayproject'
-		# turn1server if available
+		# freeTURN (무료, 가입 불필요)
+		w.par.turn0server = 'turn:freeturn.net:3478'
+		w.par.username = 'free'
+		w.par.password = 'free'
 		if hasattr(w.par, 'turn1server'):
-			w.par.turn1server = 'turn:openrelay.metered.ca:443'
+			w.par.turn1server = 'turns:freeturn.net:5349'
 		print('[WOB] WebRTC DAT TURN configured for cross-network')
 	except Exception as e:
 		print(f'[WOB] WebRTC ICE init skip: {e}')

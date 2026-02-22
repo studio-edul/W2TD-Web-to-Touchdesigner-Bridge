@@ -7,9 +7,11 @@ const WebRTCModule = (() => {
   const DEFAULT_ICE_SERVERS = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    // Free TURN for cross-network (tunnel/cloudflared)
+    // freeTURN (무료, 가입 불필요) — cross-network/터널용
+    { urls: 'turn:freeturn.net:3478', username: 'free', credential: 'free' },
+    { urls: 'turns:freeturn.net:5349', username: 'free', credential: 'free' },
+    // openrelay 백업 (고정 인증은 일부 deprecated 가능)
     { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
     { urls: 'turns:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
   ];
 
@@ -42,6 +44,7 @@ const WebRTCModule = (() => {
     noiseSuppression = false,
     autoGainControl = false,
     iceServers = null,
+    iceTransportPolicy = null,
   } = {}) {
     _lastError = null;
     _iceRecvCount = 0;
@@ -84,7 +87,11 @@ const WebRTCModule = (() => {
 
     // 3. Create peer connection
     const ice = Array.isArray(iceServers) && iceServers.length ? iceServers : DEFAULT_ICE_SERVERS;
-    pc = new RTCPeerConnection({ iceServers: ice });
+    const rtcConfig = { iceServers: ice };
+    if (iceTransportPolicy === 'relay') {
+      rtcConfig.iceTransportPolicy = 'relay';
+    }
+    pc = new RTCPeerConnection(rtcConfig);
 
     // Add local tracks
     localStream.getTracks().forEach(track => pc.addTrack(track, localStream));

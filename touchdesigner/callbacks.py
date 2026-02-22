@@ -119,6 +119,9 @@ def _config_msg(cfg):
 	ice_srv = cfg.get('ice_servers', '').strip()
 	if ice_srv:
 		out['ice_servers'] = ice_srv
+	itp = cfg.get('ice_transport_policy', '').strip()
+	if itp in ('relay', 'all'):
+		out['ice_transport_policy'] = itp
 	return out
 
 
