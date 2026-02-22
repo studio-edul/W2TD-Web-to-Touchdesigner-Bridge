@@ -14,6 +14,28 @@ connectionId = slot number as string (e.g. '1', '2', ...)
 import json
 
 
+def _auto_select_audio_chop(webrtcDAT, connectionId):
+	"""When WebRTC connects, auto-set webrtc_audio_1 Connection and Track."""
+	audio_chop = op('webrtc_audio_1')
+	if audio_chop is None:
+		return
+	try:
+		tracks = webrtcDAT.getTracks(connectionId, 'audio', 'remote')
+		track_id = tracks[0] if tracks and len(tracks) > 0 else None
+		for par_name in ('webrtcconnection', 'Webrtcconnection'):
+			if hasattr(audio_chop.par, par_name):
+				setattr(audio_chop.par, par_name, connectionId)
+				break
+		if track_id:
+			for par_name in ('webrtctrack', 'Webrtctrack'):
+				if hasattr(audio_chop.par, par_name):
+					setattr(audio_chop.par, par_name, track_id)
+					break
+		print(f'[WOB WebRTC] webrtc_audio_1 auto-selected conn={connectionId} track={track_id}')
+	except Exception as e:
+		print(f'[WOB WebRTC] Auto-select audio failed: {e}')
+
+
 def _send_to_client(connectionId, data):
 	"""Send a JSON message back to the mobile client via Web Server DAT."""
 	ws_path = op('/').fetch('wob_webserver_op', '')
@@ -72,6 +94,9 @@ def onConnectionStateChange(webrtcDAT, connectionId, state):
 			'type': 'webrtc_state',
 			'state': state,
 		})
+	elif state == 'connected':
+		# Auto-select WebRTC Connection and Track in webrtc_audio_1
+		_auto_select_audio_chop(webrtcDAT, connectionId)
 
 
 def onIceConnectionStateChange(webrtcDAT, connectionId, state):

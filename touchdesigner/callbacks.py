@@ -100,7 +100,7 @@ def init_tables():
 
 def _config_msg(cfg):
 	"""Build config JSON dict from wob_config values."""
-	return {
+	out = {
 		'type':               'config',
 		'sample_rate':        int(cfg.get('sample_rate', 30)),
 		'wake_lock':          int(cfg.get('wake_lock', 1)),
@@ -116,6 +116,10 @@ def _config_msg(cfg):
 		'audio_noise_suppression':  int(cfg.get('audio_noise_suppression', 0)),
 		'audio_auto_gain':          int(cfg.get('audio_auto_gain', 0)),
 	}
+	ice_srv = cfg.get('ice_servers', '').strip()
+	if ice_srv:
+		out['ice_servers'] = ice_srv
+	return out
 
 
 def broadcast_config(webServerDAT):

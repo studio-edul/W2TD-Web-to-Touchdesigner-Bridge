@@ -94,6 +94,7 @@ TD의 `wob_config` Table DAT에서 값을 읽어 연결 시 모바일로 push.
 | `audio_echo_cancellation` | 0 | 에코 제거 (0=끔/원본, 1=켜짐) |
 | `audio_noise_suppression` | 0 | 노이즈 억제 (0=끔/원본, 1=켜짐) |
 | `audio_auto_gain` | 0 | 자동 게인 (0=끔/원본, 1=켜짐) |
+| `ice_servers` | (없음) | 다른 네트워크용 TURN. JSON 배열 (예: `[{"urls":"turn:..."}]`) |
 | `max_clients` | 20 | 최대 접속 수 |
 
 ---

@@ -4,20 +4,13 @@
  * Signaling server = TD Web Server DAT (no separate signaling server needed).
  */
 const WebRTCModule = (() => {
-  const ICE_SERVERS = [
+  const DEFAULT_ICE_SERVERS = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    // Free TURN for cross-network fallback
-    {
-      urls: 'turn:openrelay.metered.ca:80',
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    },
-    {
-      urls: 'turn:openrelay.metered.ca:443',
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    },
+    // Free TURN for cross-network (tunnel/cloudflared)
+    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turns:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
   ];
 
   let pc = null;           // RTCPeerConnection
@@ -48,6 +41,7 @@ const WebRTCModule = (() => {
     echoCancellation = false,
     noiseSuppression = false,
     autoGainControl = false,
+    iceServers = null,
   } = {}) {
     _lastError = null;
     _iceRecvCount = 0;
@@ -89,7 +83,8 @@ const WebRTCModule = (() => {
     }
 
     // 3. Create peer connection
-    pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    const ice = Array.isArray(iceServers) && iceServers.length ? iceServers : DEFAULT_ICE_SERVERS;
+    pc = new RTCPeerConnection({ iceServers: ice });
 
     // Add local tracks
     localStream.getTracks().forEach(track => pc.addTrack(track, localStream));

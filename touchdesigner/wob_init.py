@@ -42,9 +42,27 @@ def _init_tables():
 	else:
 		print('[WOB] touch_table DAT not found - create a Table DAT named "touch_table"')
 
+def _init_webrtc_ice():
+	"""Configure WebRTC DAT TURN servers for cross-network (tunnel/cloudflared)."""
+	try:
+		w = op('webrtc_dat')
+		if w is None:
+			return
+		w.par.turn0server = 'turn:openrelay.metered.ca:80'
+		w.par.username = 'openrelayproject'
+		w.par.password = 'openrelayproject'
+		# turn1server if available
+		if hasattr(w.par, 'turn1server'):
+			w.par.turn1server = 'turn:openrelay.metered.ca:443'
+		print('[WOB] WebRTC DAT TURN configured for cross-network')
+	except Exception as e:
+		print(f'[WOB] WebRTC ICE init skip: {e}')
+
+
 def onStart():
 	print('[WOB] onStart triggered')
 	_init_tables()
+	_init_webrtc_ice()
 	generate()
 
 def generate():
