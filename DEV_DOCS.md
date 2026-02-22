@@ -615,6 +615,10 @@ Row 0 = 헤더, Row 1~ = 슬롯 데이터 (동적 추가/삭제)
 - `[WOB WebRTC] Answer sent to connectionId=1` → answer 전송됨
 - 위 로그가 없으면 → `webrtc_dat` Callbacks DAT 미연결 또는 callbacks.py의 webrtc_offer 처리 문제
 
+- **TD: offer 받은 직후 Disconnected** → WebRTC connectionId 오류였을 수 있음. callbacks.py에서 `openConnection()`으로 UUID 생성 후 사용하도록 수정됨.
+
+- **STUN URL 확인**: TD WebRTC DAT의 STUN이 `stun:stun.l.google.com:19302` 인지 확인 (오타: `stun.1` ❌ → `stun.l` ✓)
+
 ### toggle 로직 설계 원칙
 
 `handleMicToggle`의 toggle 방향은 **`micEnabled`** (사용자 의도) 기준으로 결정.

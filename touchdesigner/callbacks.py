@@ -241,7 +241,16 @@ def onWebSocketClose(webServerDAT, client):
 			tt.deleteRow(r)
 
 	# Clean up WebRTC state for this slot
-	op('/').store(f'wob_webrtc_addr_{slot}', None)
+	conn_id = op('/').fetch(f'wob_webrtc_slot_to_uuid_{slot}', None)
+	if conn_id:
+		wrtc = op('webrtc_dat')
+		if wrtc is not None:
+			try:
+				wrtc.closeConnection(conn_id)
+			except Exception:
+				pass
+		op('/').store(f'wob_webrtc_addr_{conn_id}', None)
+		op('/').store(f'wob_webrtc_slot_to_uuid_{slot}', None)
 
 	print(f'[WOB] Disconnected -> slot {slot} | {addr} | {MAX_CLIENTS - len(free)} active')
 
@@ -332,12 +341,13 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 		if wrtc is None:
 			print('[WOB] webrtc_dat not found — create a WebRTC DAT named "webrtc_dat"')
 			return
-		conn_id = str(slot)
-		op('/').store(f'wob_webrtc_addr_{conn_id}', addr)
 		try:
+			conn_id = wrtc.openConnection()
+			op('/').store(f'wob_webrtc_addr_{conn_id}', addr)
+			op('/').store(f'wob_webrtc_slot_to_uuid_{slot}', conn_id)
 			wrtc.setRemoteDescription(conn_id, 'offer', sdp)
 			wrtc.createAnswer(conn_id)
-			print(f'[WOB WebRTC] Offer received from slot {slot}, creating answer...')
+			print(f'[WOB WebRTC] Offer received from slot {slot}, conn_id={conn_id}, creating answer...')
 		except Exception as e:
 			print(f'[WOB WebRTC] Offer handling error: {e}')
 
@@ -348,7 +358,9 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 		wrtc = op('webrtc_dat')
 		if wrtc is None:
 			return
-		conn_id = str(slot)
+		conn_id = op('/').fetch(f'wob_webrtc_slot_to_uuid_{slot}', None)
+		if conn_id is None:
+			return
 		line_index = int(msg.get('sdpMLineIndex', 0))
 		sdp_mid = msg.get('sdpMid', '')
 		try:
