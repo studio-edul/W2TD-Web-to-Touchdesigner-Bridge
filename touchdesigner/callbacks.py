@@ -1,4 +1,4 @@
-﻿import json
+import json
 
 GITHUB_PAGES_URL = 'https://studio-edul.github.io/Web-Osc-Bridge/'
 # Default - overridden by config_table DAT at init_tables() time
@@ -112,6 +112,9 @@ def _config_msg(cfg):
 		'dev_mode':           int(cfg.get('dev_mode', 1)),
 		'sensor_camera':      int(cfg.get('sensor_camera', 0)),
 		'sensor_microphone':  int(cfg.get('sensor_microphone', 0)),
+		'audio_echo_cancellation':  int(cfg.get('audio_echo_cancellation', 0)),
+		'audio_noise_suppression':  int(cfg.get('audio_noise_suppression', 0)),
+		'audio_auto_gain':          int(cfg.get('audio_auto_gain', 0)),
 	}
 
 

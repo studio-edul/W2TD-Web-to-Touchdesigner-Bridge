@@ -14,6 +14,9 @@
   let vizInitialized = false;
   let cameraEnabled = false; // config: auto-enable camera on connect
   let micEnabled = false;    // config: auto-enable mic on connect
+  let audioEchoCancellation = false;  // config: 0=raw, 1=on
+  let audioNoiseSuppression = false;
+  let audioAutoGain = false;
 
   const $ = (id) => document.getElementById(id);
   const els = {};
@@ -115,6 +118,22 @@
       renderSensorList();
       if (micEnabled && !WebRTCModule.isMicActive()) _startWebRTC();
     }
+    let audioProcChanged = false;
+    if (cfg.audio_echo_cancellation != null) {
+      const v = !!parseInt(cfg.audio_echo_cancellation);
+      if (v !== audioEchoCancellation) { audioEchoCancellation = v; audioProcChanged = true; }
+    }
+    if (cfg.audio_noise_suppression != null) {
+      const v = !!parseInt(cfg.audio_noise_suppression);
+      if (v !== audioNoiseSuppression) { audioNoiseSuppression = v; audioProcChanged = true; }
+    }
+    if (cfg.audio_auto_gain != null) {
+      const v = !!parseInt(cfg.audio_auto_gain);
+      if (v !== audioAutoGain) { audioAutoGain = v; audioProcChanged = true; }
+    }
+    if (audioProcChanged && micEnabled && WebRTCModule.isMicActive()) {
+      _startWebRTC();
+    }
   }
 
   // ── Dev Mode ─────────────────────────────────────────────────────────────
@@ -202,6 +221,9 @@
     loadSettings();
     bindEvents();
     initLogViewer();
+    if (typeof WebRTCModule !== 'undefined' && WebRTCModule.setOnLog) {
+      WebRTCModule.setOnLog((msg) => addLog('WebRTC ' + msg, 'info'));
+    }
     renderSensorList();
     SensorModule.setDebugCallback((msg) => updateDebug(msg));
 
@@ -432,7 +454,12 @@
     micEnabled = true;
 
     if (WSClient.isConnected() && !WebRTCModule.isMicActive()) {
-      const ok = await WebRTCModule.start({ camera: cameraEnabled, mic: true });
+      const ok = await WebRTCModule.start({
+        camera: cameraEnabled, mic: true,
+        echoCancellation: audioEchoCancellation,
+        noiseSuppression: audioNoiseSuppression,
+        autoGainControl: audioAutoGain,
+      });
       if (ok === false) {
         micEnabled = false;
         const err = WebRTCModule.getLastError();
@@ -725,7 +752,12 @@
       cameraEnabled = false;
     } else {
       cameraEnabled = true;
-      await WebRTCModule.start({ camera: true, mic: micEnabled });
+      await WebRTCModule.start({
+        camera: true, mic: micEnabled,
+        echoCancellation: audioEchoCancellation,
+        noiseSuppression: audioNoiseSuppression,
+        autoGainControl: audioAutoGain,
+      });
     }
     renderSensorList();
   }
@@ -744,7 +776,12 @@
     micEnabled = true;
     renderSensorList();
 
-    const ok = await WebRTCModule.start({ camera: cameraEnabled, mic: true });
+    const ok = await WebRTCModule.start({
+      camera: cameraEnabled, mic: true,
+      echoCancellation: audioEchoCancellation,
+      noiseSuppression: audioNoiseSuppression,
+      autoGainControl: audioAutoGain,
+    });
     if (ok === false) {
       micEnabled = false;
       const err = WebRTCModule.getLastError();

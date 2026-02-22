@@ -91,6 +91,9 @@ TD의 `wob_config` Table DAT에서 값을 읽어 연결 시 모바일로 push.
 | `dev_mode` | 1 | 1=풀 UI, 0=터치패드만 |
 | `sensor_camera` | 0 | 카메라 (Pro 전용, 미구현) |
 | `sensor_microphone` | 0 | 마이크 WebRTC 자동활성화 |
+| `audio_echo_cancellation` | 0 | 에코 제거 (0=끔/원본, 1=켜짐) |
+| `audio_noise_suppression` | 0 | 노이즈 억제 (0=끔/원본, 1=켜짐) |
+| `audio_auto_gain` | 0 | 자동 게인 (0=끔/원본, 1=켜짐) |
 | `max_clients` | 20 | 최대 접속 수 |
 
 ---
@@ -540,7 +543,42 @@ Row 0 = 헤더, Row 1~ = 슬롯 데이터 (동적 추가/삭제)
 
 ---
 
-## 12. 마이크 문제 해결 가이드
+## 12. 마이크 오디오 처리 설정 (TD에서 제어)
+
+브라우저 `getUserMedia`의 오디오 처리 옵션을 wob_config로 제어할 수 있다. **wob_config Table DAT**에 아래 행을 추가하고, 값을 바꾼 뒤 `broadcast_config`를 호출하면 연결된 클라이언트에 즉시 반영된다. (마이크가 이미 켜져 있으면 자동 재연결됨)
+
+| wob_config 키 | 값 | 효과 |
+|---|---|---|
+| `audio_echo_cancellation` | 0 | 에코 제거 끔 — 원본 신호, 스피커→마이크 피드백 가능 |
+| | 1 | 에코 제거 켜짐 — 스피커 소리 제거 |
+| `audio_noise_suppression` | 0 | 노이즈 억제 끔 — 타이핑·배경음 모두 수집 |
+| | 1 | 노이즈 억제 켜짐 — 음성 구간만 강조 |
+| `audio_auto_gain` | 0 | 자동 게인 끔 — 입력 그대로 |
+| | 1 | 자동 게인 켜짐 — 음량 자동 보정 |
+
+**설정 절차**
+
+1. TD에서 `wob_config` Table DAT 열기
+2. 열 구조: `key` | `value`
+3. 아래처럼 행 추가 (없는 것만):
+
+   | key | value |
+   |-----|-------|
+   | audio_echo_cancellation | 0 |
+   | audio_noise_suppression | 0 |
+   | audio_auto_gain | 0 |
+
+4. **원본 신호** (타이핑, 배경음 수집): 위 세 값 모두 `0`
+5. **음성 위주** (노이즈 제거): `audio_noise_suppression` = 1 등
+6. 값 변경 후 적용:
+   ```python
+   op('web_server_dat').module.broadcast_config(op('web_server_dat'))
+   ```
+   (또는 Execute DAT, Button DAT 등에서 실행)
+
+---
+
+## 13. 마이크 문제 해결 가이드
 
 ### 증상: 권한 팝업이 뜨지 않고 마이크가 활성화되지 않음
 
@@ -562,6 +600,21 @@ Row 0 = 헤더, Row 1~ = 슬롯 데이터 (동적 추가/삭제)
 - UI는 초록(micEnabled=true)으로 표시되지만 실제 스트림 없음
 - 사용자가 Microphone 항목을 직접 탭해서 활성화해야 함
 
+### 증상: WebRTC DAT에 연결된 기기가 안 뜸 — 로그 확인
+
+**웹 로그 확인** (로그 보기 버튼):
+- `WebRTC getUserMedia OK` → 마이크/카메라 획득 성공
+- `WebRTC Offer sent to TD` → offer 전송 성공
+- `WebRTC Offer FAILED — WebSocket not connected` → **WebSocket 미연결**, TD 연결 후 마이크 다시 시도
+- `WebRTC Answer received from TD` → TD에서 answer 수신됨
+- `WebRTC iceConnectionState: connected` → P2P 연결 완료
+- `WebRTC connectionState: failed` → 연결 실패 (방화벽, ICE 등)
+
+**TD 로그 확인** (Textport):
+- `[WOB WebRTC] Offer received from slot 1` → offer 수신됨
+- `[WOB WebRTC] Answer sent to connectionId=1` → answer 전송됨
+- 위 로그가 없으면 → `webrtc_dat` Callbacks DAT 미연결 또는 callbacks.py의 webrtc_offer 처리 문제
+
 ### toggle 로직 설계 원칙
 
 `handleMicToggle`의 toggle 방향은 **`micEnabled`** (사용자 의도) 기준으로 결정.
@@ -574,7 +627,7 @@ micEnabled=false → 탭 → ENABLE 경로  (start + getUserMedia)
 
 ---
 
-## 13. 이 문서 업데이트 방법
+## 14. 이 문서 업데이트 방법
 
 새 기능 추가·버그 수정 후 이 파일에 반영:
 

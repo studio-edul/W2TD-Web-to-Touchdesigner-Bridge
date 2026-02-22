@@ -28,24 +28,44 @@ const WebRTCModule = (() => {
   let _lastError = null;   // last getUserMedia error name (e.g. 'NotAllowedError')
   let _audioCtx = null;
   let _analyser = null;
+  let _onLog = null;       // optional fn(msg) for debug log
+  let _iceRecvCount = 0;
+
+  function _log(msg) {
+    if (_onLog) _onLog(msg);
+    console.log('[WOB WebRTC]', msg);
+  }
 
   // ── Public API ─────────────────────────────────────────────────────────────
 
   /**
    * Start camera and/or mic, create RTCPeerConnection, send offer via WS.
-   * @param {object} opts - { camera: bool, mic: bool }
+   * @param {object} opts - { camera, mic, echoCancellation, noiseSuppression, autoGainControl }
    */
-  async function start({ camera = true, mic = true } = {}) {
+  async function start({
+    camera = true,
+    mic = true,
+    echoCancellation = false,
+    noiseSuppression = false,
+    autoGainControl = false,
+  } = {}) {
     _lastError = null;
+    _iceRecvCount = 0;
     if (pc) await stop();
 
-    // 1. Get user media
-    const constraints = { video: camera, audio: mic };
+    const constraints = {
+      video: camera,
+      audio: mic ? {
+        echoCancellation,
+        noiseSuppression,
+        autoGainControl,
+      } : false,
+    };
     try {
       localStream = await navigator.mediaDevices.getUserMedia(constraints);
       cameraActive = camera && localStream.getVideoTracks().length > 0;
       micActive = mic && localStream.getAudioTracks().length > 0;
-      console.log('[WOB WebRTC] getUserMedia OK — camera:', cameraActive, 'mic:', micActive);
+      _log('getUserMedia OK — camera:' + cameraActive + ' mic:' + micActive);
     } catch (e) {
       _lastError = e.name || 'unknown';
       console.error('[WOB WebRTC] getUserMedia failed:', e.name, e.message);
@@ -75,8 +95,11 @@ const WebRTCModule = (() => {
     localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
     // ICE candidates → send via WebSocket
+    let iceCount = 0;
     pc.onicecandidate = ({ candidate }) => {
       if (!candidate) return; // null = end-of-candidates, TD handles this
+      iceCount++;
+      if (iceCount <= 3) _log('ICE candidate #' + iceCount + ' sent');
       WSClient.send({
         type: 'webrtc_ice',
         candidate: candidate.candidate,
@@ -102,8 +125,8 @@ const WebRTCModule = (() => {
     try {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      WSClient.send({ type: 'webrtc_offer', sdp: offer.sdp });
-      console.log('[WOB WebRTC] Offer sent to TD');
+      const sent = WSClient.send({ type: 'webrtc_offer', sdp: offer.sdp });
+      _log(sent ? 'Offer sent to TD' : 'Offer FAILED — WebSocket not connected');
     } catch (e) {
       console.error('[WOB WebRTC] createOffer failed:', e);
       _setState('failed');
@@ -143,16 +166,23 @@ const WebRTCModule = (() => {
   /** Handle webrtc_ice message from TD (via WebSocket). */
   async function handleIce({ candidate, sdpMLineIndex, sdpMid }) {
     if (!pc || !candidate) return;
+    _iceRecvCount++;
+    if (_iceRecvCount <= 3) _log('ICE from TD #' + _iceRecvCount);
     try {
       await pc.addIceCandidate(new RTCIceCandidate({ candidate, sdpMLineIndex, sdpMid }));
     } catch (e) {
-      console.error('[WOB WebRTC] addIceCandidate failed:', e);
+      _log('addIceCandidate failed: ' + (e.message || e));
     }
   }
 
   /** Register a state change callback: fn(state) */
   function onStateChange(fn) {
     _onStateChange = fn;
+  }
+
+  /** Register debug log callback: fn(msg) — appears in Log viewer */
+  function setOnLog(fn) {
+    _onLog = fn;
   }
 
   function isActive() {
@@ -194,6 +224,6 @@ const WebRTCModule = (() => {
     }
   }
 
-  return { start, stop, handleAnswer, handleIce, onStateChange, isActive, isCameraActive, isMicActive,
+  return { start, stop, handleAnswer, handleIce, onStateChange, setOnLog, isActive, isCameraActive, isMicActive,
            getMicLevel, getLastError: () => _lastError };
 })();
