@@ -51,6 +51,8 @@
     els.userStartOverlay = $('user-start-overlay');
     els.btnUserStart = $('btn-user-start');
     els.wobLoading = $('wob-loading');
+    els.logViewerOverlay = $('log-viewer-overlay');
+    els.logViewerContent = $('log-viewer-content');
   }
 
   function loadSettings() {
@@ -191,6 +193,7 @@
 
   function init() {
     cacheDom();
+    addLog('WOB 시작 (protocol: ' + window.location.protocol + ')', 'info');
     // Apply cached dev mode instantly to prevent flash of wrong UI
     const _cached = localStorage.getItem('wob-dev-mode');
     if (_cached !== null) {
@@ -199,6 +202,7 @@
     }
     loadSettings();
     bindEvents();
+    initLogViewer();
     renderSensorList();
     SensorModule.setDebugCallback((msg) => updateDebug(msg));
 
@@ -225,8 +229,29 @@
     }
   }
 
+  function showLogViewer() {
+    if (els.logViewerOverlay) {
+      els.logViewerOverlay.classList.remove('hidden');
+      _renderLog();
+    }
+  }
+  function hideLogViewer() {
+    if (els.logViewerOverlay) els.logViewerOverlay.classList.add('hidden');
+  }
+  function initLogViewer() {
+    const overlay = els.logViewerOverlay;
+    const box = document.getElementById('log-viewer-box');
+    if (overlay) {
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) hideLogViewer(); });
+      if (box) box.addEventListener('click', (e) => e.stopPropagation());
+    }
+  }
+
   function bindEvents() {
     els.btnConnect.addEventListener('click', handleConnect);
+    if (els.btnShowLog = $('btn-show-log')) els.btnShowLog.addEventListener('click', showLogViewer);
+    if (els.btnShowLogTop = $('btn-show-log-top')) els.btnShowLogTop.addEventListener('click', showLogViewer);
+    if (els.btnCloseLog = $('btn-close-log')) els.btnCloseLog.addEventListener('click', hideLogViewer);
     els.btnEnableSensors.addEventListener('click', handleEnableSensors);
     els.btnFullscreenTouch.addEventListener('click', enterTouchPad);
     els.btnExitTouch.addEventListener('click', exitTouchPad);
@@ -315,6 +340,8 @@
     haptic();
 
     addLog('Connecting to: ' + addr, 'info');
+    const wsUrl = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + addr.replace(/^(wss?|https?):\/\//, '');
+    addLog('WebSocket URL: ' + wsUrl, 'info');
     WSClient.connect(addr, {
       onStatusChange: (status) => {
         updateConnectionStatus(status);
@@ -634,12 +661,14 @@
   }
 
   function _renderLog() {
-    const el = els.debugInfo;
-    if (!el) return;
-    el.innerHTML = logLines.slice().reverse().map(l => {
+    const html = logLines.slice().reverse().map(l => {
       const color = l.level === 'error' ? '#ff6677' : l.level === 'warn' ? '#ffaa33' : '#6a9f6a';
       return `<span style="color:${color}">[${l.time}] ${_esc(l.msg)}</span>`;
     }).join('\n');
+    if (els.debugInfo) els.debugInfo.innerHTML = html;
+    if (els.logViewerContent && !els.logViewerOverlay.classList.contains('hidden')) {
+      els.logViewerContent.innerHTML = html;
+    }
   }
 
   function _esc(s) {
