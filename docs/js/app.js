@@ -472,10 +472,9 @@
 
     if (WSClient.isConnected() && micEnabled && !WebRTCModule.isMicActive()) {
       if (_isTunnelConnection()) {
-        showToast('마이크는 같은 내부 네트워크(같은 Wi‑Fi)에서만 사용 가능합니다. 지금은 터널로 연결 중입니다.', 4500);
-      } else {
-        showToast('마이크는 TouchDesigner와 같은 내부 네트워크(같은 Wi‑Fi)에서만 사용 가능합니다.', 4000);
-        const ok = await WebRTCModule.start(_webrtcStartOpts({
+        showToast('Warning: Mic over tunnel may fail. Cross-network requires a TURN server.', 4500);
+      }
+      const ok = await WebRTCModule.start(_webrtcStartOpts({
         camera: cameraEnabled, mic: micEnabled,
         echoCancellation: audioEchoCancellation,
         noiseSuppression: audioNoiseSuppression,
@@ -485,13 +484,13 @@
         micEnabled = false;
         const err = WebRTCModule.getLastError();
         if (err === 'NotAllowedError' || err === 'PermissionDeniedError') {
-          showToast('마이크 권한 거부 — 브라우저 설정에서 허용해주세요');
+          showToast('Mic permission denied — allow microphone in browser settings');
+          addLog('마이크 권한 거부됨 — 브라우저 설정에서 허용해주세요', 'error');
         } else if (err === 'NotFoundError') {
-          showToast('마이크를 찾을 수 없습니다');
+          showToast('Microphone not found');
         } else {
-          showToast('마이크 활성화 실패');
+          showToast('Mic activation failed');
         }
-      }
       }
     }
 
@@ -800,10 +799,9 @@
 
     if (SensorModule.isEnabled() && WSClient.isConnected() && !WebRTCModule.isMicActive()) {
       if (_isTunnelConnection()) {
-        showToast('마이크는 같은 내부 네트워크에서만 사용 가능합니다. 지금은 터널로 연결 중입니다.', 4500);
-      } else {
-        showToast('마이크는 TouchDesigner와 같은 내부 네트워크(같은 Wi‑Fi)에서만 사용 가능합니다.', 4000);
-        const ok = await WebRTCModule.start(_webrtcStartOpts({
+        showToast('Warning: Mic over tunnel may fail. Cross-network requires a TURN server.', 4500);
+      }
+      const ok = await WebRTCModule.start(_webrtcStartOpts({
         camera: cameraEnabled, mic: true,
         echoCancellation: audioEchoCancellation,
         noiseSuppression: audioNoiseSuppression,
@@ -812,19 +810,18 @@
       if (ok === false) {
         micEnabled = false;
         const err = WebRTCModule.getLastError();
-        let toastMsg = '마이크 활성화 실패';
+        let toastMsg = 'Mic activation failed';
         if (err === 'NotAllowedError' || err === 'PermissionDeniedError') {
-          toastMsg = '마이크 권한 거부 — 브라우저 설정에서 허용해주세요';
-          addLog('마이크 권한 거부됨 — 브라우저 설정에서 이 사이트의 마이크 권한을 허용해주세요', 'error');
+          toastMsg = 'Mic permission denied — allow microphone in browser settings';
+          addLog('마이크 권한 거부됨 — 브라우저 설정에서 허용해주세요', 'error');
         } else if (err === 'NotFoundError') {
-          toastMsg = '마이크를 찾을 수 없습니다';
+          toastMsg = 'Microphone not found';
           addLog('마이크를 찾을 수 없습니다 (장치 없음)', 'error');
         } else {
           addLog('마이크 시작 실패: ' + (err || 'unknown'), 'error');
         }
         showToast(toastMsg);
         renderSensorList();
-      }
       }
     }
   }
