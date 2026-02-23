@@ -20,6 +20,11 @@
   let iceServersFromConfig = null;   // from wob_config ice_servers (JSON)
   let iceTransportPolicyFromConfig = null;  // 'relay' | 'all' | null
 
+  function _isTunnelConnection() {
+    const addr = (els.tdAddress && els.tdAddress.value || '').toLowerCase();
+    return addr.includes('trycloudflare.com') || addr.includes('cloudflare') || addr.includes('.cfargotunnel.com');
+  }
+
   const $ = (id) => document.getElementById(id);
   const els = {};
 
@@ -466,8 +471,11 @@
     SensorModule.startListening();
 
     if (WSClient.isConnected() && micEnabled && !WebRTCModule.isMicActive()) {
-      showToast('마이크는 TouchDesigner와 같은 내부 네트워크(같은 Wi‑Fi)에서만 사용 가능합니다.', 4000);
-      const ok = await WebRTCModule.start(_webrtcStartOpts({
+      if (_isTunnelConnection()) {
+        showToast('마이크는 같은 내부 네트워크(같은 Wi‑Fi)에서만 사용 가능합니다. 지금은 터널로 연결 중입니다.', 4500);
+      } else {
+        showToast('마이크는 TouchDesigner와 같은 내부 네트워크(같은 Wi‑Fi)에서만 사용 가능합니다.', 4000);
+        const ok = await WebRTCModule.start(_webrtcStartOpts({
         camera: cameraEnabled, mic: micEnabled,
         echoCancellation: audioEchoCancellation,
         noiseSuppression: audioNoiseSuppression,
@@ -483,6 +491,7 @@
         } else {
           showToast('마이크 활성화 실패');
         }
+      }
       }
     }
 
@@ -790,8 +799,11 @@
     renderSensorList();
 
     if (SensorModule.isEnabled() && WSClient.isConnected() && !WebRTCModule.isMicActive()) {
-      showToast('마이크는 TouchDesigner와 같은 내부 네트워크(같은 Wi‑Fi)에서만 사용 가능합니다.', 4000);
-      const ok = await WebRTCModule.start(_webrtcStartOpts({
+      if (_isTunnelConnection()) {
+        showToast('마이크는 같은 내부 네트워크에서만 사용 가능합니다. 지금은 터널로 연결 중입니다.', 4500);
+      } else {
+        showToast('마이크는 TouchDesigner와 같은 내부 네트워크(같은 Wi‑Fi)에서만 사용 가능합니다.', 4000);
+        const ok = await WebRTCModule.start(_webrtcStartOpts({
         camera: cameraEnabled, mic: true,
         echoCancellation: audioEchoCancellation,
         noiseSuppression: audioNoiseSuppression,
@@ -812,6 +824,7 @@
         }
         showToast(toastMsg);
         renderSensorList();
+      }
       }
     }
   }
