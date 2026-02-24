@@ -92,7 +92,7 @@ class RelativePositionEstimator:
         self._cal_samples  = []   # 보정용 샘플 버퍼
         self._cal_done     = False
         self._bias         = np.zeros(3)  # 세계 좌표계 가속도 바이어스
-        print(f'[WOB Pos] slot={self.slot} reset — hold device still for ~1s (bias calibration starting...)')
+        print(f'[WOB Pos] slot={self.slot} reset - hold device still ~1s (bias calibration...)')
 
     def update(self, accel_x, accel_y, accel_z, oa=0, ob=0, og=0):
         """
@@ -153,7 +153,7 @@ def _write_to_chop(pos):
     """Write position to mobile_position Constant CHOP (slot 1 only)."""
     chop = op('mobile_position')
     if chop is None:
-        print('[WOB Pos] ERROR: op("mobile_position") not found — create a Constant CHOP named mobile_position')
+        print('[WOB Pos] ERROR: op("mobile_position") not found - create a Constant CHOP named mobile_position')
         return False
     # Try const0value / const1value / const2value (TD 2022+)
     try:
@@ -189,7 +189,7 @@ def onTableChange(dat):
         return
 
     if _update_count == 1:
-        print(f'[WOB Pos] started — sensor_table rows={dat.numRows}')
+        print(f'[WOB Pos] started - sensor_table rows={dat.numRows}')
 
     # Clean up estimators for disconnected slots
     active_slots = set()
@@ -201,7 +201,7 @@ def onTableChange(dat):
 
     for stale in list(_estimators_cache.keys()):
         if stale not in active_slots:
-            print(f'[WOB Pos] slot={stale} disconnected — estimator removed')
+            print(f'[WOB Pos] slot={stale} disconnected - estimator removed')
             del _estimators_cache[stale]
 
     # Estimate position per slot
