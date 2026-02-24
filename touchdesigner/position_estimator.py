@@ -32,6 +32,7 @@ GRAVITY = 9.81
 CAL_FRAMES = 30  # 보정용 정지 샘플 수 (~1초 @ 30Hz)
 
 _update_count = 0
+_estimators_cache = {}  # module-level cache — persists between calls, resets on script reload
 
 
 # ── 수학 유틸 ──────────────────────────────────────────────────────────────────
@@ -148,17 +149,8 @@ class RelativePositionEstimator:
 
 # ── TD 연동 ───────────────────────────────────────────────────────────────────
 
-def _get_estimators():
-    key = 'wob_relative_position_estimators'
-    est = op('/').fetch(key, None)
-    if est is None:
-        est = {}
-        op('/').store(key, est)
-    return est
-
-
 def _write_to_chop(pos):
-    """mobile_position Constant CHOP에 위치값 기록."""
+    """Write position to mobile_position Constant CHOP (slot 1 only)."""
     chop = op('mobile_position')
     if chop is None:
         print('[WOB Pos] ERROR: op("mobile_position") not found — create a Constant CHOP named mobile_position')
@@ -189,10 +181,7 @@ def _write_to_chop(pos):
 
 
 def onTableChange(dat):
-    """
-    sensor_table Table Change 이벤트 핸들러.
-    슬롯 1의 위치를 mobile_position CHOP과 op('/').store에 출력.
-    """
+    """sensor_table Table Change handler. Writes slot 1 position to mobile_position CHOP."""
     global _update_count
     _update_count += 1
 
@@ -202,9 +191,7 @@ def onTableChange(dat):
     if _update_count == 1:
         print(f'[WOB Pos] started — sensor_table rows={dat.numRows}')
 
-    estimators = _get_estimators()
-
-    # 연결 해제된 슬롯 정리
+    # Clean up estimators for disconnected slots
     active_slots = set()
     for r in range(1, dat.numRows):
         try:
@@ -212,13 +199,12 @@ def onTableChange(dat):
         except (ValueError, TypeError, KeyError):
             pass
 
-    for stale in list(estimators.keys()):
+    for stale in list(_estimators_cache.keys()):
         if stale not in active_slots:
             print(f'[WOB Pos] slot={stale} disconnected — estimator removed')
-            del estimators[stale]
-            op('/').store(f'wob_pos_{stale}', None)
+            del _estimators_cache[stale]
 
-    # 슬롯별 위치 추정
+    # Estimate position per slot
     for r in range(1, dat.numRows):
         try:
             slot = int(dat[r, 'slot'])
@@ -235,17 +221,11 @@ def onTableChange(dat):
         except (ValueError, TypeError, KeyError):
             ax = ay = az = oa = ob = og = 0.0
 
-        if slot not in estimators:
-            estimators[slot] = RelativePositionEstimator(slot)
+        if slot not in _estimators_cache:
+            _estimators_cache[slot] = RelativePositionEstimator(slot)
             print(f'[WOB Pos] slot={slot} new estimator created')
 
-        pos = estimators[slot].update(ax, ay, az, oa, ob, og)
-
-        op('/').store(f'wob_pos_{slot}', {
-            'x': round(pos[0], 4),
-            'y': round(pos[1], 4),
-            'z': round(pos[2], 4),
-        })
+        pos = _estimators_cache[slot].update(ax, ay, az, oa, ob, og)
 
         if slot == 1:
             _write_to_chop(pos)
