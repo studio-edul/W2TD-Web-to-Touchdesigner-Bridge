@@ -74,31 +74,27 @@ def _rotation_device_to_world(oa, ob, og):
 
 # ── 위치 추정 클래스 ───────────────────────────────────────────────────────────
 
+ZUPT_THRESHOLD   = 0.12   # m/s² — still detection sensitivity
+STILL_RESET_FRAMES = 10  # consecutive still frames before hard-zeroing velocity
+BIAS_UPDATE_RATE = 0.02  # dynamic bias update speed during still periods (per frame)
+
 class RelativePositionEstimator:
     def __init__(self, slot):
         self.slot = slot
-        self.last_time       = None
-        self.accel_threshold = 0.08  # ZUPT 임계값 (m/s²)
-        self.damping_half_life = 0.5  # 정지 시 속도 반감기 (초)
+        self.last_time         = None
+        self.damping_half_life = 0.3   # velocity half-life when still (s)
         self.reset_position()
 
     def reset_position(self):
-        """
-        위치·속도·바이어스 보정을 0으로 초기화.
-        호출 후 기기를 ~1초 정지 상태로 유지하면 바이어스 재보정.
-        """
-        self.position      = np.zeros(3)
-        self.velocity      = np.zeros(3)
-        self._cal_samples  = []   # 보정용 샘플 버퍼
-        self._cal_done     = False
-        self._bias         = np.zeros(3)  # 세계 좌표계 가속도 바이어스
+        self.position     = np.zeros(3)
+        self.velocity     = np.zeros(3)
+        self._cal_samples = []
+        self._cal_done    = False
+        self._bias        = np.zeros(3)
+        self._still_frames = 0
         print(f'[WOB Pos] slot={self.slot} reset - hold device still ~1s (bias calibration...)')
 
     def update(self, accel_x, accel_y, accel_z, oa=0, ob=0, og=0):
-        """
-        매 sensor_table 변경 시 호출.
-        반환: (x, y, z) 세계 좌표계 상대 위치 (m)
-        """
         now = time.time()
         if self.last_time is None:
             self.last_time = now
@@ -110,37 +106,46 @@ class RelativePositionEstimator:
         if dt <= 0 or dt > 1.0:
             return tuple(self.position)
 
-        # Step 1: 중력 제거 → 기기 좌표계 선형 가속도
-        accel_raw = np.array([
-            float(accel_x or 0),
-            float(accel_y or 0),
-            float(accel_z or 0),
-        ])
+        # Step 1: gravity removal in device frame
+        accel_raw = np.array([float(accel_x or 0), float(accel_y or 0), float(accel_z or 0)])
         a_device = accel_raw - _gravity_in_device_frame(oa, ob, og)
 
-        # Step 2: 기기 좌표계 → 세계 좌표계 변환
+        # Step 2: rotate to world frame
         R = _rotation_device_to_world(oa, ob, og)
         a_world = R @ a_device
 
-        # Step 3: 바이어스 보정 (처음 CAL_FRAMES 동안 정지 상태 측정)
+        # Step 3: initial bias calibration (first CAL_FRAMES while stationary)
         if not self._cal_done:
             self._cal_samples.append(a_world.copy())
             if len(self._cal_samples) >= CAL_FRAMES:
                 self._bias = np.mean(self._cal_samples, axis=0)
                 self._cal_done = True
-                print(f'[WOB Pos] slot={self.slot} bias calibrated: ({self._bias[0]:.4f}, {self._bias[1]:.4f}, {self._bias[2]:.4f}) m/s2')
-            # 보정 중에는 적분 안 함
+                print(f'[WOB Pos] slot={self.slot} bias calibrated: '
+                      f'({self._bias[0]:.4f}, {self._bias[1]:.4f}, {self._bias[2]:.4f}) m/s2')
             return tuple(self.position)
 
         a_corrected = a_world - self._bias
 
-        # Step 4: ZUPT — 보정된 가속도가 임계값 미만이면 정지로 간주
-        if np.linalg.norm(a_corrected) < self.accel_threshold:
+        # Step 4: ZUPT — zero velocity update when device is still
+        if np.linalg.norm(a_corrected) < ZUPT_THRESHOLD:
             a_corrected = np.zeros(3)
+            self._still_frames += 1
+
+            # Exponential velocity decay
             decay = 0.5 ** (dt / self.damping_half_life)
             self.velocity *= decay
 
-        # Step 5: 이중 적분 (세계 좌표계)
+            # Hard-zero velocity after enough consecutive still frames
+            if self._still_frames >= STILL_RESET_FRAMES:
+                self.velocity = np.zeros(3)
+
+            # Dynamic bias update: continuously re-estimate bias while still
+            # This corrects for temperature drift and imperfect initial calibration
+            self._bias += (a_world - self._bias) * BIAS_UPDATE_RATE
+        else:
+            self._still_frames = 0
+
+        # Step 5: double integration
         self.velocity += a_corrected * dt
         self.position += self.velocity * dt
 
