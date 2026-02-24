@@ -119,9 +119,9 @@ def _config_msg(cfg):
 	ice_srv = cfg.get('ice_servers', '').strip()
 	if ice_srv:
 		out['ice_servers'] = ice_srv
-	itp = cfg.get('ice_transport_policy', '').strip()
-	if itp in ('relay', 'all'):
-		out['ice_transport_policy'] = itp
+	# 'relay'로 명시된 경우에만 제한. 미설정(기본값)이면 전송 안 함 → 브라우저 기본 'all' 사용
+	if cfg.get('ice_transport_policy', '').strip() == 'relay':
+		out['ice_transport_policy'] = 'relay'
 	return out
 
 
