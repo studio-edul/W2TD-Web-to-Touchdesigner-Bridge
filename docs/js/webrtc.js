@@ -34,7 +34,49 @@ const WebRTCModule = (() => {
   // ── Public API ─────────────────────────────────────────────────────────────
 
   /**
-   * Start camera and/or mic, create RTCPeerConnection, send offer via WS.
+   * Acquire mic stream (getUserMedia) without creating a peer connection.
+   * Call on Enable Sensors so the permission popup appears immediately.
+   * Idempotent — returns true if stream already acquired.
+   */
+  async function acquireMic({
+    echoCancellation = false,
+    noiseSuppression = false,
+    autoGainControl = false,
+  } = {}) {
+    _lastError = null;
+    if (localStream && localStream.getAudioTracks().length > 0) return true;
+    if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+    if (_audioCtx) { _audioCtx.close(); _audioCtx = null; }
+    _analyser = null;
+    micActive = false;
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation, noiseSuppression, autoGainControl },
+        video: false,
+      });
+      micActive = localStream.getAudioTracks().length > 0;
+      _log('acquireMic OK — mic:' + micActive);
+    } catch (e) {
+      _lastError = e.name || 'unknown';
+      console.error('[WOB WebRTC] acquireMic failed:', e.name, e.message);
+      return false;
+    }
+    if (micActive) {
+      try {
+        _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const source = _audioCtx.createMediaStreamSource(localStream);
+        _analyser = _audioCtx.createAnalyser();
+        _analyser.fftSize = 256;
+        _analyser.smoothingTimeConstant = 0.8;
+        source.connect(_analyser);
+      } catch (e) { console.warn('[WOB WebRTC] Audio analyser setup failed:', e); }
+    }
+    return micActive;
+  }
+
+  /**
+   * Create RTCPeerConnection with existing localStream and send offer to TD.
+   * If localStream not yet acquired, falls back to getUserMedia.
    * @param {object} opts - { camera, mic, echoCancellation, noiseSuppression, autoGainControl }
    */
   async function start({
@@ -48,42 +90,41 @@ const WebRTCModule = (() => {
   } = {}) {
     _lastError = null;
     _iceRecvCount = 0;
-    if (pc) await stop();
+    // Close existing PC only — keep localStream if already acquired via acquireMic()
+    if (pc) { pc.close(); pc = null; }
 
-    const constraints = {
-      video: camera,
-      audio: mic ? {
-        echoCancellation,
-        noiseSuppression,
-        autoGainControl,
-      } : false,
-    };
-    try {
-      localStream = await navigator.mediaDevices.getUserMedia(constraints);
-      cameraActive = camera && localStream.getVideoTracks().length > 0;
-      micActive = mic && localStream.getAudioTracks().length > 0;
-      _log('getUserMedia OK — camera:' + cameraActive + ' mic:' + micActive);
-    } catch (e) {
-      _lastError = e.name || 'unknown';
-      console.error('[WOB WebRTC] getUserMedia failed:', e.name, e.message);
-      _setState('failed');
-      return false;
-    }
-
-    // 2. Show local preview if camera is active
-    _updatePreview(localStream);
-
-    // 2b. Set up audio analyser for mic level visualization
-    if (micActive && localStream.getAudioTracks().length > 0) {
+    // If stream not yet acquired, get it now (fallback for cases like camera)
+    if (!localStream) {
+      const constraints = {
+        video: camera,
+        audio: mic ? { echoCancellation, noiseSuppression, autoGainControl } : false,
+      };
       try {
-        _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const source = _audioCtx.createMediaStreamSource(localStream);
-        _analyser = _audioCtx.createAnalyser();
-        _analyser.fftSize = 256;
-        _analyser.smoothingTimeConstant = 0.8;
-        source.connect(_analyser);
-      } catch (e) { console.warn('[WOB WebRTC] Audio analyser setup failed:', e); }
+        localStream = await navigator.mediaDevices.getUserMedia(constraints);
+        cameraActive = camera && localStream.getVideoTracks().length > 0;
+        micActive = mic && localStream.getAudioTracks().length > 0;
+        _log('getUserMedia OK — camera:' + cameraActive + ' mic:' + micActive);
+      } catch (e) {
+        _lastError = e.name || 'unknown';
+        console.error('[WOB WebRTC] getUserMedia failed:', e.name, e.message);
+        _setState('failed');
+        return false;
+      }
+      // Set up audio analyser (only if not already done by acquireMic)
+      if (micActive && !_analyser) {
+        try {
+          _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          const source = _audioCtx.createMediaStreamSource(localStream);
+          _analyser = _audioCtx.createAnalyser();
+          _analyser.fftSize = 256;
+          _analyser.smoothingTimeConstant = 0.8;
+          source.connect(_analyser);
+        } catch (e) { console.warn('[WOB WebRTC] Audio analyser setup failed:', e); }
+      }
     }
+
+    // Show local preview if camera is active
+    _updatePreview(localStream);
 
     // 3. Create peer connection
     const ice = Array.isArray(iceServers) && iceServers.length ? iceServers : DEFAULT_ICE_SERVERS;
@@ -152,6 +193,13 @@ const WebRTCModule = (() => {
     _updatePreview(null);
     _setState('closed');
     console.log('[WOB WebRTC] Stopped');
+  }
+
+  /** Close peer connection only — keep localStream and mic analyser alive. */
+  function disconnect() {
+    if (pc) { pc.close(); pc = null; }
+    _setState('closed');
+    console.log('[WOB WebRTC] Disconnected (stream kept)');
   }
 
   /** Handle webrtc_answer message from TD (via WebSocket). */
@@ -226,6 +274,7 @@ const WebRTCModule = (() => {
     }
   }
 
-  return { start, stop, handleAnswer, handleIce, onStateChange, setOnLog, isActive, isCameraActive, isMicActive,
+  return { start, stop, disconnect, acquireMic, handleAnswer, handleIce, onStateChange, setOnLog,
+           isActive, isCameraActive, isMicActive, isPCActive: () => pc !== null,
            getMicLevel, getLastError: () => _lastError };
 })();

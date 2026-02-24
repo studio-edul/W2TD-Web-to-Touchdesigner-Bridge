@@ -445,7 +445,7 @@
 
   async function _maybeStartWebRTC() {
     if (!WSClient.isConnected() || !micEnabled || !SensorModule.isEnabled() ||
-        WebRTCModule.isMicActive() || !broadcasting) return;
+        WebRTCModule.isPCActive() || !broadcasting) return;
     if (_isTunnelConnection()) {
       showToast('Warning: Mic over tunnel may fail. Cross-network requires a TURN server.', 4500);
     }
@@ -498,6 +498,25 @@
     }
 
     SensorModule.startListening();
+
+    if (micEnabled && !WebRTCModule.isMicActive()) {
+      const ok = await WebRTCModule.acquireMic({
+        echoCancellation: audioEchoCancellation,
+        noiseSuppression: audioNoiseSuppression,
+        autoGainControl: audioAutoGain,
+      });
+      if (ok === false) {
+        micEnabled = false;
+        const err = WebRTCModule.getLastError();
+        if (err === 'NotAllowedError' || err === 'PermissionDeniedError') {
+          showToast('Mic permission denied — allow microphone in browser settings');
+        } else if (err === 'NotFoundError') {
+          showToast('Microphone not found');
+        } else {
+          showToast('Mic activation failed');
+        }
+      }
+    }
 
     if (SensorModule.isSimulating()) {
       els.btnEnableSensors.textContent = 'Deactivate (Simulating)';
@@ -567,7 +586,7 @@
       clearInterval(broadcastInterval);
       broadcastInterval = null;
     }
-    if (WebRTCModule.isMicActive()) WebRTCModule.stop();
+    WebRTCModule.disconnect();
     els.btnBroadcast.textContent = 'Start Broadcast';
     els.btnBroadcast.classList.remove('broadcasting');
     if (els.packetRate) els.packetRate.classList.remove('broadcasting');
@@ -802,10 +821,31 @@
       renderSensorList();
       return;
     }
-    // Enable path: 선택만 변경. WebRTC는 Enable Sensors 시에만 시작 (권한 팝업은 그때만)
     micEnabled = true;
     renderSensorList();
 
+    // Acquire mic stream immediately (permission popup) if sensors are already on
+    if (SensorModule.isEnabled() && !WebRTCModule.isMicActive()) {
+      const ok = await WebRTCModule.acquireMic({
+        echoCancellation: audioEchoCancellation,
+        noiseSuppression: audioNoiseSuppression,
+        autoGainControl: audioAutoGain,
+      });
+      if (ok === false) {
+        micEnabled = false;
+        const err = WebRTCModule.getLastError();
+        if (err === 'NotAllowedError' || err === 'PermissionDeniedError') {
+          showToast('Mic permission denied — allow microphone in browser settings');
+        } else if (err === 'NotFoundError') {
+          showToast('Microphone not found');
+        } else {
+          showToast('Mic activation failed');
+        }
+        renderSensorList();
+        return;
+      }
+    }
+    // If already broadcasting, connect immediately
     await _maybeStartWebRTC();
   }
 

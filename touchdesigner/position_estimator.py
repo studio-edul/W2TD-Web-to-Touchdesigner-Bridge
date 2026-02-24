@@ -91,7 +91,7 @@ class RelativePositionEstimator:
         self._cal_samples  = []   # 보정용 샘플 버퍼
         self._cal_done     = False
         self._bias         = np.zeros(3)  # 세계 좌표계 가속도 바이어스
-        print(f'[WOB Pos] slot={self.slot} reset — 기기를 1초 정지 상태로 유지하세요 (바이어스 보정 중...)')
+        print(f'[WOB Pos] slot={self.slot} reset — hold device still for ~1s (bias calibration starting...)')
 
     def update(self, accel_x, accel_y, accel_z, oa=0, ob=0, og=0):
         """
@@ -127,7 +127,7 @@ class RelativePositionEstimator:
             if len(self._cal_samples) >= CAL_FRAMES:
                 self._bias = np.mean(self._cal_samples, axis=0)
                 self._cal_done = True
-                print(f'[WOB Pos] slot={self.slot} 바이어스 보정 완료: ({self._bias[0]:.4f}, {self._bias[1]:.4f}, {self._bias[2]:.4f}) m/s²')
+                print(f'[WOB Pos] slot={self.slot} bias calibrated: ({self._bias[0]:.4f}, {self._bias[1]:.4f}, {self._bias[2]:.4f}) m/s2')
             # 보정 중에는 적분 안 함
             return tuple(self.position)
 
@@ -161,7 +161,7 @@ def _write_to_chop(pos):
     """mobile_position Constant CHOP에 위치값 기록."""
     chop = op('mobile_position')
     if chop is None:
-        print('[WOB Pos] ERROR: op("mobile_position") 없음 — Constant CHOP을 만들고 이름을 mobile_position으로 설정하세요')
+        print('[WOB Pos] ERROR: op("mobile_position") not found — create a Constant CHOP named mobile_position')
         return False
     # Try const0value / const1value / const2value (TD 2022+)
     try:
@@ -182,9 +182,9 @@ def _write_to_chop(pos):
     # Diagnostic: list available parameters so the user knows what name to use
     try:
         par_names = [p.name for p in chop.pars()]
-        print(f'[WOB Pos] ERROR: mobile_position CHOP에 const0value/val0 파라미터가 없습니다. 사용 가능한 파라미터: {par_names[:15]}')
+        print(f'[WOB Pos] ERROR: mobile_position CHOP missing const0value/val0. Available pars: {par_names[:15]}')
     except Exception:
-        print('[WOB Pos] ERROR: mobile_position CHOP 파라미터 접근 실패')
+        print('[WOB Pos] ERROR: mobile_position CHOP parameter access failed')
     return False
 
 
@@ -200,7 +200,7 @@ def onTableChange(dat):
         return
 
     if _update_count == 1:
-        print(f'[WOB Pos] 시작됨 — sensor_table rows={dat.numRows}')
+        print(f'[WOB Pos] started — sensor_table rows={dat.numRows}')
 
     estimators = _get_estimators()
 
@@ -214,7 +214,7 @@ def onTableChange(dat):
 
     for stale in list(estimators.keys()):
         if stale not in active_slots:
-            print(f'[WOB Pos] slot={stale} 연결 해제 — estimator 정리')
+            print(f'[WOB Pos] slot={stale} disconnected — estimator removed')
             del estimators[stale]
             op('/').store(f'wob_pos_{stale}', None)
 
@@ -237,7 +237,7 @@ def onTableChange(dat):
 
         if slot not in estimators:
             estimators[slot] = RelativePositionEstimator(slot)
-            print(f'[WOB Pos] slot={slot} 새 estimator 생성')
+            print(f'[WOB Pos] slot={slot} new estimator created')
 
         pos = estimators[slot].update(ax, ay, az, oa, ob, og)
 
