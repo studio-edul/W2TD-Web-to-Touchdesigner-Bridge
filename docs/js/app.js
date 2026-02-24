@@ -443,6 +443,35 @@
     els.modal.classList.add('active');
   }
 
+  async function _maybeStartWebRTC() {
+    if (!WSClient.isConnected() || !micEnabled || !SensorModule.isEnabled() ||
+        WebRTCModule.isMicActive() || !broadcasting) return;
+    if (_isTunnelConnection()) {
+      showToast('Warning: Mic over tunnel may fail. Cross-network requires a TURN server.', 4500);
+    }
+    const ok = await WebRTCModule.start(_webrtcStartOpts({
+      camera: cameraEnabled, mic: micEnabled,
+      echoCancellation: audioEchoCancellation,
+      noiseSuppression: audioNoiseSuppression,
+      autoGainControl: audioAutoGain,
+    }));
+    if (ok === false) {
+      micEnabled = false;
+      const err = WebRTCModule.getLastError();
+      if (err === 'NotAllowedError' || err === 'PermissionDeniedError') {
+        showToast('Mic permission denied — allow microphone in browser settings');
+        addLog('마이크 권한 거부됨 — 브라우저 설정에서 허용해주세요', 'error');
+      } else if (err === 'NotFoundError') {
+        showToast('Microphone not found');
+        addLog('마이크를 찾을 수 없습니다 (장치 없음)', 'error');
+      } else {
+        showToast('Mic activation failed');
+        addLog('마이크 시작 실패: ' + (err || 'unknown'), 'error');
+      }
+    }
+    renderSensorList();
+  }
+
   async function handleEnableSensors() {
     haptic();
 
@@ -469,30 +498,6 @@
     }
 
     SensorModule.startListening();
-
-    if (WSClient.isConnected() && micEnabled && !WebRTCModule.isMicActive()) {
-      if (_isTunnelConnection()) {
-        showToast('Warning: Mic over tunnel may fail. Cross-network requires a TURN server.', 4500);
-      }
-      const ok = await WebRTCModule.start(_webrtcStartOpts({
-        camera: cameraEnabled, mic: micEnabled,
-        echoCancellation: audioEchoCancellation,
-        noiseSuppression: audioNoiseSuppression,
-        autoGainControl: audioAutoGain,
-      }));
-      if (ok === false) {
-        micEnabled = false;
-        const err = WebRTCModule.getLastError();
-        if (err === 'NotAllowedError' || err === 'PermissionDeniedError') {
-          showToast('Mic permission denied — allow microphone in browser settings');
-          addLog('마이크 권한 거부됨 — 브라우저 설정에서 허용해주세요', 'error');
-        } else if (err === 'NotFoundError') {
-          showToast('Microphone not found');
-        } else {
-          showToast('Mic activation failed');
-        }
-      }
-    }
 
     if (SensorModule.isSimulating()) {
       els.btnEnableSensors.textContent = 'Deactivate (Simulating)';
@@ -528,7 +533,7 @@
     els.broadcastStatus.className = 'broadcast-status' + (isError ? ' error' : '');
   }
 
-  function startBroadcast() {
+  async function startBroadcast() {
     if (!WSClient.isConnected()) {
       const msg = '1. TouchDesigner에 연결하세요 (Connect to TD)';
       showBroadcastStatus(msg, true);
@@ -552,6 +557,8 @@
     broadcastInterval = setInterval(() => {
       WSClient.sendSensorData(SensorModule.getData());
     }, interval);
+
+    await _maybeStartWebRTC();
   }
 
   function stopBroadcast() {
@@ -560,11 +567,13 @@
       clearInterval(broadcastInterval);
       broadcastInterval = null;
     }
+    if (WebRTCModule.isMicActive()) WebRTCModule.stop();
     els.btnBroadcast.textContent = 'Start Broadcast';
     els.btnBroadcast.classList.remove('broadcasting');
     if (els.packetRate) els.packetRate.classList.remove('broadcasting');
     showBroadcastStatus('', false);
     updateDebug('Broadcast 중지됨');
+    renderSensorList();
   }
 
   function sendTrigger() {
@@ -797,33 +806,7 @@
     micEnabled = true;
     renderSensorList();
 
-    if (SensorModule.isEnabled() && WSClient.isConnected() && !WebRTCModule.isMicActive()) {
-      if (_isTunnelConnection()) {
-        showToast('Warning: Mic over tunnel may fail. Cross-network requires a TURN server.', 4500);
-      }
-      const ok = await WebRTCModule.start(_webrtcStartOpts({
-        camera: cameraEnabled, mic: true,
-        echoCancellation: audioEchoCancellation,
-        noiseSuppression: audioNoiseSuppression,
-        autoGainControl: audioAutoGain,
-      }));
-      if (ok === false) {
-        micEnabled = false;
-        const err = WebRTCModule.getLastError();
-        let toastMsg = 'Mic activation failed';
-        if (err === 'NotAllowedError' || err === 'PermissionDeniedError') {
-          toastMsg = 'Mic permission denied — allow microphone in browser settings';
-          addLog('마이크 권한 거부됨 — 브라우저 설정에서 허용해주세요', 'error');
-        } else if (err === 'NotFoundError') {
-          toastMsg = 'Microphone not found';
-          addLog('마이크를 찾을 수 없습니다 (장치 없음)', 'error');
-        } else {
-          addLog('마이크 시작 실패: ' + (err || 'unknown'), 'error');
-        }
-        showToast(toastMsg);
-        renderSensorList();
-      }
-    }
+    await _maybeStartWebRTC();
   }
 
   document.addEventListener('DOMContentLoaded', init);
