@@ -128,16 +128,23 @@
       localStorage.setItem('wob-dev-mode', String(cfg.dev_mode));
       applyDevMode(!!parseInt(cfg.dev_mode));
     }
-    if (cfg.sensor_camera != null) {
-      const camOn = !!parseInt(cfg.sensor_camera);
-      if (!camOn) {
-        // config says off → disable and stop any active stream
-        cameraFrontEnabled = false;
+    if (cfg.sensor_rear_camera != null) {
+      const on = !!parseInt(cfg.sensor_rear_camera);
+      if (!on && cameraRearEnabled) {
         cameraRearEnabled = false;
-        if (WebRTCModule.isCamPCActive()) WebRTCModule.stopCamera();
-      } else if (!cameraFrontEnabled && !cameraRearEnabled) {
-        // config says on and nothing active yet → default to rear
+        WebRTCModule.stopCameraRear();
+      } else if (on && !cameraRearEnabled) {
         cameraRearEnabled = true;
+      }
+      renderSensorList();
+    }
+    if (cfg.sensor_front_camera != null) {
+      const on = !!parseInt(cfg.sensor_front_camera);
+      if (!on && cameraFrontEnabled) {
+        cameraFrontEnabled = false;
+        WebRTCModule.stopCameraFront();
+      } else if (on && !cameraFrontEnabled) {
+        cameraFrontEnabled = true;
       }
       renderSensorList();
     }
