@@ -14,7 +14,6 @@
   let vizInitialized = false;
   let cameraFrontEnabled = false;
   let cameraRearEnabled = false;
-  let cameraConfigOn = true;   // sensor_camera from config — when false, hide both toggles
   let micEnabled = false;
   let audioEchoCancellation = false;  // config: 0=raw, 1=on
   let audioNoiseSuppression = false;
@@ -33,9 +32,9 @@
 
   // Sensor definitions for UI
   const sensorDefs = [
-    { key: 'motion', name: 'Motion (Accel + Gyro)', icon: '&#x1F4F1;' },
+    { key: 'motion', name: 'Motion', icon: '&#x1F4F1;' },
     { key: 'orientation', name: 'Orientation', icon: '&#x1F9ED;' },
-    { key: 'geolocation', name: 'Geolocation (GPS)', icon: '&#x1F4CD;' },
+    { key: 'geolocation', name: 'GPS', icon: '&#x1F4CD;' },
     { key: 'touch', name: 'Touch Point', icon: '&#x1F4BB;' },
   ];
 
@@ -131,12 +130,13 @@
     }
     if (cfg.sensor_camera != null) {
       const camOn = !!parseInt(cfg.sensor_camera);
-      cameraConfigOn = camOn;
       if (!camOn) {
+        // config says off → disable and stop any active stream
         cameraFrontEnabled = false;
         cameraRearEnabled = false;
         if (WebRTCModule.isCamPCActive()) WebRTCModule.stopCamera();
       } else if (!cameraFrontEnabled && !cameraRearEnabled) {
+        // config says on and nothing active yet → default to rear
         cameraRearEnabled = true;
       }
       renderSensorList();
@@ -385,8 +385,8 @@
       els.sensorList.appendChild(li);
     });
 
-    // Rear Camera — default when sensor_camera=1
-    if (cameraConfigOn) {
+    // Rear Camera
+    {
       const li = document.createElement('li');
       const camAvail = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
       if (!camAvail) li.className = 'unavailable';
@@ -397,7 +397,7 @@
       els.sensorList.appendChild(li);
     }
     // Front Camera (selfie)
-    if (cameraConfigOn) {
+    {
       const li = document.createElement('li');
       const camAvail = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
       if (!camAvail) li.className = 'unavailable';
