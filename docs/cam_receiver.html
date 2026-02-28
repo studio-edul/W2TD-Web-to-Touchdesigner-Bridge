@@ -5,8 +5,9 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background: #000; width: 100vw; height: 100vh; overflow: hidden; }
-  #video-wrap { position: relative; width: 100%; height: 100%; }
-  video { width: 100%; height: 100%; object-fit: contain; display: block; }
+  #video-wrap { position: relative; width: 100%; height: 100%; display: flex; flex-wrap: wrap; }
+  #video-wrap video { flex: 1; min-width: 0; min-height: 0; object-fit: contain; display: block; }
+  #video-wrap video.hidden { display: none; }
   #overlay {
     position: absolute; top: 8px; left: 8px;
     background: rgba(0,0,0,0.6); color: #fff;
@@ -20,16 +21,18 @@
 </head>
 <body>
 <div id="video-wrap">
-  <video id="remote-video" autoplay playsinline muted></video>
+  <video id="remote-video-rear" class="hidden" autoplay playsinline muted></video>
+  <video id="remote-video-front" class="hidden" autoplay playsinline muted></video>
   <div id="overlay">
     <span id="ws-status" class="dot-wait">WS: connecting...</span><br>
     <span id="cam-status" class="dot-wait">CAM: waiting</span>
   </div>
 </div>
 <script>
-  const video     = document.getElementById('remote-video');
-  const wsStatus  = document.getElementById('ws-status');
-  const camStatus = document.getElementById('cam-status');
+  const videoRear  = document.getElementById('remote-video-rear');
+  const videoFront = document.getElementById('remote-video-front');
+  const wsStatus   = document.getElementById('ws-status');
+  const camStatus  = document.getElementById('cam-status');
 
   const params = new URLSearchParams(location.search);
   const port = params.get('port') || '9980';
@@ -48,7 +51,10 @@
 
   const peers = {};
   let ws = null;
-  let activeSlot = null;
+
+  function peerKey(slot, camType) {
+    return slot + '_' + (camType || 'rear');
+  }
 
   function send(obj) {
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -70,8 +76,10 @@
       wsStatus.className = 'dot-err';
       camStatus.textContent = 'CAM: waiting';
       camStatus.className = 'dot-wait';
-      for (const slot in peers) { try { peers[slot].close(); } catch(e){} }
+      for (const k in peers) { try { peers[k].close(); } catch(e){} }
       Object.keys(peers).forEach(k => delete peers[k]);
+      if (videoRear) videoRear.srcObject = null;
+      if (videoFront) videoFront.srcObject = null;
       setTimeout(connect, 2000);
     };
 
@@ -85,29 +93,34 @@
       try { msg = JSON.parse(e.data); } catch { return; }
 
       if (msg.type === 'cam_offer') {
-        await handleOffer(msg.slot, msg.sdp);
+        await handleOffer(msg.slot, msg.sdp, msg.camType);
       } else if (msg.type === 'cam_ice') {
-        await handleRemoteIce(msg.slot, msg.candidate, msg.sdpMLineIndex, msg.sdpMid);
+        await handleRemoteIce(msg.slot, msg.candidate, msg.sdpMLineIndex, msg.sdpMid, msg.camType);
       } else if (msg.type === 'cam_peer_closed') {
-        closePeer(msg.slot);
+        closePeer(peerKey(msg.slot, msg.camType));
       }
     };
   }
 
-  async function handleOffer(slot, sdp) {
-    if (peers[slot]) { try { peers[slot].close(); } catch(e){} }
+  async function handleOffer(slot, sdp, camType) {
+    camType = camType || 'rear';
+    const key = peerKey(slot, camType);
+    if (peers[key]) { try { peers[key].close(); } catch(e){} }
 
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-    peers[slot] = pc;
+    peers[key] = pc;
 
-    camStatus.textContent = 'CAM: connecting (slot ' + slot + ')';
+    camStatus.textContent = 'CAM: connecting (' + camType + ')';
     camStatus.className = 'dot-wait';
 
+    const videoEl = camType === 'front' ? videoFront : videoRear;
+
     pc.ontrack = (e) => {
-      if (e.streams && e.streams[0]) {
-        activeSlot = slot;
-        video.srcObject = e.streams[0];
-        camStatus.textContent = 'CAM: streaming (slot ' + slot + ')';
+      if (e.streams && e.streams[0] && videoEl) {
+        videoEl.srcObject = e.streams[0];
+        videoEl.classList.remove('hidden');
+        const count = Object.keys(peers).filter(k => peers[k].connectionState === 'connected').length;
+        camStatus.textContent = 'CAM: streaming (' + camType + (count > 1 ? ', ' + count + ' streams' : '') + ')';
         camStatus.className = 'dot-ok';
       }
     };
@@ -117,6 +130,7 @@
         send({
           type: 'cam_ice',
           slot,
+          camType,
           candidate: candidate.candidate,
           sdpMLineIndex: candidate.sdpMLineIndex,
           sdpMid: candidate.sdpMid,
@@ -127,12 +141,16 @@
     pc.onconnectionstatechange = () => {
       const s = pc.connectionState;
       if (s === 'failed' || s === 'closed' || s === 'disconnected') {
-        if (activeSlot === slot) {
-          video.srcObject = null;
-          camStatus.textContent = 'CAM: ' + s;
-          camStatus.className = 'dot-err';
+        if (videoEl) {
+          videoEl.srcObject = null;
+          videoEl.classList.add('hidden');
         }
-        if (s === 'failed' || s === 'closed') closePeer(slot);
+        if (s === 'failed' || s === 'closed') closePeer(key);
+        const active = Object.keys(peers).length;
+        if (active === 0) {
+          camStatus.textContent = 'CAM: waiting';
+          camStatus.className = 'dot-wait';
+        }
       }
     };
 
@@ -140,16 +158,17 @@
       await pc.setRemoteDescription({ type: 'offer', sdp });
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
-      send({ type: 'cam_answer', slot, sdp: answer.sdp });
+      send({ type: 'cam_answer', slot, camType, sdp: answer.sdp });
     } catch (err) {
       camStatus.textContent = 'CAM: offer error — ' + err.message;
       camStatus.className = 'dot-err';
-      closePeer(slot);
+      closePeer(key);
     }
   }
 
-  async function handleRemoteIce(slot, candidate, sdpMLineIndex, sdpMid) {
-    const pc = peers[slot];
+  async function handleRemoteIce(slot, candidate, sdpMLineIndex, sdpMid, camType) {
+    const key = peerKey(slot, camType);
+    const pc = peers[key];
     if (!pc || !candidate) return;
     try {
       await pc.addIceCandidate(new RTCIceCandidate({ candidate, sdpMLineIndex, sdpMid }));
@@ -158,14 +177,18 @@
     }
   }
 
-  function closePeer(slot) {
-    if (peers[slot]) {
-      try { peers[slot].close(); } catch(e) {}
-      delete peers[slot];
+  function closePeer(key) {
+    if (peers[key]) {
+      try { peers[key].close(); } catch(e) {}
+      delete peers[key];
     }
-    if (activeSlot === slot) {
-      activeSlot = null;
-      video.srcObject = null;
+    const camType = (key || '').includes('front') ? 'front' : 'rear';
+    const videoEl = camType === 'front' ? videoFront : videoRear;
+    if (videoEl) {
+      videoEl.srcObject = null;
+      videoEl.classList.add('hidden');
+    }
+    if (Object.keys(peers).length === 0) {
       camStatus.textContent = 'CAM: waiting';
       camStatus.className = 'dot-wait';
     }

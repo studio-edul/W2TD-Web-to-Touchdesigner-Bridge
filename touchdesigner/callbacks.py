@@ -103,12 +103,14 @@ def _handle_cam_receiver_msg(webServerDAT, addr, msg):
 		if mobile_addr is None:
 			print(f'[WOB Cam] cam_answer: no mobile addr for slot {slot}')
 			return
+		cam_type = msg.get('camType', msg.get('cam_type', 'rear'))
 		try:
 			webServerDAT.webSocketSendText(mobile_addr, json.dumps({
 				'type': 'webrtc_answer_cam',
 				'sdp': sdp,
+				'camType': cam_type,
 			}))
-			print(f'[WOB Cam] cam_answer relayed -> slot {slot}')
+			print(f'[WOB Cam] cam_answer relayed -> slot {slot} ({cam_type})')
 		except Exception as e:
 			print(f'[WOB Cam] cam_answer relay error: {e}')
 
@@ -120,12 +122,14 @@ def _handle_cam_receiver_msg(webServerDAT, addr, msg):
 		mobile_addr = _addr_for_slot(slot)
 		if mobile_addr is None:
 			return
+		cam_type = msg.get('camType', msg.get('cam_type', 'rear'))
 		try:
 			webServerDAT.webSocketSendText(mobile_addr, json.dumps({
 				'type': 'webrtc_ice_cam',
 				'candidate': candidate,
 				'sdpMLineIndex': msg.get('sdpMLineIndex', 0),
 				'sdpMid': msg.get('sdpMid', ''),
+				'camType': cam_type,
 			}))
 		except Exception as e:
 			print(f'[WOB Cam] cam_ice relay error: {e}')
@@ -713,13 +717,15 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 		if receiver_addr is None:
 			print('[WOB Cam] webrtc_offer_cam received but no cam_receiver connected')
 			return
+		cam_type = msg.get('camType', msg.get('cam_type', 'rear'))
 		try:
 			webServerDAT.webSocketSendText(receiver_addr, json.dumps({
 				'type': 'cam_offer',
 				'slot': slot,
 				'sdp': sdp,
+				'camType': cam_type,
 			}))
-			print(f'[WOB Cam] cam_offer relayed to receiver (slot {slot})')
+			print(f'[WOB Cam] cam_offer relayed to receiver (slot {slot}, {cam_type})')
 		except Exception as e:
 			print(f'[WOB Cam] cam_offer relay error: {e}')
 
@@ -731,6 +737,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 		receiver_addr = _cam_receiver_addr()
 		if receiver_addr is None:
 			return
+		cam_type = msg.get('camType', msg.get('cam_type', 'rear'))
 		try:
 			webServerDAT.webSocketSendText(receiver_addr, json.dumps({
 				'type': 'cam_ice',
@@ -738,6 +745,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 				'candidate': candidate,
 				'sdpMLineIndex': msg.get('sdpMLineIndex', 0),
 				'sdpMid': msg.get('sdpMid', ''),
+				'camType': cam_type,
 			}))
 		except Exception as e:
 			print(f'[WOB Cam] webrtc_ice_cam relay error: {e}')

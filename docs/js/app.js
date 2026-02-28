@@ -12,8 +12,10 @@
   let hapticEnabled = true;
   let devMode = true; // true = full UI, false = minimal/auto mode
   let vizInitialized = false;
-  let cameraEnabled = false; // config: auto-enable camera on connect
-  let micEnabled = false;    // config: wob_config sensor_microphone에서 로드
+  let cameraFrontEnabled = false;
+  let cameraRearEnabled = false;
+  let cameraConfigOn = false;  // sensor_camera from config — when false, hide both toggles
+  let micEnabled = false;
   let audioEchoCancellation = false;  // config: 0=raw, 1=on
   let audioNoiseSuppression = false;
   let audioAutoGain = false;
@@ -128,11 +130,24 @@
       applyDevMode(!!parseInt(cfg.dev_mode));
     }
     if (cfg.sensor_camera != null) {
-      cameraEnabled = !!parseInt(cfg.sensor_camera);
+      const camOn = !!parseInt(cfg.sensor_camera);
+      cameraConfigOn = camOn;
+      if (!camOn) {
+        cameraFrontEnabled = false;
+        cameraRearEnabled = false;
+        if (WebRTCModule.isCamPCActive()) WebRTCModule.stopCamera();
+      } else if (!cameraFrontEnabled && !cameraRearEnabled) {
+        cameraRearEnabled = true;
+      }
       renderSensorList();
     }
     if (cfg.sensor_microphone != null) {
-      micEnabled = !!parseInt(cfg.sensor_microphone);
+      const micOn = !!parseInt(cfg.sensor_microphone);
+      const wasOn = micEnabled;
+      micEnabled = micOn;
+      if (wasOn && !micOn && WebRTCModule.isMicActive()) {
+        WebRTCModule.stop();
+      }
       renderSensorList();
     }
     let audioProcChanged = false;
@@ -335,7 +350,6 @@
       renderSensorList();
       addLog('WebRTC cam: ' + state, state === 'connected' ? 'info' : state === 'failed' ? 'error' : 'warn');
     });
-
     setInterval(updatePacketRate, 1000);
   }
 
@@ -371,23 +385,26 @@
       els.sensorList.appendChild(li);
     });
 
-    // Camera item — toggleable via WebRTC (cam_receiver.html in Web Render TOP)
-    {
+    // Rear Camera — default when sensor_camera=1
+    if (cameraConfigOn) {
       const li = document.createElement('li');
       const camAvail = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-      if (!camAvail) {
-        li.className = 'unavailable';
-      } else if (cameraEnabled) {
-        li.className = 'available selected' + (WebRTCModule.isCameraActive() ? ' rtc-connected' : '');
-      } else {
-        li.className = 'available deselected';
-      }
-      li.innerHTML = `<span class="sensor-icon">&#x1F4F7;</span> Camera`;
-      if (camAvail) {
-        li.addEventListener('click', async () => {
-          await handleCameraToggle();
-        });
-      }
+      if (!camAvail) li.className = 'unavailable';
+      else if (cameraRearEnabled) li.className = 'available selected' + (WebRTCModule.isCameraRearActive() ? ' rtc-connected' : '');
+      else li.className = 'available deselected';
+      li.innerHTML = `<span class="sensor-icon">&#x1F4F7;</span> Rear`;
+      if (camAvail) li.addEventListener('click', () => handleRearCameraToggle());
+      els.sensorList.appendChild(li);
+    }
+    // Front Camera (selfie)
+    if (cameraConfigOn) {
+      const li = document.createElement('li');
+      const camAvail = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+      if (!camAvail) li.className = 'unavailable';
+      else if (cameraFrontEnabled) li.className = 'available selected' + (WebRTCModule.isCameraFrontActive() ? ' rtc-connected' : '');
+      else li.className = 'available deselected';
+      li.innerHTML = `<span class="sensor-icon">&#x1F4F9;</span> Front`;
+      if (camAvail) li.addEventListener('click', () => handleFrontCameraToggle());
       els.sensorList.appendChild(li);
     }
 
@@ -489,7 +506,7 @@
       onWebRTCSignal: (msg) => {
         if (msg.type === 'webrtc_answer')         WebRTCModule.handleAnswer(msg.sdp);
         else if (msg.type === 'webrtc_ice')        WebRTCModule.handleIce(msg);
-        else if (msg.type === 'webrtc_answer_cam') WebRTCModule.handleCameraAnswer(msg.sdp);
+        else if (msg.type === 'webrtc_answer_cam') WebRTCModule.handleCameraAnswer(msg.sdp, msg.camType);
         else if (msg.type === 'webrtc_ice_cam')    WebRTCModule.handleCameraIce(msg);
       },
         onHaptic: (data) => {
@@ -582,6 +599,7 @@
     if (SensorModule.isEnabled()) {
       SensorModule.stopListening();
       if (WebRTCModule.isMicActive()) await WebRTCModule.stop();
+      if (WebRTCModule.isCamPCActive()) WebRTCModule.stopCamera();
       els.btnEnableSensors.textContent = 'Enable Sensors';
       els.btnEnableSensors.classList.remove('btn-active');
       updateDebug('Sensors deactivated');
@@ -619,6 +637,31 @@
         } else {
           showToast('Mic activation failed');
         }
+      }
+    }
+
+    if (cameraRearEnabled && !WebRTCModule.isCameraRearActive()) {
+      const ok = await WebRTCModule.acquireCamera('environment');
+      if (ok) {
+        await WebRTCModule.startCamera('environment', _webrtcStartOpts({}));
+      } else {
+        cameraRearEnabled = false;
+        const err = WebRTCModule.getLastError();
+        if (err === 'NotAllowedError' || err === 'PermissionDeniedError') showToast('Camera permission denied');
+        else if (err === 'NotFoundError') showToast('Camera not found');
+        else showToast('Rear camera activation failed');
+      }
+    }
+    if (cameraFrontEnabled && !WebRTCModule.isCameraFrontActive()) {
+      const ok = await WebRTCModule.acquireCamera('user');
+      if (ok) {
+        await WebRTCModule.startCamera('user', _webrtcStartOpts({}));
+      } else {
+        cameraFrontEnabled = false;
+        const err = WebRTCModule.getLastError();
+        if (err === 'NotAllowedError' || err === 'PermissionDeniedError') showToast('Camera permission denied');
+        else if (err === 'NotFoundError') showToast('Camera not found');
+        else showToast('Front camera activation failed');
       }
     }
 
@@ -1001,35 +1044,56 @@
     }
   }
 
-  async function handleCameraToggle() {
+  async function handleRearCameraToggle() {
     haptic();
-    if (cameraEnabled) {
-      cameraEnabled = false;
-      if (WebRTCModule.isCamPCActive()) WebRTCModule.stopCamera();
+    if (cameraRearEnabled) {
+      cameraRearEnabled = false;
+      WebRTCModule.stopCameraRear();
       renderSensorList();
       return;
     }
-    cameraEnabled = true;
+    cameraRearEnabled = true;
     renderSensorList();
-
     if (!WSClient.isConnected()) {
       showToast('Connect to TouchDesigner first');
-      cameraEnabled = false;
+      cameraRearEnabled = false;
       renderSensorList();
       return;
     }
-
-    const ok = await WebRTCModule.startCamera(_webrtcStartOpts({}));
+    const ok = await WebRTCModule.startCamera('environment', _webrtcStartOpts({}));
     if (ok === false) {
-      cameraEnabled = false;
+      cameraRearEnabled = false;
       const err = WebRTCModule.getLastError();
-      if (err === 'NotAllowedError' || err === 'PermissionDeniedError') {
-        showToast('Camera permission denied — allow camera in browser settings');
-      } else if (err === 'NotFoundError') {
-        showToast('Camera not found');
-      } else {
-        showToast('Camera activation failed');
-      }
+      if (err === 'NotAllowedError' || err === 'PermissionDeniedError') showToast('Camera permission denied');
+      else if (err === 'NotFoundError') showToast('Camera not found');
+      else showToast('Rear camera activation failed');
+      renderSensorList();
+    }
+  }
+
+  async function handleFrontCameraToggle() {
+    haptic();
+    if (cameraFrontEnabled) {
+      cameraFrontEnabled = false;
+      WebRTCModule.stopCameraFront();
+      renderSensorList();
+      return;
+    }
+    cameraFrontEnabled = true;
+    renderSensorList();
+    if (!WSClient.isConnected()) {
+      showToast('Connect to TouchDesigner first');
+      cameraFrontEnabled = false;
+      renderSensorList();
+      return;
+    }
+    const ok = await WebRTCModule.startCamera('user', _webrtcStartOpts({}));
+    if (ok === false) {
+      cameraFrontEnabled = false;
+      const err = WebRTCModule.getLastError();
+      if (err === 'NotAllowedError' || err === 'PermissionDeniedError') showToast('Camera permission denied');
+      else if (err === 'NotFoundError') showToast('Camera not found');
+      else showToast('Front camera activation failed');
       renderSensorList();
     }
   }
@@ -1080,6 +1144,7 @@
     const results = {
       sensors: false,
       microphone: false,
+      camera: false,
       wakeLock: false,
     };
 
@@ -1114,7 +1179,23 @@
         addLog('Microphone permission error: ' + (e.message || e.name), 'warn');
       }
 
-      // 3. WakeLock permission (Screen Wake Lock API)
+      // 3. Camera permission — if rear or front enabled (from config)
+      if (cameraRearEnabled || cameraFrontEnabled) {
+        try {
+          const mode = cameraRearEnabled ? 'environment' : 'user';
+          const camOk = await WebRTCModule.acquireCamera(mode);
+          if (camOk) {
+            results.camera = true;
+            addLog('Camera permission granted', 'info');
+          } else {
+            addLog('Camera permission denied', 'warn');
+          }
+        } catch (e) {
+          addLog('Camera permission error: ' + (e.message || e.name), 'warn');
+        }
+      }
+
+      // 4. WakeLock permission (Screen Wake Lock API)
       // Note: WakeLock doesn't require explicit permission, but needs user gesture
       try {
         if ('wakeLock' in navigator) {

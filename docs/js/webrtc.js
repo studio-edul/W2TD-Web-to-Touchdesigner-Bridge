@@ -22,11 +22,11 @@ const WebRTCModule = (() => {
   let _micIceRecvCount = 0;
 
   // ── Camera (→ Web Render TOP via cam_receiver.html) ───────────────────────
-  let camPc     = null;
-  let camStream = null;
-  let camActive = false;
+  // Front (user/selfie) and Rear (environment) as separate connections
+  let camFrontPc = null, camFrontStream = null;
+  let camRearPc   = null, camRearStream   = null;
   let _onCamStateChange = null;
-  let _camIceRecvCount  = 0;
+  let _camFrontIceRecv = 0, _camRearIceRecv = 0;
 
   // ── Shared ────────────────────────────────────────────────────────────────
   let _lastError = null;
@@ -191,102 +191,146 @@ const WebRTCModule = (() => {
     }
   }
 
-  // ── Camera public API ──────────────────────────────────────────────────────
+  // ── Camera public API (Front / Rear) ───────────────────────────────────────
 
-  /**
-   * Acquire camera stream + create RTCPeerConnection → send webrtc_offer_cam to TD.
-   * TD relays the offer to cam_receiver.html (Web Render TOP).
-   */
-  async function startCamera({
-    iceServers         = null,
-    iceTransportPolicy = null,
-  } = {}) {
+  const CAM_FRONT = 'front';
+  const CAM_REAR  = 'rear';
+
+  /** Acquire camera stream — facingMode: 'user' (front) or 'environment' (rear). */
+  async function acquireCamera(facingMode = 'environment') {
     _lastError = null;
-    _camIceRecvCount = 0;
-    if (camPc) { camPc.close(); camPc = null; }
-    if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
-    camActive = false;
-
+    const isFront = facingMode === 'user';
+    const stream = isFront ? camFrontStream : camRearStream;
+    if (stream && stream.getVideoTracks().length > 0) return true;
+    if (stream) { stream.getTracks().forEach(t => t.stop()); }
+    if (isFront) camFrontStream = null; else camRearStream = null;
     try {
-      camStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-      camActive = camStream.getVideoTracks().length > 0;
-      _log('acquireCamera OK — cam:' + camActive);
+      const s = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: facingMode } },
+        audio: false,
+      });
+      if (isFront) camFrontStream = s; else camRearStream = s;
+      _log('acquireCamera OK — ' + (isFront ? 'front' : 'rear'));
+      _updatePreview(_getActiveCameraStream());
+      return true;
     } catch (e) {
       _lastError = e.name || 'unknown';
       console.error('[WOB WebRTC] acquireCamera failed:', e.name, e.message);
-      _setCamState('failed');
       return false;
     }
+  }
 
-    _updatePreview(camStream);
+  function _getActiveCameraStream() {
+    if (camRearStream && camRearStream.getVideoTracks().length > 0) return camRearStream;
+    if (camFrontStream && camFrontStream.getVideoTracks().length > 0) return camFrontStream;
+    return null;
+  }
 
-    camPc = new RTCPeerConnection(_buildRtcConfig(iceServers, iceTransportPolicy));
-    camStream.getTracks().forEach(track => camPc.addTrack(track, camStream));
+  /** Start camera stream (front or rear) and send offer to TD. */
+  async function startCamera(facingMode = 'environment', opts = {}) {
+    _lastError = null;
+    const isFront = facingMode === 'user';
+    const camType = isFront ? CAM_FRONT : CAM_REAR;
 
-    let iceCount = 0;
-    camPc.onicecandidate = ({ candidate }) => {
+    if (isFront) {
+      _camFrontIceRecv = 0;
+      if (camFrontPc) { camFrontPc.close(); camFrontPc = null; }
+    } else {
+      _camRearIceRecv = 0;
+      if (camRearPc) { camRearPc.close(); camRearPc = null; }
+    }
+
+    let stream = isFront ? camFrontStream : camRearStream;
+    if (!stream || stream.getVideoTracks().length === 0) {
+      if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+      if (isFront) camFrontStream = null; else camRearStream = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: facingMode } },
+          audio: false,
+        });
+        if (isFront) camFrontStream = stream; else camRearStream = stream;
+      } catch (e) {
+        _lastError = e.name || 'unknown';
+        _setCamState('failed');
+        return false;
+      }
+      _updatePreview(_getActiveCameraStream());
+    }
+
+    const pc = new RTCPeerConnection(_buildRtcConfig(opts.iceServers, opts.iceTransportPolicy));
+    if (isFront) camFrontPc = pc; else camRearPc = pc;
+
+    stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+    pc.onicecandidate = ({ candidate }) => {
       if (!candidate) return;
-      iceCount++;
-      if (iceCount <= 3) _log('cam ICE #' + iceCount + ' sent');
       WSClient.send({
         type: 'webrtc_ice_cam',
         candidate: candidate.candidate,
         sdpMLineIndex: candidate.sdpMLineIndex,
         sdpMid: candidate.sdpMid,
+        camType,
       });
     };
 
-    camPc.onconnectionstatechange = () => {
-      const s = camPc.connectionState;
-      console.log('[WOB WebRTC] cam connectionState:', s);
+    pc.onconnectionstatechange = () => {
+      const s = pc.connectionState;
       _setCamState(s);
-      if (s === 'failed' || s === 'closed') stopCamera();
-    };
-
-    camPc.oniceconnectionstatechange = () => {
-      console.log('[WOB WebRTC] cam iceState:', camPc.iceConnectionState);
+      if (s === 'failed' || s === 'closed') {
+        if (isFront) stopCameraFront();
+        else stopCameraRear();
+      }
     };
 
     _setCamState('connecting');
 
     try {
-      const offer = await camPc.createOffer();
-      await camPc.setLocalDescription(offer);
-      const sent = WSClient.send({ type: 'webrtc_offer_cam', sdp: offer.sdp });
-      _log(sent ? 'Cam offer sent to TD' : 'Cam offer FAILED — WebSocket not connected');
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      const sent = WSClient.send({ type: 'webrtc_offer_cam', sdp: offer.sdp, camType });
+      _log(sent ? 'Cam ' + camType + ' offer sent' : 'Cam offer FAILED');
+      return sent ? true : false;
     } catch (e) {
-      console.error('[WOB WebRTC] cam createOffer failed:', e);
       _setCamState('failed');
       return false;
     }
   }
 
-  /** Stop camera: close PC and release stream. */
-  function stopCamera() {
-    if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
-    if (camPc) { camPc.close(); camPc = null; }
-    camActive = false;
-    _updatePreview(null);
-    _setCamState('closed');
-    console.log('[WOB WebRTC] Camera stopped');
+  function stopCameraFront() {
+    if (camFrontStream) { camFrontStream.getTracks().forEach(t => t.stop()); camFrontStream = null; }
+    if (camFrontPc) { camFrontPc.close(); camFrontPc = null; }
+    _updatePreview(_getActiveCameraStream());
   }
 
-  async function handleCameraAnswer(sdp) {
-    if (!camPc) return;
+  function stopCameraRear() {
+    if (camRearStream) { camRearStream.getTracks().forEach(t => t.stop()); camRearStream = null; }
+    if (camRearPc) { camRearPc.close(); camRearPc = null; }
+    _updatePreview(_getActiveCameraStream());
+  }
+
+  function stopCamera() {
+    stopCameraFront();
+    stopCameraRear();
+    _updatePreview(null);
+    _setCamState('closed');
+  }
+
+  async function handleCameraAnswer(sdp, camType = CAM_REAR) {
+    const pc = camType === CAM_FRONT ? camFrontPc : camRearPc;
+    if (!pc) return;
     try {
-      await camPc.setRemoteDescription({ type: 'answer', sdp });
-      console.log('[WOB WebRTC] Cam remote description set');
+      await pc.setRemoteDescription({ type: 'answer', sdp });
     } catch (e) {
       console.error('[WOB WebRTC] cam setRemoteDescription failed:', e);
     }
   }
 
-  async function handleCameraIce({ candidate, sdpMLineIndex, sdpMid }) {
-    if (!camPc || !candidate) return;
-    _camIceRecvCount++;
-    if (_camIceRecvCount <= 3) _log('cam ICE from TD #' + _camIceRecvCount);
+  async function handleCameraIce({ candidate, sdpMLineIndex, sdpMid, camType = CAM_REAR }) {
+    const pc = camType === CAM_FRONT ? camFrontPc : camRearPc;
+    if (!pc || !candidate) return;
     try {
-      await camPc.addIceCandidate(new RTCIceCandidate({ candidate, sdpMLineIndex, sdpMid }));
+      await pc.addIceCandidate(new RTCIceCandidate({ candidate, sdpMLineIndex, sdpMid }));
     } catch (e) {
       _log('cam addIceCandidate failed: ' + (e.message || e));
     }
@@ -347,13 +391,17 @@ const WebRTCModule = (() => {
     isMicActive:  () => micActive,
     isPCActive:   () => micPc !== null,
     // Camera
-    startCamera, stopCamera,
+    acquireCamera, startCamera, stopCamera,
+    stopCameraFront, stopCameraRear,
     handleCameraAnswer, handleCameraIce,
     onCamStateChange,
-    isCameraActive: () => camActive,
-    isCamPCActive:  () => camPc !== null,
+    CAM_FRONT, CAM_REAR,
+    isCameraFrontActive: () => !!(camFrontStream && camFrontStream.getVideoTracks().length),
+    isCameraRearActive:  () => !!(camRearStream && camRearStream.getVideoTracks().length),
+    isCameraActive:      () => !!(camFrontStream?.getVideoTracks().length || camRearStream?.getVideoTracks().length),
+    isCamPCActive:       () => camFrontPc !== null || camRearPc !== null,
     // Shared
-    isActive:     () => micActive || camActive,
+    isActive: () => micActive || !!(camFrontStream?.getVideoTracks().length || camRearStream?.getVideoTracks().length),
     setOnLog,
     getMicLevel,
     getLastError: () => _lastError,
