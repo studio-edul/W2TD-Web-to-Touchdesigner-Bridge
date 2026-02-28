@@ -7,36 +7,75 @@
 #
 # Automatically broadcasts config changes to all connected clients.
 # Uses debouncing to prevent excessive broadcasts during rapid edits.
+# Broadcast logic is self-contained (no web_server_dat.module access) to avoid module compilation errors.
+
+import json
 
 # Debouncing: wait 300ms after last change before broadcasting
 _debounce_timer = None
 DEBOUNCE_DELAY = 0.3  # seconds
 
 
-def _broadcast():
-	"""Call callbacks.py broadcast_config() to push config to all clients."""
+def _read_config():
+	"""Read settings from wob_config Table DAT (key | value)."""
+	cfg = op('wob_config')
+	if cfg is None:
+		return {}
+	out = {}
+	for r in range(1, cfg.numRows):
+		try:
+			out[str(cfg[r, 0])] = str(cfg[r, 1])
+		except Exception:
+			pass
+	return out
+
+
+def _build_config_msg(cfg):
+	"""Build config JSON dict — matches callbacks._config_msg format."""
+	out = {
+		'type': 'config',
+		'sample_rate': int(cfg.get('sample_rate', 30)),
+		'wake_lock': int(cfg.get('wake_lock', 1)),
+		'haptic': int(cfg.get('haptic', 1)),
+		'sensor_motion': int(cfg.get('sensor_motion', 1)),
+		'sensor_orientation': int(cfg.get('sensor_orientation', 1)),
+		'sensor_geolocation': int(cfg.get('sensor_geolocation', 0)),
+		'sensor_touch': int(cfg.get('sensor_touch', 1)),
+		'dev_mode': int(cfg.get('dev_mode', 1)),
+		'sensor_camera': int(cfg.get('sensor_camera', 0)),
+		'sensor_microphone': int(cfg.get('sensor_microphone', 1)),
+		'audio_echo_cancellation': int(cfg.get('audio_echo_cancellation', 0)),
+		'audio_noise_suppression': int(cfg.get('audio_noise_suppression', 0)),
+		'audio_auto_gain': int(cfg.get('audio_auto_gain', 0)),
+	}
+	ice_srv = cfg.get('ice_servers', '').strip()
+	if ice_srv:
+		out['ice_servers'] = ice_srv
+	if cfg.get('ice_transport_policy', '').strip() == 'relay':
+		out['ice_transport_policy'] = 'relay'
+	return out
+
+
+def _do_broadcast():
+	"""Send config to all connected clients. Uses web operator methods only (no web.module)."""
 	web = op('web_server_dat')
 	if web is None:
-		print('[WOB Config Watch] web_server_dat not found — update op name')
 		return
-	
-	# Use callbacks.py's broadcast_config function for consistency
-	try:
-		# Import callbacks module and call broadcast_config
-		callbacks_module = web.module
-		if hasattr(callbacks_module, 'broadcast_config'):
-			callbacks_module.broadcast_config(web)
-		else:
-			print('[WOB Config Watch] broadcast_config not found in callbacks.py')
-	except Exception as e:
-		print(f'[WOB Config Watch] Broadcast error: {e}')
+	cfg = _read_config()
+	msg = json.dumps(_build_config_msg(cfg))
+	slots = op('/').fetch('wob_client_slots', {})
+	for addr in list(slots.keys()):
+		try:
+			web.webSocketSendText(addr, msg)
+		except Exception:
+			pass
+	print(f'[WOB] Config broadcast -> {len(slots)} clients')
 
 
 def _debounced_broadcast():
-	"""Debounced broadcast — waits for changes to settle."""
+	"""Debounced broadcast — schedules _do_broadcast (no web.module access)."""
 	global _debounce_timer
 
-	# Cancel previous timer
 	if _debounce_timer is not None:
 		try:
 			_debounce_timer.kill()
@@ -44,18 +83,12 @@ def _debounced_broadcast():
 			pass
 		_debounce_timer = None
 
-	# Schedule broadcast after delay using TD's global run() function
-	try:
-		delay_frames = max(1, int(DEBOUNCE_DELAY * 60))  # 60fps default
-		_debounce_timer = run(
-			'web = op("web_server_dat")\n'
-			'if web and hasattr(web.module, "broadcast_config"):\n'
-			'    web.module.broadcast_config(web)',
-			delayFrames=delay_frames
-		)
-	except Exception:
-		# Fallback: immediate broadcast if run() fails
-		_broadcast()
+	delay_frames = max(1, int(DEBOUNCE_DELAY * 60))
+	_debounce_timer = run(
+		"op('config_watch').module._do_broadcast()",
+		delayFrames=delay_frames,
+		fromOP=op('config_watch')
+	)
 
 
 def onTableChange(dat):

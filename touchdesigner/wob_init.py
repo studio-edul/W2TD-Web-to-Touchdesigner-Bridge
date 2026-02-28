@@ -245,14 +245,20 @@ def generate():
 		print(f'[WOB] TOP reload failed: {e}')
 		return
 
-	# 6. Set Web Render TOP URL to cam_receiver.html
+	# 6. Set Web Render TOP URL to cam_receiver (web-deployed, no local file needed)
 	try:
 		web_render = op('web_render_top')
 		if web_render is not None:
-			receiver_path = os.path.join(project.folder, 'touchdesigner', 'cam_receiver.html')
-			file_url = 'file:///' + receiver_path.replace('\\', '/')
-			web_render.par.url = file_url
-			print(f'[WOB] web_render_top URL set: {file_url}')
+			GITHUB_PAGES_URL = 'https://studio-edul.github.io/Web-Osc-Bridge/'
+			receiver_url = GITHUB_PAGES_URL + 'cam_receiver.html?port=' + str(port)
+			# Add tls=1 if Web Server DAT has TLS enabled (par.secure or par.tls)
+			web_srv = op('web_server_dat')
+			if web_srv is not None:
+				tls_on = bool(getattr(web_srv.par, 'secure', False) or getattr(web_srv.par, 'tls', False))
+				if tls_on:
+					receiver_url += '&tls=1'
+			web_render.par.url = receiver_url
+			print(f'[WOB] web_render_top URL set: {receiver_url}')
 		else:
 			print('[WOB] web_render_top not found - create a Web Render TOP named "web_render_top"')
 	except Exception as e:
