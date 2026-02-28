@@ -50,19 +50,34 @@ def _init_tables():
 
 def _init_webrtc_ice():
 	"""Configure WebRTC DAT TURN servers for cross-network (tunnel/cloudflared)."""
-	try:
-		w = op('webrtc_dat')
-		if w is None:
-			return
-		# freeTURN (free, no signup required)
-		w.par.turn0server = 'turn:freeturn.net:3478'
-		w.par.username = 'free'
-		w.par.password = 'free'
-		if hasattr(w.par, 'turn1server'):
-			w.par.turn1server = 'turns:freeturn.net:5349'
-		print('[WOB] WebRTC DAT TURN configured for cross-network')
-	except Exception as e:
-		print(f'[WOB] WebRTC ICE init skip: {e}')
+	w = op('webrtc_dat')
+	if w is None:
+		return
+
+	# freeTURN server 0: TURN (UDP/TCP)
+	_set_par(w, 'turn0server', 'turn:freeturn.net:3478')
+	# Credential parameter names vary by TD version — try all known names
+	_set_par(w, 'turn0username',   'free', ('turn0user',))
+	_set_par(w, 'turn0credential', 'free', ('turn0password', 'turn0pass'))
+
+	# freeTURN server 1: TURNS (TLS)
+	_set_par(w, 'turn1server', 'turns:freeturn.net:5349')
+	_set_par(w, 'turn1username',   'free', ('turn1user',))
+	_set_par(w, 'turn1credential', 'free', ('turn1password', 'turn1pass'))
+
+	print('[WOB] WebRTC DAT TURN configured for cross-network')
+
+
+def _set_par(op_node, primary, value, fallbacks=()):
+	"""Set an operator parameter by trying primary name then fallbacks."""
+	for name in (primary,) + tuple(fallbacks):
+		if hasattr(op_node.par, name):
+			try:
+				setattr(op_node.par, name, value)
+				return True
+			except Exception as e:
+				print(f'[WOB] _set_par {name}={value} failed: {e}')
+	return False
 
 
 def install_packages():

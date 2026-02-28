@@ -15,25 +15,23 @@ import json
 
 
 def _auto_select_audio_chop(webrtcDAT, connectionId):
-	"""When WebRTC connects, auto-set webrtc_audio_1 Connection and Track."""
+	"""When WebRTC connects, auto-set webrtc_audio_1 Connection."""
 	audio_chop = op('webrtc_audio_1')
 	if audio_chop is None:
 		return
-	try:
-		tracks = webrtcDAT.getTracks(connectionId, 'audio', 'remote')
-		track_id = tracks[0] if tracks and len(tracks) > 0 else None
-		for par_name in ('webrtcconnection', 'Webrtcconnection'):
-			if hasattr(audio_chop.par, par_name):
+	# Set connection ID — TD auto-detects audio tracks for the connection.
+	# Note: getTracks() is not available in TD's WebRTC DAT Python API,
+	# so we only set the connection; the CHOP handles track selection internally.
+	set_ok = False
+	for par_name in ('webrtcconnection', 'Webrtcconnection'):
+		if hasattr(audio_chop.par, par_name):
+			try:
 				setattr(audio_chop.par, par_name, connectionId)
+				set_ok = True
 				break
-		if track_id:
-			for par_name in ('webrtctrack', 'Webrtctrack'):
-				if hasattr(audio_chop.par, par_name):
-					setattr(audio_chop.par, par_name, track_id)
-					break
-		print(f'[WOB WebRTC] webrtc_audio_1 auto-selected conn={connectionId} track={track_id}')
-	except Exception as e:
-		print(f'[WOB WebRTC] Auto-select audio failed: {e}')
+			except Exception as e:
+				print(f'[WOB WebRTC] Set {par_name} failed: {e}')
+	print(f'[WOB WebRTC] webrtc_audio_1 connection -> {connectionId} (set_ok={set_ok})')
 
 
 def _send_to_client(connectionId, data):
