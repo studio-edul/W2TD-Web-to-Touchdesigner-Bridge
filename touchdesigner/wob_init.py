@@ -48,6 +48,14 @@ def _init_tables():
 	else:
 		print('[WOB] touch_table DAT not found - create a Table DAT named "touch_table"')
 
+	wt = op('webrtc_table')
+	if wt is not None:
+		wt.clear()
+		wt.appendRow(['slot', 'name', 'conn_id', 'state'])
+		print('[WOB] webrtc_table initialized')
+	else:
+		print('[WOB] webrtc_table DAT not found - create a Table DAT named "webrtc_table"')
+
 def _init_webrtc_ice():
 	"""Configure WebRTC DAT TURN servers for cross-network (tunnel/cloudflared)."""
 	w = op('webrtc_dat')

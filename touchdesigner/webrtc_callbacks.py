@@ -94,9 +94,24 @@ def onIceCandidate(webrtcDAT, connectionId, candidate, lineIndex, sdpMid):
 	})
 
 
+def _wt_set_state(conn_id, state):
+	"""Update state column in webrtc_table for the given conn_id."""
+	t = op('webrtc_table')
+	if t is None:
+		return
+	for r in range(1, t.numRows):
+		try:
+			if str(t[r, 'conn_id']) == str(conn_id):
+				t[r, 'state'] = state
+				return
+		except Exception:
+			pass
+
+
 def onConnectionStateChange(webrtcDAT, connectionId, state):
 	"""Called when the overall connection state changes."""
 	print(f'[WOB WebRTC] connectionId={connectionId} state={state}')
+	_wt_set_state(connectionId, state)
 	if state in ('failed', 'closed', 'disconnected'):
 		# Notify client
 		_send_to_client(connectionId, {

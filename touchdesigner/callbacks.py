@@ -1,4 +1,5 @@
 import json
+import os
 
 GITHUB_PAGES_URL = 'https://studio-edul.github.io/Web-Osc-Bridge/'
 # Default - overridden by config_table DAT at init_tables() time
@@ -18,6 +19,7 @@ SENSOR_COLS = [
 	'screen_width', 'screen_height',
 	'device_pixel_ratio',
 ]
+WEBRTC_COLS = ['slot', 'name', 'conn_id', 'state']
 
 # ── Persistent state (survives module reload via op('/').store/fetch) ──────────
 # These are stored in TD's global root op so module reloads don't reset them.
@@ -59,6 +61,45 @@ def _find_row(t, slot):
 		except Exception:
 			pass
 	return None
+
+def _wt_find_row(t, conn_id):
+	"""Find row in webrtc_table by conn_id."""
+	for r in range(1, t.numRows):
+		try:
+			if str(t[r, 'conn_id']) == str(conn_id):
+				return r
+		except Exception:
+			pass
+	return None
+
+def _wt_add(slot, conn_id):
+	"""Add row to webrtc_table when a WebRTC offer arrives."""
+	t = op('webrtc_table')
+	if t is None:
+		return
+	name = _client_names().get(slot, f'Slot {slot}')
+	t.appendRow([slot, name, conn_id, 'connecting'])
+
+def _wt_remove(conn_id):
+	"""Remove row from webrtc_table when connection closes."""
+	t = op('webrtc_table')
+	if t is None:
+		return
+	row = _wt_find_row(t, conn_id)
+	if row is not None:
+		t.deleteRow(row)
+
+def _wt_update_name(slot, name):
+	"""Update name for all webrtc_table rows matching slot."""
+	t = op('webrtc_table')
+	if t is None:
+		return
+	for r in range(1, t.numRows):
+		try:
+			if int(t[r, 'slot']) == slot:
+				t[r, 'name'] = name
+		except Exception:
+			pass
 
 def _cam_receiver_addr():
 	"""Returns stored cam_receiver WebSocket address, or None."""
@@ -205,6 +246,14 @@ def init_tables():
 		print('[WOB] touch_table initialized')
 	else:
 		print('[WOB] touch_table DAT not found - create a Table DAT named "touch_table"')
+
+	wt = op('webrtc_table')
+	if wt is not None:
+		wt.clear()
+		wt.appendRow(WEBRTC_COLS)
+		print('[WOB] webrtc_table initialized')
+	else:
+		print('[WOB] webrtc_table DAT not found - create a Table DAT named "webrtc_table"')
 
 
 def _config_msg(cfg):
@@ -442,7 +491,26 @@ def send_heartbeat(webServerDAT, slot=None):
 
 
 def onHTTPRequest(webServerDAT, request, response):
-	"""Redirect to GitHub Pages with TD address as param."""
+	"""Serve cam_receiver.html locally; redirect all other requests to GitHub Pages."""
+	uri = request.get('uri', '/')
+
+	# Serve cam_receiver.html for Web Render TOP (loaded locally, avoids mixed-content issues)
+	if uri.startswith('/cam_receiver.html'):
+		cam_path = os.path.join(project.folder, 'cam_receiver.html')
+		try:
+			with open(cam_path, 'r', encoding='utf-8') as f:
+				html = f.read()
+			response['statusCode'] = 200
+			response['statusReason'] = 'OK'
+			response['headers'] = {'Content-Type': 'text/html; charset=utf-8'}
+			response['data'] = html
+		except Exception as e:
+			response['statusCode'] = 404
+			response['statusReason'] = 'Not Found'
+			response['data'] = f'<html><body>cam_receiver.html not found: {e}</body></html>'
+			print(f'[WOB] cam_receiver.html not found at {cam_path}: {e}')
+		return response
+
 	stored_url = op('/').fetch('wob_url', '')
 	host = stored_url.replace('https://', '').replace('http://', '').strip()
 	if not host:
@@ -568,6 +636,7 @@ def onWebSocketClose(webServerDAT, client):
 				pass
 		op('/').store(f'wob_webrtc_addr_{conn_id}', None)
 		op('/').store(f'wob_webrtc_slot_to_uuid_{slot}', None)
+		_wt_remove(conn_id)
 
 		print(f'[WOB] Disconnected -> slot {slot} | {addr} | {len(slots)}/{MAX_CLIENTS} active')
 
@@ -712,6 +781,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			op('/').store(f'wob_webrtc_slot_to_uuid_{slot}', conn_id)
 			wrtc.setRemoteDescription(conn_id, 'offer', sdp)
 			wrtc.createAnswer(conn_id)
+			_wt_add(slot, conn_id)
 			print(f'[WOB WebRTC] Offer received from slot {slot}, conn_id={conn_id}, creating answer...')
 		except Exception as e:
 			print(f'[WOB WebRTC] Offer handling error: {e}')
@@ -800,6 +870,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			if row is not None:
 				t[row, 'name'] = client_name
 		
+		_wt_update_name(slot, client_name)
 		print(f'[WOB] Client name updated: slot {slot} -> {client_name}')
 
 	elif msg_type == 'screen_info':

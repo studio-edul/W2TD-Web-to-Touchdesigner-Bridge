@@ -69,6 +69,17 @@
     els.logViewerContent = $('log-viewer-content');
   }
 
+  function _detectDeviceName() {
+    const ua = navigator.userAgent;
+    if (/iPad/.test(ua)) return 'iPad';
+    if (/iPhone/.test(ua)) return 'iPhone';
+    if (/iPod/.test(ua)) return 'iPod';
+    const androidModel = ua.match(/Android [^;]+;\s*([^)]+)\)/);
+    if (androidModel) return androidModel[1].trim().replace(/\s+Build.*$/, '');
+    if (/Android/.test(ua)) return 'Android';
+    return '';
+  }
+
   function loadSettings() {
     const saved = localStorage.getItem('wob-settings');
     if (saved) {
@@ -85,6 +96,10 @@
           showTouchPoints = s.showTouchPoints;
         }
       } catch (e) { /* ignore */ }
+    }
+    // Auto-populate device name if empty
+    if (els.clientName && !els.clientName.value) {
+      els.clientName.value = _detectDeviceName();
     }
   }
 
