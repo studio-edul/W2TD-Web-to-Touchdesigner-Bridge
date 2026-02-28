@@ -14,7 +14,7 @@
   let vizInitialized = false;
   let cameraFrontEnabled = false;
   let cameraRearEnabled = false;
-  let cameraConfigOn = false;  // sensor_camera from config — when false, hide both toggles
+  let cameraConfigOn = true;   // sensor_camera from config — when false, hide both toggles
   let micEnabled = false;
   let audioEchoCancellation = false;  // config: 0=raw, 1=on
   let audioNoiseSuppression = false;
