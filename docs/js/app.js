@@ -55,7 +55,6 @@
     els.vizContainer = $('viz-container');
     els.vizCanvas = $('viz-canvas');
     els.broadcastStatus = $('broadcast-status');
-    els.dataAckIndicator = $('data-ack-indicator');
     els.btnBroadcast = $('btn-broadcast');
     els.btnTrigger = $('btn-trigger');
     els.touchPad = $('touch-pad');
@@ -1071,6 +1070,10 @@
       renderSensorList();
       return;
     }
+    if (cameraFrontEnabled) {
+      cameraFrontEnabled = false;
+      WebRTCModule.stopCameraFront();
+    }
     cameraRearEnabled = true;
     renderSensorList();
     if (!WSClient.isConnected()) {
@@ -1097,6 +1100,10 @@
       WebRTCModule.stopCameraFront();
       renderSensorList();
       return;
+    }
+    if (cameraRearEnabled) {
+      cameraRearEnabled = false;
+      WebRTCModule.stopCameraRear();
     }
     cameraFrontEnabled = true;
     renderSensorList();
@@ -1243,21 +1250,13 @@
   }
 
   /**
-   * Update data acknowledgment indicator (green pulse when TD receives data)
+   * Update data acknowledgment indicator (pulse on status-dot next to "Connected to TD")
    */
   function updateDataAckIndicator() {
-    if (!els.dataAckIndicator) return;
-    
-    // Show indicator
-    els.dataAckIndicator.classList.remove('hidden', 'warning', 'error');
-    els.dataAckIndicator.classList.add('active');
-    
-    // Hide after animation (500ms)
-    setTimeout(() => {
-      if (els.dataAckIndicator) {
-        els.dataAckIndicator.classList.remove('active');
-      }
-    }, 500);
+    const dot = els.connectionStatus;
+    if (!dot || !dot.classList.contains('connected')) return;
+    dot.classList.add('ack-pulse');
+    setTimeout(() => dot.classList.remove('ack-pulse'), 500);
   }
 
   /**

@@ -245,20 +245,27 @@ def generate():
 		print(f'[WOB] TOP reload failed: {e}')
 		return
 
-	# 6. Set Web Render TOP URL to cam_receiver (web-deployed, no local file needed)
+	# 6. Set Web Render TOP URL to cam_receiver (served locally via TD Web Server)
+	# Serving locally avoids GitHub Pages dependency and mixed-content WS/WSS issues.
 	try:
 		web_render = op('web_render_top')
 		if web_render is not None:
-			GITHUB_PAGES_URL = 'https://studio-edul.github.io/Web-Osc-Bridge/'
-			receiver_url = GITHUB_PAGES_URL + 'cam_receiver.html?port=' + str(port)
-			# Add tls=1 if Web Server DAT has TLS enabled (par.secure or par.tls)
+			# Detect TLS (try all known parameter names across TD versions)
+			tls_on = False
 			web_srv = op('web_server_dat')
 			if web_srv is not None:
-				tls_on = bool(getattr(web_srv.par, 'secure', False) or getattr(web_srv.par, 'tls', False))
-				if tls_on:
-					receiver_url += '&tls=1'
+				for _par in ('secure', 'tls', 'https', 'usessl'):
+					if bool(getattr(web_srv.par, _par, False)):
+						tls_on = True
+						break
+			# Use local IP — TLS cert is usually issued for the LAN IP
+			local_ip = get_local_ip()
+			scheme = 'https' if tls_on else 'http'
+			receiver_url = f'{scheme}://{local_ip}:{port}/cam_receiver.html?port={port}'
+			if tls_on:
+				receiver_url += '&tls=1'
 			web_render.par.url = receiver_url
-			print(f'[WOB] web_render_top URL set: {receiver_url}')
+			print(f'[WOB] web_render_top URL set (local): {receiver_url}')
 		else:
 			print('[WOB] web_render_top not found - create a Web Render TOP named "web_render_top"')
 	except Exception as e:

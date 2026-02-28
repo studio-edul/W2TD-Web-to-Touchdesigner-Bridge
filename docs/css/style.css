@@ -363,10 +363,17 @@ input[type="checkbox"] {
 }
 
 .status-dot.connected { background: var(--success); }
+.status-dot.connected.ack-pulse { animation: status-dot-ack 0.5s ease-out; }
 .status-dot.disconnected { background: var(--danger); }
 .status-dot.connecting,
 .status-dot.reconnecting { background: var(--warning); animation: pulse 1s infinite; }
 .status-dot.error { background: var(--danger); }
+
+@keyframes status-dot-ack {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 0.9; }
+  100% { transform: scale(1); opacity: 1; }
+}
 
 #connection-label {
   font-size: 13px;
@@ -540,48 +547,6 @@ input[type="checkbox"] {
   padding: 0;
 }
 
-/* Data ACK Indicator */
-.data-ack-indicator {
-  position: absolute;
-  bottom: 8px;
-  right: 12px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--success);
-  opacity: 0;
-  transition: opacity 0.2s;
-  z-index: 10;
-}
-
-.data-ack-indicator.active {
-  opacity: 1;
-  animation: pulse-ack 0.5s ease-out;
-}
-
-.data-ack-indicator.warning {
-  background: var(--warning);
-}
-
-.data-ack-indicator.error {
-  background: var(--danger);
-}
-
-@keyframes pulse-ack {
-  0% {
-    opacity: 0;
-    transform: scale(0.8);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.2);
-  }
-  100% {
-    opacity: 0.8;
-    transform: scale(1);
-  }
-}
-
 /* Touch Pad */
 #touch-pad {
   position: fixed;
@@ -598,10 +563,13 @@ input[type="checkbox"] {
 
 .touch-pad-controls {
   position: absolute;
-  bottom: 12px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 12px;
+  left: 0;
+  right: 0;
   display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 0 12px;
   gap: 8px;
   z-index: 10;
 }
@@ -637,10 +605,6 @@ input[type="checkbox"] {
 }
 
 .btn-exit-touch {
-  position: fixed;
-  top: 12px;
-  right: 12px;
-  z-index: 501;
   background: rgba(20, 20, 31, 0.8) !important;
   backdrop-filter: blur(8px);
 }
