@@ -175,30 +175,6 @@ def _handle_cam_receiver_msg(webServerDAT, addr, msg):
 		except Exception as e:
 			print(f'[WOB Cam] cam_ice relay error: {e}')
 
-def _resize_web_render_top(slot, rear, front):
-	"""Resize web_render_top to match the mobile device resolution and active camera layout.
-	Single camera: physicalWidth x physicalHeight
-	Dual camera (rear + front side-by-side): 2*physicalWidth x physicalHeight
-	"""
-	screen_info = op('/').fetch(f'wob_screen_{slot}', {})
-	w = int(screen_info.get('physicalWidth', 0))
-	h = int(screen_info.get('physicalHeight', 0))
-	if w <= 0 or h <= 0:
-		print(f'[WOB Cam] _resize_web_render_top: no screen info for slot {slot}')
-		return
-	total_w = w * 2 if (rear and front) else w
-	web_render = op('web_render_top')
-	if web_render is None:
-		print('[WOB Cam] web_render_top not found')
-		return
-	try:
-		web_render.par.resolutionw = total_w
-		web_render.par.resolutionh = h
-		print(f'[WOB Cam] web_render_top resized: {total_w}x{h} (rear={rear}, front={front})')
-	except Exception as e:
-		print(f'[WOB Cam] web_render_top resize failed: {e}')
-
-
 # ──────────────────────────────────────────────────────────────────────────────
 
 def _read_config():
@@ -910,8 +886,3 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 		
 		print(f'[WOB] Screen info updated: slot {slot} -> CSS: {css_width}x{css_height}, Physical: {physical_width}x{physical_height}, Screen: {screen_width}x{screen_height} (DPR: {device_pixel_ratio})')
 
-	elif msg_type == 'cam_layout':
-		# Mobile reports active camera layout → resize web_render_top accordingly
-		rear  = bool(msg.get('rear',  False))
-		front = bool(msg.get('front', False))
-		_resize_web_render_top(slot, rear, front)

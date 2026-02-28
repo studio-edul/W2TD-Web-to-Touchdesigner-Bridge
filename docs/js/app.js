@@ -366,13 +366,10 @@
       renderSensorList();
       addLog('WebRTC mic: ' + state, state === 'connected' ? 'info' : state === 'failed' ? 'error' : 'warn');
     });
-    // Camera state changes → re-render sensor list + notify TD of layout
+    // Camera state changes → re-render sensor list
     WebRTCModule.onCamStateChange((state) => {
       renderSensorList();
       addLog('WebRTC cam: ' + state, state === 'connected' ? 'info' : state === 'failed' ? 'error' : 'warn');
-      if (state === 'connected' || state === 'closed' || state === 'failed') {
-        _sendCamLayout();
-      }
     });
     setInterval(updatePacketRate, 1000);
   }
@@ -1066,15 +1063,6 @@
       else if (err === 'NotFoundError') msg = '마이크를 찾을 수 없습니다';
       showToast(msg);
     }
-  }
-
-  function _sendCamLayout() {
-    if (!WSClient.isConnected()) return;
-    WSClient.send({
-      type:  'cam_layout',
-      rear:  WebRTCModule.isCameraRearActive(),
-      front: WebRTCModule.isCameraFrontActive(),
-    });
   }
 
   async function handleRearCameraToggle() {

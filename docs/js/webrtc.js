@@ -360,12 +360,24 @@ const WebRTCModule = (() => {
     const hasRear  = !!(camRearStream  && camRearStream.getVideoTracks().length  > 0);
     const hasFront = !!(camFrontStream && camFrontStream.getVideoTracks().length > 0);
     if (rearVid) {
-      if (hasRear) { rearVid.srcObject = camRearStream;  rearVid.classList.remove('hidden'); }
-      else         { rearVid.srcObject = null;            rearVid.classList.add('hidden'); }
+      if (hasRear) {
+        rearVid.srcObject = camRearStream;
+        rearVid.classList.remove('hidden');
+        rearVid.play().catch(() => {});
+      } else {
+        rearVid.srcObject = null;
+        rearVid.classList.add('hidden');
+      }
     }
     if (frontVid) {
-      if (hasFront) { frontVid.srcObject = camFrontStream; frontVid.classList.remove('hidden'); }
-      else          { frontVid.srcObject = null;            frontVid.classList.add('hidden'); }
+      if (hasFront) {
+        frontVid.srcObject = camFrontStream;
+        frontVid.classList.remove('hidden');
+        frontVid.play().catch(() => {});
+      } else {
+        frontVid.srcObject = null;
+        frontVid.classList.add('hidden');
+      }
     }
     container.classList.toggle('hidden', !hasRear && !hasFront);
   }

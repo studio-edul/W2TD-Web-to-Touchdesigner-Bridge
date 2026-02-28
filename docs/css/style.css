@@ -566,12 +566,24 @@ input[type="checkbox"] {
   top: 12px;
   left: 0;
   right: 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding: 0 12px;
-  gap: 8px;
+  pointer-events: none;
   z-index: 10;
+}
+
+.touch-pad-controls .btn {
+  pointer-events: auto;
+}
+
+.btn-toggle-touch-points {
+  position: absolute;
+  top: 0;
+  left: 12px;
+}
+
+.btn-exit-touch {
+  position: absolute;
+  top: 0;
+  right: 12px;
 }
 
 .btn-toggle-touch-points {
