@@ -67,6 +67,9 @@
     els.wobLoading = $('wob-loading');
     els.logViewerOverlay = $('log-viewer-overlay');
     els.logViewerContent = $('log-viewer-content');
+    els.btnCameraMonitor = $('btn-camera-monitor');
+    els.cameraMonitor = $('camera-monitor');
+    els.btnExitCameraMonitor = $('btn-exit-camera-monitor');
   }
 
   function _detectDeviceName() {
@@ -354,6 +357,8 @@
     els.btnEnableSensors.addEventListener('click', handleEnableSensors);
     els.btnFullscreenTouch.addEventListener('click', enterTouchPad);
     els.btnExitTouch.addEventListener('click', exitTouchPad);
+    if (els.btnCameraMonitor) els.btnCameraMonitor.addEventListener('click', enterCameraMonitor);
+    if (els.btnExitCameraMonitor) els.btnExitCameraMonitor.addEventListener('click', exitCameraMonitor);
     if (els.btnToggleTouchPoints) {
       els.btnToggleTouchPoints.addEventListener('click', toggleTouchPoints);
     }
@@ -820,6 +825,23 @@
     TouchModule.destroy();
     startVizTouch();
     haptic();
+  }
+
+  function enterCameraMonitor() {
+    if (!WebRTCModule.isCameraActive()) {
+      showToast('카메라를 먼저 활성화하세요 (Rear 또는 Front)');
+      haptic();
+      return;
+    }
+    haptic();
+    els.mainUI.classList.add('hidden');
+    els.cameraMonitor.classList.remove('hidden');
+  }
+
+  function exitCameraMonitor() {
+    haptic();
+    els.cameraMonitor.classList.add('hidden');
+    els.mainUI.classList.remove('hidden');
   }
 
   function resizeTouchCanvas() {

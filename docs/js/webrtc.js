@@ -353,8 +353,6 @@ const WebRTCModule = (() => {
   }
 
   function _updatePreview() {
-    const container = document.getElementById('webrtc-preview-container');
-    if (!container) return;
     const rearVid  = document.getElementById('webrtc-preview-rear');
     const frontVid = document.getElementById('webrtc-preview-front');
     const hasRear  = !!(camRearStream  && camRearStream.getVideoTracks().length  > 0);
@@ -367,7 +365,6 @@ const WebRTCModule = (() => {
       if (hasFront) { frontVid.srcObject = camFrontStream; frontVid.classList.remove('hidden'); }
       else          { frontVid.srcObject = null;            frontVid.classList.add('hidden'); }
     }
-    container.classList.toggle('hidden', !hasRear && !hasFront);
   }
 
   function getMicLevel() {

@@ -64,6 +64,7 @@
       </ul>
       <div class="action-row">
         <button id="btn-fullscreen-touch" class="btn btn-small">Touch Pad</button>
+        <button id="btn-camera-monitor" class="btn btn-small">카메라 모니터링</button>
         <button id="btn-enable-sensors" class="btn btn-small">Enable Sensors</button>
       </div>
       <pre id="debug-info" class="log-panel hidden"></pre>
@@ -105,11 +106,13 @@
   <!-- Loading screen: shown while waiting for config on first QR-scan connection -->
   <div id="wob-loading" class="hidden"></div>
 
-  <!-- Local camera preview (picture-in-picture, hidden when camera inactive) -->
-  <!-- Both rear and front shown side-by-side when both active: rear left, front right -->
-  <div id="webrtc-preview-container" class="webrtc-preview-container hidden">
-    <video id="webrtc-preview-rear"  class="webrtc-preview-video hidden" autoplay muted playsinline></video>
-    <video id="webrtc-preview-front" class="webrtc-preview-video hidden" autoplay muted playsinline></video>
+  <!-- Full-screen camera monitor (enter via 카메라 모니터링 button) -->
+  <div id="camera-monitor" class="camera-monitor hidden">
+    <div class="camera-monitor-video-area">
+      <video id="webrtc-preview-rear"  class="camera-monitor-video hidden" autoplay muted playsinline></video>
+      <video id="webrtc-preview-front" class="camera-monitor-video hidden" autoplay muted playsinline></video>
+    </div>
+    <button id="btn-exit-camera-monitor" class="btn btn-small btn-exit-camera-monitor">Exit</button>
   </div>
 
   <!-- Log viewer overlay -->
