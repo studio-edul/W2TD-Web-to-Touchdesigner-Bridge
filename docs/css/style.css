@@ -587,9 +587,6 @@ input[type="checkbox"] {
 }
 
 .btn-toggle-touch-points {
-  display: flex;
-  align-items: center;
-  gap: 4px;
   background: var(--surface);
   border: 1px solid var(--border);
   color: var(--text);
@@ -606,14 +603,6 @@ input[type="checkbox"] {
   border-color: var(--primary);
   color: #fff;
   opacity: 1;
-}
-
-.btn-toggle-touch-points .toggle-icon {
-  font-size: 16px;
-}
-
-.btn-toggle-touch-points .toggle-label {
-  font-size: 12px;
 }
 
 .btn-exit-touch {

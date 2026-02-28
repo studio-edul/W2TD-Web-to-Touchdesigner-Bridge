@@ -20,7 +20,7 @@
   let audioAutoGain = false;
   let iceServersFromConfig = null;   // from wob_config ice_servers (JSON)
   let iceTransportPolicyFromConfig = null;  // 'relay' | 'all' | null
-  let showTouchPoints = true; // 터치 포인트 표시 여부 (터치패드 모드)
+  let showTouchPoints = true;
 
   function _isTunnelConnection() {
     const addr = (els.tdAddress && els.tdAddress.value || '').toLowerCase();
@@ -1315,10 +1315,12 @@
     
     if (showTouchPoints) {
       els.btnToggleTouchPoints.classList.add('active');
-      els.btnToggleTouchPoints.setAttribute('title', '터치 포인트 표시 끄기');
+      els.btnToggleTouchPoints.textContent = 'Show Dots';
+      els.btnToggleTouchPoints.setAttribute('title', 'Hide dots');
     } else {
       els.btnToggleTouchPoints.classList.remove('active');
-      els.btnToggleTouchPoints.setAttribute('title', '터치 포인트 표시 켜기');
+      els.btnToggleTouchPoints.textContent = 'Show Dots';
+      els.btnToggleTouchPoints.setAttribute('title', 'Show dots');
     }
   }
 
