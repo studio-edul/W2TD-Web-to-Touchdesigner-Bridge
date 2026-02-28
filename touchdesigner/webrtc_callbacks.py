@@ -18,20 +18,31 @@ def _auto_select_audio_chop(webrtcDAT, connectionId):
 	"""When WebRTC connects, auto-set webrtc_audio_1 Connection."""
 	audio_chop = op('webrtc_audio_1')
 	if audio_chop is None:
+		print('[WOB WebRTC] webrtc_audio_1 NOT FOUND — create Audio Stream In CHOP named "webrtc_audio_1"')
 		return
-	# Set connection ID — TD auto-detects audio tracks for the connection.
-	# Note: getTracks() is not available in TD's WebRTC DAT Python API,
-	# so we only set the connection; the CHOP handles track selection internally.
+	# TD version differences: try all known Connection parameter names.
+	# Note: getTracks() is not a valid TD Python API — connection-only is sufficient.
+	CONN_PAR_NAMES = ('webrtcconnection', 'Webrtcconnection', 'connection', 'Connection')
 	set_ok = False
-	for par_name in ('webrtcconnection', 'Webrtcconnection'):
+	matched_par = None
+	for par_name in CONN_PAR_NAMES:
 		if hasattr(audio_chop.par, par_name):
 			try:
 				setattr(audio_chop.par, par_name, connectionId)
 				set_ok = True
+				matched_par = par_name
 				break
 			except Exception as e:
 				print(f'[WOB WebRTC] Set {par_name} failed: {e}')
-	print(f'[WOB WebRTC] webrtc_audio_1 connection -> {connectionId} (set_ok={set_ok})')
+	if not set_ok:
+		# Dump all par names containing webrtc/connect/track so we can find the correct one
+		try:
+			relevant = [p.name for p in audio_chop.pars()
+			            if any(k in p.name.lower() for k in ('webrtc', 'connect', 'track', 'stream'))]
+			print(f'[WOB WebRTC] webrtc_audio_1 relevant pars: {relevant}')
+		except Exception:
+			pass
+	print(f'[WOB WebRTC] webrtc_audio_1 conn={connectionId!r} type={type(connectionId).__name__} par={matched_par} ok={set_ok}')
 
 
 def _send_to_client(connectionId, data):
