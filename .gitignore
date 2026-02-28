@@ -1,4 +1,43 @@
+# Dependencies
 node_modules/
+
+# macOS
 .DS_Store
+.AppleDouble
+.LSOverride
+
+# IDE
 .claude/
+.cursor/
+*.swp
+*.swo
+*~
+
+# Development planning (not for production)
+development/
+
+# TouchDesigner
+touchdesigner/qr.png
+touchdesigner/Backup/
+
+# Python (소스 파일은 포함, 캐시/컴파일 파일만 제외)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# SSL certificates
 certs/*.pem
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/

@@ -15,6 +15,14 @@ const WSClient = (() => {
   let onErrorDetail = null;
   let onConfig = null;
   let onWebRTCSignal = null; // callback(msg) for webrtc_answer / webrtc_ice / webrtc_state
+  let onHaptic = null; // callback(pattern) for haptic feedback
+  let onDataAck = null; // callback() for data acknowledgment
+  
+  // Heartbeat
+  let heartbeatInterval = null;
+  let heartbeatTimeout = null;
+  const HEARTBEAT_INTERVAL = 5000; // 5 seconds
+  const HEARTBEAT_TIMEOUT = 10000; // 10 seconds (2 missed pongs = disconnect)
 
   // Packet counting
   let sentCount = 0;
@@ -29,6 +37,8 @@ const WSClient = (() => {
     onErrorDetail = callbacks.onErrorDetail || null;
     onConfig = callbacks.onConfig || null;
     onWebRTCSignal = callbacks.onWebRTCSignal || null;
+    onHaptic = callbacks.onHaptic || null;
+    onDataAck = callbacks.onDataAck || null;
     reconnectAttempts = 0; // reset in case previous session was rejected
 
     // Strip any existing protocol prefix, then re-add the correct one
@@ -63,6 +73,7 @@ const WSClient = (() => {
       _updateStatus('connected');
       _reportError(null);
       console.log('[WS] Connected to TD:', serverUrl);
+      _startHeartbeat();
     };
 
     ws.onmessage = (event) => {
@@ -73,8 +84,24 @@ const WSClient = (() => {
           console.log('[WS] TD ack, slot:', msg.slot);
         } else if (msg.type === 'config') {
           if (onConfig) onConfig(msg);
-        } else if (msg.type === 'webrtc_answer' || msg.type === 'webrtc_ice' || msg.type === 'webrtc_state') {
+        } else if (msg.type === 'webrtc_answer' || msg.type === 'webrtc_ice' || msg.type === 'webrtc_state' ||
+                   msg.type === 'webrtc_answer_cam' || msg.type === 'webrtc_ice_cam') {
           if (onWebRTCSignal) onWebRTCSignal(msg);
+        } else if (msg.type === 'haptic') {
+          // Haptic feedback (pattern or state)
+          if (onHaptic) {
+            // Pass entire message object (supports both pattern and state)
+            onHaptic(msg);
+          }
+        } else if (msg.type === 'ping') {
+          // TD heartbeat ping → respond with pong
+          send({ type: 'pong' });
+        } else if (msg.type === 'pong') {
+          // TD heartbeat pong response → reset timeout
+          _resetHeartbeatTimeout();
+        } else if (msg.type === 'data_ack') {
+          // TD data acknowledgment → show indicator
+          if (onDataAck) onDataAck();
         } else if (msg.type === 'rejected') {
           // Server full — cancel reconnect and surface the reason
           if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
@@ -88,6 +115,7 @@ const WSClient = (() => {
 
     ws.onclose = (event) => {
       connected = false;
+      _stopHeartbeat();
       const code = event.code;
       const reason = event.reason || '';
       const msg = _getCloseMessage(code, reason, serverUrl);
@@ -210,7 +238,51 @@ const WSClient = (() => {
     }
   }
 
+  function _startHeartbeat() {
+    _stopHeartbeat();
+    // Send ping every HEARTBEAT_INTERVAL
+    heartbeatInterval = setInterval(() => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        send({ type: 'ping' });
+        // Start timeout only if one isn't already running
+        // (cleared on pong; if still pending, the old deadline stands)
+        if (!heartbeatTimeout) {
+          _startHeartbeatTimeout();
+        }
+      }
+    }, HEARTBEAT_INTERVAL);
+  }
+
+  function _stopHeartbeat() {
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
+    }
+    if (heartbeatTimeout) {
+      clearTimeout(heartbeatTimeout);
+      heartbeatTimeout = null;
+    }
+  }
+
+  function _startHeartbeatTimeout() {
+    heartbeatTimeout = setTimeout(() => {
+      heartbeatTimeout = null;
+      console.warn('[WS] Heartbeat timeout — no pong received, closing');
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.close(1006, 'Heartbeat timeout');
+      }
+    }, HEARTBEAT_TIMEOUT);
+  }
+
+  function _resetHeartbeatTimeout() {
+    if (heartbeatTimeout) {
+      clearTimeout(heartbeatTimeout);
+      heartbeatTimeout = null;
+    }
+  }
+
   function disconnect() {
+    _stopHeartbeat();
     if (reconnectTimer) {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;

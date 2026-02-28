@@ -1,148 +1,125 @@
 /**
  * WOB WebRTC Module
- * Handles camera/mic capture and WebRTC signaling via existing WebSocket.
- * Signaling server = TD Web Server DAT (no separate signaling server needed).
+ * Mic  → RTCPeerConnection(micPc)  → TD WebRTC DAT → Audio Stream In CHOP
+ * Cam  → RTCPeerConnection(camPc)  → Web Render TOP (cam_receiver.html)
+ * Signaling for both uses the existing WebSocket (TD Web Server DAT).
  */
 const WebRTCModule = (() => {
   const DEFAULT_ICE_SERVERS = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    // freeTURN (무료, 가입 불필요) — cross-network/터널용
-    { urls: 'turn:freeturn.net:3478', username: 'free', credential: 'free' },
-    { urls: 'turns:freeturn.net:5349', username: 'free', credential: 'free' },
-    // openrelay 백업 (고정 인증은 일부 deprecated 가능)
-    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-    { urls: 'turns:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:freeturn.net:3478',        username: 'free', credential: 'free' },
+    { urls: 'turns:freeturn.net:5349',       username: 'free', credential: 'free' },
+    { urls: 'turn:openrelay.metered.ca:80',  username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turns:openrelay.metered.ca:443',username: 'openrelayproject', credential: 'openrelayproject' },
   ];
 
-  let pc = null;           // RTCPeerConnection
-  let localStream = null;  // MediaStream from getUserMedia
-  let cameraActive = false;
+  // ── Mic (→ TD WebRTC DAT) ──────────────────────────────────────────────────
+  let micPc     = null;
+  let micStream = null;
   let micActive = false;
-  let _onStateChange = null; // callback(state) where state = 'connecting'|'connected'|'failed'|'closed'
-  let _lastError = null;   // last getUserMedia error name (e.g. 'NotAllowedError')
-  let _audioCtx = null;
-  let _analyser = null;
-  let _onLog = null;       // optional fn(msg) for debug log
-  let _iceRecvCount = 0;
+  let _onStateChange = null;
+  let _micIceRecvCount = 0;
+
+  // ── Camera (→ Web Render TOP via cam_receiver.html) ───────────────────────
+  let camPc     = null;
+  let camStream = null;
+  let camActive = false;
+  let _onCamStateChange = null;
+  let _camIceRecvCount  = 0;
+
+  // ── Shared ────────────────────────────────────────────────────────────────
+  let _lastError = null;
+  let _audioCtx  = null;
+  let _analyser  = null;
+  let _onLog     = null;
 
   function _log(msg) {
     if (_onLog) _onLog(msg);
     console.log('[WOB WebRTC]', msg);
   }
 
-  // ── Public API ─────────────────────────────────────────────────────────────
+  function _buildRtcConfig(iceServers, iceTransportPolicy) {
+    const ice = Array.isArray(iceServers) && iceServers.length ? iceServers : DEFAULT_ICE_SERVERS;
+    const cfg = { iceServers: ice };
+    if (iceTransportPolicy === 'relay') cfg.iceTransportPolicy = 'relay';
+    return cfg;
+  }
+
+  // ── Mic public API ─────────────────────────────────────────────────────────
 
   /**
-   * Acquire mic stream (getUserMedia) without creating a peer connection.
-   * Call on Enable Sensors so the permission popup appears immediately.
+   * Acquire mic stream (getUserMedia) — call on Enable Sensors for early permission.
    * Idempotent — returns true if stream already acquired.
    */
   async function acquireMic({
     echoCancellation = false,
     noiseSuppression = false,
-    autoGainControl = false,
+    autoGainControl  = false,
   } = {}) {
     _lastError = null;
-    if (localStream && localStream.getAudioTracks().length > 0) return true;
-    if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+    if (micStream && micStream.getAudioTracks().length > 0) return true;
+    if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
     if (_audioCtx) { _audioCtx.close(); _audioCtx = null; }
     _analyser = null;
     micActive = false;
     try {
-      localStream = await navigator.mediaDevices.getUserMedia({
+      micStream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation, noiseSuppression, autoGainControl },
         video: false,
       });
-      micActive = localStream.getAudioTracks().length > 0;
+      micActive = micStream.getAudioTracks().length > 0;
       _log('acquireMic OK — mic:' + micActive);
     } catch (e) {
       _lastError = e.name || 'unknown';
       console.error('[WOB WebRTC] acquireMic failed:', e.name, e.message);
       return false;
     }
-    if (micActive) {
-      try {
-        _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const source = _audioCtx.createMediaStreamSource(localStream);
-        _analyser = _audioCtx.createAnalyser();
-        _analyser.fftSize = 256;
-        _analyser.smoothingTimeConstant = 0.8;
-        source.connect(_analyser);
-      } catch (e) { console.warn('[WOB WebRTC] Audio analyser setup failed:', e); }
-    }
+    if (micActive) _setupAnalyser(micStream);
     return micActive;
   }
 
   /**
-   * Create RTCPeerConnection with existing localStream and send offer to TD.
-   * If localStream not yet acquired, falls back to getUserMedia.
-   * @param {object} opts - { camera, mic, echoCancellation, noiseSuppression, autoGainControl }
+   * Create mic RTCPeerConnection and send offer to TD WebRTC DAT.
+   * Camera is handled separately via startCamera().
    */
   async function start({
-    camera = true,
     mic = true,
     echoCancellation = false,
     noiseSuppression = false,
-    autoGainControl = false,
-    iceServers = null,
+    autoGainControl  = false,
+    iceServers       = null,
     iceTransportPolicy = null,
   } = {}) {
     _lastError = null;
-    _iceRecvCount = 0;
-    // Close existing PC only — keep localStream if already acquired via acquireMic()
-    if (pc) { pc.close(); pc = null; }
+    _micIceRecvCount = 0;
+    if (micPc) { micPc.close(); micPc = null; }
 
-    // If stream not yet acquired, get it now (fallback for cases like camera)
-    if (!localStream) {
-      const constraints = {
-        video: camera,
-        audio: mic ? { echoCancellation, noiseSuppression, autoGainControl } : false,
-      };
+    if (!micStream) {
       try {
-        localStream = await navigator.mediaDevices.getUserMedia(constraints);
-        cameraActive = camera && localStream.getVideoTracks().length > 0;
-        micActive = mic && localStream.getAudioTracks().length > 0;
-        _log('getUserMedia OK — camera:' + cameraActive + ' mic:' + micActive);
+        micStream = await navigator.mediaDevices.getUserMedia({
+          audio: mic ? { echoCancellation, noiseSuppression, autoGainControl } : false,
+          video: false,
+        });
+        micActive = mic && micStream.getAudioTracks().length > 0;
+        _log('getUserMedia (mic) OK — mic:' + micActive);
       } catch (e) {
         _lastError = e.name || 'unknown';
-        console.error('[WOB WebRTC] getUserMedia failed:', e.name, e.message);
-        _setState('failed');
+        console.error('[WOB WebRTC] getUserMedia mic failed:', e.name, e.message);
+        _setMicState('failed');
         return false;
       }
-      // Set up audio analyser (only if not already done by acquireMic)
-      if (micActive && !_analyser) {
-        try {
-          _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-          const source = _audioCtx.createMediaStreamSource(localStream);
-          _analyser = _audioCtx.createAnalyser();
-          _analyser.fftSize = 256;
-          _analyser.smoothingTimeConstant = 0.8;
-          source.connect(_analyser);
-        } catch (e) { console.warn('[WOB WebRTC] Audio analyser setup failed:', e); }
-      }
+      if (micActive && !_analyser) _setupAnalyser(micStream);
     }
 
-    // Show local preview if camera is active
-    _updatePreview(localStream);
+    micPc = new RTCPeerConnection(_buildRtcConfig(iceServers, iceTransportPolicy));
+    micStream.getTracks().forEach(track => micPc.addTrack(track, micStream));
 
-    // 3. Create peer connection
-    const ice = Array.isArray(iceServers) && iceServers.length ? iceServers : DEFAULT_ICE_SERVERS;
-    const rtcConfig = { iceServers: ice };
-    if (iceTransportPolicy === 'relay') {
-      rtcConfig.iceTransportPolicy = 'relay';
-    }
-    pc = new RTCPeerConnection(rtcConfig);
-
-    // Add local tracks
-    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-    // ICE candidates → send via WebSocket
     let iceCount = 0;
-    pc.onicecandidate = ({ candidate }) => {
-      if (!candidate) return; // null = end-of-candidates, TD handles this
+    micPc.onicecandidate = ({ candidate }) => {
+      if (!candidate) return;
       iceCount++;
-      if (iceCount <= 3) _log('ICE candidate #' + iceCount + ' sent');
+      if (iceCount <= 3) _log('mic ICE #' + iceCount + ' sent');
       WSClient.send({
         type: 'webrtc_ice',
         candidate: candidate.candidate,
@@ -151,115 +128,190 @@ const WebRTCModule = (() => {
       });
     };
 
-    pc.onconnectionstatechange = () => {
-      const s = pc.connectionState;
-      console.log('[WOB WebRTC] connectionState:', s);
-      _setState(s);
+    micPc.onconnectionstatechange = () => {
+      const s = micPc.connectionState;
+      console.log('[WOB WebRTC] mic connectionState:', s);
+      _setMicState(s);
       if (s === 'failed' || s === 'closed') stop();
     };
 
-    pc.oniceconnectionstatechange = () => {
-      console.log('[WOB WebRTC] iceConnectionState:', pc.iceConnectionState);
+    micPc.oniceconnectionstatechange = () => {
+      console.log('[WOB WebRTC] mic iceState:', micPc.iceConnectionState);
     };
 
-    _setState('connecting');
+    _setMicState('connecting');
 
-    // 4. Create and send offer
     try {
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
+      const offer = await micPc.createOffer();
+      await micPc.setLocalDescription(offer);
       const sent = WSClient.send({ type: 'webrtc_offer', sdp: offer.sdp });
-      _log(sent ? 'Offer sent to TD' : 'Offer FAILED — WebSocket not connected');
+      _log(sent ? 'Mic offer sent to TD' : 'Mic offer FAILED — WebSocket not connected');
     } catch (e) {
-      console.error('[WOB WebRTC] createOffer failed:', e);
-      _setState('failed');
+      console.error('[WOB WebRTC] mic createOffer failed:', e);
+      _setMicState('failed');
     }
   }
 
-  /** Stop all streams and close peer connection. */
+  /** Stop mic: close PC and release stream. */
   async function stop() {
     if (_audioCtx) { _audioCtx.close(); _audioCtx = null; }
     _analyser = null;
-    if (localStream) {
-      localStream.getTracks().forEach(t => t.stop());
-      localStream = null;
-    }
-    if (pc) {
-      pc.close();
-      pc = null;
-    }
-    cameraActive = false;
+    if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+    if (micPc) { micPc.close(); micPc = null; }
     micActive = false;
-    _updatePreview(null);
-    _setState('closed');
-    console.log('[WOB WebRTC] Stopped');
+    _setMicState('closed');
+    console.log('[WOB WebRTC] Mic stopped');
   }
 
-  /** Close peer connection only — keep localStream and mic analyser alive. */
+  /** Close mic PC only — keep micStream and analyser alive (for reuse). */
   function disconnect() {
-    if (pc) { pc.close(); pc = null; }
-    _setState('closed');
-    console.log('[WOB WebRTC] Disconnected (stream kept)');
+    if (micPc) { micPc.close(); micPc = null; }
+    _setMicState('closed');
+    console.log('[WOB WebRTC] Mic disconnected (stream kept)');
   }
 
-  /** Handle webrtc_answer message from TD (via WebSocket). */
   async function handleAnswer(sdp) {
-    if (!pc) return;
+    if (!micPc) return;
     try {
-      await pc.setRemoteDescription({ type: 'answer', sdp });
-      console.log('[WOB WebRTC] Remote description set (answer)');
+      await micPc.setRemoteDescription({ type: 'answer', sdp });
+      console.log('[WOB WebRTC] Mic remote description set');
     } catch (e) {
-      console.error('[WOB WebRTC] setRemoteDescription failed:', e);
+      console.error('[WOB WebRTC] mic setRemoteDescription failed:', e);
     }
   }
 
-  /** Handle webrtc_ice message from TD (via WebSocket). */
   async function handleIce({ candidate, sdpMLineIndex, sdpMid }) {
-    if (!pc || !candidate) return;
-    _iceRecvCount++;
-    if (_iceRecvCount <= 3) _log('ICE from TD #' + _iceRecvCount);
+    if (!micPc || !candidate) return;
+    _micIceRecvCount++;
+    if (_micIceRecvCount <= 3) _log('mic ICE from TD #' + _micIceRecvCount);
     try {
-      await pc.addIceCandidate(new RTCIceCandidate({ candidate, sdpMLineIndex, sdpMid }));
+      await micPc.addIceCandidate(new RTCIceCandidate({ candidate, sdpMLineIndex, sdpMid }));
     } catch (e) {
-      _log('addIceCandidate failed: ' + (e.message || e));
+      _log('mic addIceCandidate failed: ' + (e.message || e));
     }
   }
 
-  /** Register a state change callback: fn(state) */
-  function onStateChange(fn) {
-    _onStateChange = fn;
-  }
+  // ── Camera public API ──────────────────────────────────────────────────────
 
-  /** Register debug log callback: fn(msg) — appears in Log viewer */
-  function setOnLog(fn) {
-    _onLog = fn;
-  }
+  /**
+   * Acquire camera stream + create RTCPeerConnection → send webrtc_offer_cam to TD.
+   * TD relays the offer to cam_receiver.html (Web Render TOP).
+   */
+  async function startCamera({
+    iceServers         = null,
+    iceTransportPolicy = null,
+  } = {}) {
+    _lastError = null;
+    _camIceRecvCount = 0;
+    if (camPc) { camPc.close(); camPc = null; }
+    if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
+    camActive = false;
 
-  function isActive() {
-    return cameraActive || micActive;
-  }
-
-  function isCameraActive() { return cameraActive; }
-  function isMicActive() { return micActive; }
-
-  /** Get current mic level (0–1) for visualization. */
-  function getMicLevel() {
-    if (!_analyser || !_audioCtx) return 0;
-    if (_audioCtx.state === 'suspended') _audioCtx.resume();
-    const data = new Uint8Array(_analyser.fftSize);
-    _analyser.getByteTimeDomainData(data);
-    let sum = 0;
-    for (let i = 0; i < data.length; i++) {
-      const n = (data[i] - 128) / 128;
-      sum += n * n;
+    try {
+      camStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      camActive = camStream.getVideoTracks().length > 0;
+      _log('acquireCamera OK — cam:' + camActive);
+    } catch (e) {
+      _lastError = e.name || 'unknown';
+      console.error('[WOB WebRTC] acquireCamera failed:', e.name, e.message);
+      _setCamState('failed');
+      return false;
     }
-    return Math.min(1, Math.sqrt(sum / data.length));
+
+    _updatePreview(camStream);
+
+    camPc = new RTCPeerConnection(_buildRtcConfig(iceServers, iceTransportPolicy));
+    camStream.getTracks().forEach(track => camPc.addTrack(track, camStream));
+
+    let iceCount = 0;
+    camPc.onicecandidate = ({ candidate }) => {
+      if (!candidate) return;
+      iceCount++;
+      if (iceCount <= 3) _log('cam ICE #' + iceCount + ' sent');
+      WSClient.send({
+        type: 'webrtc_ice_cam',
+        candidate: candidate.candidate,
+        sdpMLineIndex: candidate.sdpMLineIndex,
+        sdpMid: candidate.sdpMid,
+      });
+    };
+
+    camPc.onconnectionstatechange = () => {
+      const s = camPc.connectionState;
+      console.log('[WOB WebRTC] cam connectionState:', s);
+      _setCamState(s);
+      if (s === 'failed' || s === 'closed') stopCamera();
+    };
+
+    camPc.oniceconnectionstatechange = () => {
+      console.log('[WOB WebRTC] cam iceState:', camPc.iceConnectionState);
+    };
+
+    _setCamState('connecting');
+
+    try {
+      const offer = await camPc.createOffer();
+      await camPc.setLocalDescription(offer);
+      const sent = WSClient.send({ type: 'webrtc_offer_cam', sdp: offer.sdp });
+      _log(sent ? 'Cam offer sent to TD' : 'Cam offer FAILED — WebSocket not connected');
+    } catch (e) {
+      console.error('[WOB WebRTC] cam createOffer failed:', e);
+      _setCamState('failed');
+      return false;
+    }
   }
+
+  /** Stop camera: close PC and release stream. */
+  function stopCamera() {
+    if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
+    if (camPc) { camPc.close(); camPc = null; }
+    camActive = false;
+    _updatePreview(null);
+    _setCamState('closed');
+    console.log('[WOB WebRTC] Camera stopped');
+  }
+
+  async function handleCameraAnswer(sdp) {
+    if (!camPc) return;
+    try {
+      await camPc.setRemoteDescription({ type: 'answer', sdp });
+      console.log('[WOB WebRTC] Cam remote description set');
+    } catch (e) {
+      console.error('[WOB WebRTC] cam setRemoteDescription failed:', e);
+    }
+  }
+
+  async function handleCameraIce({ candidate, sdpMLineIndex, sdpMid }) {
+    if (!camPc || !candidate) return;
+    _camIceRecvCount++;
+    if (_camIceRecvCount <= 3) _log('cam ICE from TD #' + _camIceRecvCount);
+    try {
+      await camPc.addIceCandidate(new RTCIceCandidate({ candidate, sdpMLineIndex, sdpMid }));
+    } catch (e) {
+      _log('cam addIceCandidate failed: ' + (e.message || e));
+    }
+  }
+
+  // ── Shared callbacks ───────────────────────────────────────────────────────
+
+  function onStateChange(fn)    { _onStateChange    = fn; }
+  function onCamStateChange(fn) { _onCamStateChange = fn; }
+  function setOnLog(fn)         { _onLog = fn; }
 
   // ── Private helpers ────────────────────────────────────────────────────────
 
-  function _setState(state) {
-    if (_onStateChange) _onStateChange(state);
+  function _setMicState(state) { if (_onStateChange)    _onStateChange(state); }
+  function _setCamState(state) { if (_onCamStateChange) _onCamStateChange(state); }
+
+  function _setupAnalyser(stream) {
+    try {
+      _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const source = _audioCtx.createMediaStreamSource(stream);
+      _analyser = _audioCtx.createAnalyser();
+      _analyser.fftSize = 256;
+      _analyser.smoothingTimeConstant = 0.8;
+      source.connect(_analyser);
+    } catch (e) { console.warn('[WOB WebRTC] Audio analyser setup failed:', e); }
   }
 
   function _updatePreview(stream) {
@@ -274,7 +326,36 @@ const WebRTCModule = (() => {
     }
   }
 
-  return { start, stop, disconnect, acquireMic, handleAnswer, handleIce, onStateChange, setOnLog,
-           isActive, isCameraActive, isMicActive, isPCActive: () => pc !== null,
-           getMicLevel, getLastError: () => _lastError };
+  function getMicLevel() {
+    if (!_analyser || !_audioCtx) return 0;
+    if (_audioCtx.state === 'suspended') _audioCtx.resume();
+    const data = new Uint8Array(_analyser.fftSize);
+    _analyser.getByteTimeDomainData(data);
+    let sum = 0;
+    for (let i = 0; i < data.length; i++) {
+      const n = (data[i] - 128) / 128;
+      sum += n * n;
+    }
+    return Math.min(1, Math.sqrt(sum / data.length));
+  }
+
+  return {
+    // Mic
+    acquireMic, start, stop, disconnect,
+    handleAnswer, handleIce,
+    onStateChange,
+    isMicActive:  () => micActive,
+    isPCActive:   () => micPc !== null,
+    // Camera
+    startCamera, stopCamera,
+    handleCameraAnswer, handleCameraIce,
+    onCamStateChange,
+    isCameraActive: () => camActive,
+    isCamPCActive:  () => camPc !== null,
+    // Shared
+    isActive:     () => micActive || camActive,
+    setOnLog,
+    getMicLevel,
+    getLastError: () => _lastError,
+  };
 })();

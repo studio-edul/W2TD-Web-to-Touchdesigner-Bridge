@@ -21,6 +21,12 @@
         <small>TD PC의 로컬 IP와 포트 입력 (예: 192.168.0.100:9980)</small>
       </div>
 
+      <div class="form-group">
+        <label for="client-name">기기 이름 (선택사항)</label>
+        <input type="text" id="client-name" placeholder="iPhone_이지원" autocomplete="off" maxlength="50">
+        <small>TD에서 슬롯 대신 표시될 이름 (예: iPhone_이지원, iPad_전시용)</small>
+      </div>
+
       <button id="btn-connect" class="btn btn-primary">Connect to TD</button>
       <button id="btn-show-log" class="btn btn-small" style="margin-top:8px">로그 보기</button>
 
@@ -71,6 +77,7 @@
     <!-- Broadcast Control -->
     <div id="broadcast-bar">
       <div id="broadcast-status" class="broadcast-status"></div>
+      <div id="data-ack-indicator" class="data-ack-indicator hidden" title="TD 데이터 수신 확인"></div>
       <div class="broadcast-buttons">
         <button id="btn-trigger" class="btn btn-trigger">Trigger</button>
         <button id="btn-broadcast" class="btn btn-broadcast">Start Broadcast</button>
@@ -82,7 +89,13 @@
   <!-- Fullscreen Touch Pad (shown directly in dev_mode=0, or toggled in dev_mode=1) -->
   <div id="touch-pad" class="hidden">
     <canvas id="touch-canvas"></canvas>
-    <button id="btn-exit-touch" class="btn btn-small btn-exit-touch">Exit Touch Pad</button>
+    <div class="touch-pad-controls">
+      <button id="btn-toggle-touch-points" class="btn btn-small btn-toggle-touch-points hidden" title="터치 포인트 표시">
+        <span class="toggle-icon">👆</span>
+        <span class="toggle-label">포인트</span>
+      </button>
+      <button id="btn-exit-touch" class="btn btn-small btn-exit-touch">Exit Touch Pad</button>
+    </div>
   </div>
 
   <!-- User mode (iOS): tap to trigger sensor permission request -->

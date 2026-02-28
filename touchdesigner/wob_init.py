@@ -1,6 +1,8 @@
 import socket
 import os
 import subprocess
+import sys
+import platform
 
 def get_local_ip():
 	try:
@@ -14,13 +16,17 @@ def get_local_ip():
 		return '127.0.0.1'
 
 SENSOR_COLS = [
-	'slot', 'connected',
+	'slot', 'connected', 'name',
 	'ax', 'ay', 'az',
 	'ga', 'gb', 'gg',
 	'oa', 'ob', 'og',
 	'lat', 'lon',
 	'touch_count',
 	'trig',
+	'css_width', 'css_height',
+	'physical_width', 'physical_height',
+	'screen_width', 'screen_height',
+	'device_pixel_ratio',
 ]
 MAX_CLIENTS = 20
 
@@ -48,7 +54,7 @@ def _init_webrtc_ice():
 		w = op('webrtc_dat')
 		if w is None:
 			return
-		# freeTURN (무료, 가입 불필요)
+		# freeTURN (free, no signup required)
 		w.par.turn0server = 'turn:freeturn.net:3478'
 		w.par.username = 'free'
 		w.par.password = 'free'
@@ -59,14 +65,108 @@ def _init_webrtc_ice():
 		print(f'[WOB] WebRTC ICE init skip: {e}')
 
 
+def install_packages():
+	"""Install required Python packages into TD's Python environment.
+	This function is called automatically on onCreate, or can be called manually.
+	"""
+	PACKAGES = ['qrcode[pil]', 'pycloudflared']
+	CERTIFI_PACKAGE = 'certifi'
+	
+	print('[WOB Setup] Starting package installation...')
+	print(f'[WOB Setup] Python: {sys.executable}')
+	print(f'[WOB Setup] Platform: {platform.system()}')
+	all_ok = True
+	
+	# CREATE_NO_WINDOW is Windows-only
+	kwargs = {}
+	if platform.system() == 'Windows':
+		kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+	
+	# Install certifi first with --upgrade to fix SSL certificate issues (especially on macOS)
+	print(f'[WOB Setup] Installing {CERTIFI_PACKAGE} (SSL certificates)...')
+	try:
+		subprocess.check_call(
+			[sys.executable, '-m', 'pip', 'install', '--upgrade', '--quiet', CERTIFI_PACKAGE],
+			**kwargs
+		)
+		print(f'[WOB Setup] {CERTIFI_PACKAGE} OK')
+	except Exception as e:
+		print(f'[WOB Setup] {CERTIFI_PACKAGE} FAILED: {e}')
+		all_ok = False
+	
+	# Install other packages
+	for pkg in PACKAGES:
+		print(f'[WOB Setup] Installing {pkg}...')
+		try:
+			subprocess.check_call(
+				[sys.executable, '-m', 'pip', 'install', '--quiet', pkg],
+				**kwargs
+			)
+			print(f'[WOB Setup] {pkg} OK')
+		except Exception as e:
+			print(f'[WOB Setup] {pkg} FAILED: {e}')
+			all_ok = False
+	
+	if all_ok:
+		print('[WOB Setup] All packages installed. You can now use WOB from any directory.')
+		print('[WOB Setup] Note: Restart TouchDesigner if SSL certificate errors persist.')
+	else:
+		print('[WOB Setup] Some packages failed. Check the log above.')
+
+
+def onCreate():
+	"""Called when Execute DAT is created. Install packages automatically."""
+	print('[WOB] onCreate triggered - installing packages...')
+	install_packages()
+
+
 def onStart():
 	print('[WOB] onStart triggered')
 	_init_tables()
 	_init_webrtc_ice()
 	generate()
 
+def _read_config():
+	"""Read settings from wob_config Table DAT (key | value)."""
+	cfg = op('wob_config')
+	if cfg is None:
+		return {}
+	out = {}
+	for r in range(1, cfg.numRows):
+		try:
+			out[str(cfg[r, 0])] = str(cfg[r, 1])
+		except Exception:
+			pass
+	return out
+
 def generate():
 	print('[WOB] generate() start')
+
+	# Read port from wob_config (default: 9980)
+	cfg = _read_config()
+	try:
+		port = int(cfg.get('port', 9980))
+	except (ValueError, TypeError):
+		port = 9980
+	print(f'[WOB] Using port: {port}')
+
+	# SSL certificate configuration (using certifi) - fixes macOS SSL issues
+	try:
+		import certifi
+		import ssl
+		# Set certifi certificate bundle path as environment variables
+		cert_path = certifi.where()
+		os.environ['SSL_CERT_FILE'] = cert_path
+		os.environ['REQUESTS_CA_BUNDLE'] = cert_path
+		# Configure default SSL context to use certifi (wrapped as function)
+		def _create_default_context():
+			return ssl.create_default_context(cafile=cert_path)
+		ssl._create_default_https_context = _create_default_context
+		print(f'[WOB] SSL certificates configured: {cert_path}')
+	except ImportError:
+		print('[WOB] certifi not installed - SSL may fail')
+	except Exception as e:
+		print(f'[WOB] SSL config warning: {e}')
 
 	# 1. Import qrcode
 	try:
@@ -76,27 +176,34 @@ def generate():
 		print('[WOB] qrcode not installed. Run op("wob_setup").module.install() first.')
 		return
 
-	# 2. Cloudflare tunnel (다른 네트워크 접속용) — 실패 시 로컬 IP
+	# 2. Cloudflare tunnel (for cross-network access) - fallback to local IP on failure
 	url = None
 	try:
+		# Suppress tqdm progress bar output
+		os.environ['TQDM_DISABLE'] = '1'
+		import sys
+		from contextlib import redirect_stdout, redirect_stderr
 		from pycloudflared import try_cloudflare
 		print('[WOB] Starting Cloudflare tunnel... (no signup required)')
-		result = try_cloudflare(port=9980)
-		url = result.tunnel
+		# Redirect stdout/stderr to suppress tqdm progress bars during cloudflared download
+		with open(os.devnull, 'w') as devnull:
+			with redirect_stdout(devnull), redirect_stderr(devnull):
+				result = try_cloudflare(port=port)
+				url = result.tunnel
 		print(f'[WOB] Cloudflare URL: {url}')
 	except ImportError:
 		print('[WOB] pycloudflared not installed. Run op("wob_setup").module.install() first.')
 	except Exception as e:
-		print(f'[WOB] Cloudflare tunnel failed: {e} — falling back to local')
+		print(f'[WOB] Cloudflare tunnel failed: {e} - falling back to local')
 
 	if url is None:
 		ip = get_local_ip()
-		url = f'https://{ip}:9980'
-		print(f'[WOB] Local URL: {url}')
+		url = f'https://{ip}:{port}'
+		print(f'[WOB] Local fallback URL (same network only): {ip}:{port}')
 
 	op('/').store('wob_url', url)  # Store URL internally for callbacks.py
 
-	# Build QR URL: point directly to GitHub Pages with ?td= param
+	# Build QR URL: point directly to GitHub Pages with ?td= parametereter
 	host = url.replace('https://', '').replace('http://', '').strip()
 	GITHUB_PAGES_URL = 'https://studio-edul.github.io/Web-Osc-Bridge/'
 	qr_url = GITHUB_PAGES_URL + '?td=' + host
@@ -137,5 +244,18 @@ def generate():
 	except Exception as e:
 		print(f'[WOB] TOP reload failed: {e}')
 		return
+
+	# 6. Set Web Render TOP URL to cam_receiver.html
+	try:
+		web_render = op('web_render_top')
+		if web_render is not None:
+			receiver_path = os.path.join(project.folder, 'touchdesigner', 'cam_receiver.html')
+			file_url = 'file:///' + receiver_path.replace('\\', '/')
+			web_render.par.url = file_url
+			print(f'[WOB] web_render_top URL set: {file_url}')
+		else:
+			print('[WOB] web_render_top not found - create a Web Render TOP named "web_render_top"')
+	except Exception as e:
+		print(f'[WOB] web_render_top URL set failed: {e}')
 
 	print('[WOB] generate() done')

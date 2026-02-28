@@ -503,6 +503,7 @@ input[type="checkbox"] {
 
 /* Broadcast Bar */
 #broadcast-bar {
+  position: relative;
   flex-shrink: 0;
   padding: 10px 12px;
   background: var(--surface);
@@ -539,6 +540,48 @@ input[type="checkbox"] {
   padding: 0;
 }
 
+/* Data ACK Indicator */
+.data-ack-indicator {
+  position: absolute;
+  bottom: 8px;
+  right: 12px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+  opacity: 0;
+  transition: opacity 0.2s;
+  z-index: 10;
+}
+
+.data-ack-indicator.active {
+  opacity: 1;
+  animation: pulse-ack 0.5s ease-out;
+}
+
+.data-ack-indicator.warning {
+  background: var(--warning);
+}
+
+.data-ack-indicator.error {
+  background: var(--danger);
+}
+
+@keyframes pulse-ack {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+  100% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+}
+
 /* Touch Pad */
 #touch-pad {
   position: fixed;
@@ -551,6 +594,46 @@ input[type="checkbox"] {
   width: 100%;
   height: 100%;
   display: block;
+}
+
+.touch-pad-controls {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  z-index: 10;
+}
+
+.btn-toggle-touch-points {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  opacity: 0.7;
+  transition: opacity 0.2s, background 0.2s, border-color 0.2s;
+}
+
+.btn-toggle-touch-points:hover {
+  opacity: 1;
+}
+
+.btn-toggle-touch-points.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+  opacity: 1;
+}
+
+.btn-toggle-touch-points .toggle-icon {
+  font-size: 16px;
+}
+
+.btn-toggle-touch-points .toggle-label {
+  font-size: 12px;
 }
 
 .btn-exit-touch {

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000; width: 100vw; height: 100vh; overflow: hidden; }
+  #video-wrap { position: relative; width: 100%; height: 100%; }
+  video { width: 100%; height: 100%; object-fit: contain; display: block; }
+  #overlay {
+    position: absolute; top: 8px; left: 8px;
+    background: rgba(0,0,0,0.6); color: #fff;
+    font: 11px monospace; padding: 6px 8px; border-radius: 4px;
+    pointer-events: none; line-height: 1.5;
+  }
+  .dot-ok   { color: #4caf50; }
+  .dot-wait { color: #ffb300; }
+  .dot-err  { color: #f44336; }
+</style>
+</head>
+<body>
+<div id="video-wrap">
+  <video id="remote-video" autoplay playsinline muted></video>
+  <div id="overlay">
+    <span id="ws-status" class="dot-wait">WS: connecting...</span><br>
+    <span id="cam-status" class="dot-wait">CAM: waiting</span>
+  </div>
+</div>
+<script>
+  const video     = document.getElementById('remote-video');
+  const wsStatus  = document.getElementById('ws-status');
+  const camStatus = document.getElementById('cam-status');
+
+  const ICE_SERVERS = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'turn:freeturn.net:3478', username: 'free', credential: 'free' },
+    { urls: 'turns:freeturn.net:5349', username: 'free', credential: 'free' },
+    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turns:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+  ];
+
+  // slot → RTCPeerConnection
+  const peers = {};
+  let ws = null;
+  let activeSlot = null; // last active video slot
+
+  function send(obj) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(obj));
+    }
+  }
+
+  function connect() {
+    ws = new WebSocket('ws://localhost:9980');
+
+    ws.onopen = () => {
+      wsStatus.textContent = 'WS: connected';
+      wsStatus.className = 'dot-ok';
+      send({ type: 'hello', role: 'cam_receiver' });
+    };
+
+    ws.onclose = () => {
+      wsStatus.textContent = 'WS: disconnected — retrying...';
+      wsStatus.className = 'dot-err';
+      camStatus.textContent = 'CAM: waiting';
+      camStatus.className = 'dot-wait';
+      // Close all peer connections on WS disconnect
+      for (const slot in peers) { try { peers[slot].close(); } catch(e){} }
+      Object.keys(peers).forEach(k => delete peers[k]);
+      setTimeout(connect, 2000);
+    };
+
+    ws.onerror = () => {
+      wsStatus.textContent = 'WS: error';
+      wsStatus.className = 'dot-err';
+    };
+
+    ws.onmessage = async (e) => {
+      let msg;
+      try { msg = JSON.parse(e.data); } catch { return; }
+
+      if (msg.type === 'cam_offer') {
+        await handleOffer(msg.slot, msg.sdp);
+      } else if (msg.type === 'cam_ice') {
+        await handleRemoteIce(msg.slot, msg.candidate, msg.sdpMLineIndex, msg.sdpMid);
+      } else if (msg.type === 'cam_peer_closed') {
+        closePeer(msg.slot);
+      }
+    };
+  }
+
+  async function handleOffer(slot, sdp) {
+    // Close existing PC for this slot if any
+    if (peers[slot]) { try { peers[slot].close(); } catch(e){} }
+
+    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    peers[slot] = pc;
+
+    camStatus.textContent = 'CAM: connecting (slot ' + slot + ')';
+    camStatus.className = 'dot-wait';
+
+    pc.ontrack = (e) => {
+      if (e.streams && e.streams[0]) {
+        // Show the most recently activated slot
+        activeSlot = slot;
+        video.srcObject = e.streams[0];
+        camStatus.textContent = 'CAM: streaming (slot ' + slot + ')';
+        camStatus.className = 'dot-ok';
+      }
+    };
+
+    pc.onicecandidate = ({ candidate }) => {
+      if (candidate) {
+        send({
+          type: 'cam_ice',
+          slot,
+          candidate: candidate.candidate,
+          sdpMLineIndex: candidate.sdpMLineIndex,
+          sdpMid: candidate.sdpMid,
+        });
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      const s = pc.connectionState;
+      if (s === 'failed' || s === 'closed' || s === 'disconnected') {
+        if (activeSlot === slot) {
+          video.srcObject = null;
+          camStatus.textContent = 'CAM: ' + s;
+          camStatus.className = 'dot-err';
+        }
+        if (s === 'failed' || s === 'closed') closePeer(slot);
+      }
+    };
+
+    try {
+      await pc.setRemoteDescription({ type: 'offer', sdp });
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      send({ type: 'cam_answer', slot, sdp: answer.sdp });
+    } catch (err) {
+      camStatus.textContent = 'CAM: offer error — ' + err.message;
+      camStatus.className = 'dot-err';
+      closePeer(slot);
+    }
+  }
+
+  async function handleRemoteIce(slot, candidate, sdpMLineIndex, sdpMid) {
+    const pc = peers[slot];
+    if (!pc || !candidate) return;
+    try {
+      await pc.addIceCandidate(new RTCIceCandidate({ candidate, sdpMLineIndex, sdpMid }));
+    } catch (e) {
+      console.warn('[CAM-RCV] addIceCandidate failed:', e.message);
+    }
+  }
+
+  function closePeer(slot) {
+    if (peers[slot]) {
+      try { peers[slot].close(); } catch(e) {}
+      delete peers[slot];
+    }
+    if (activeSlot === slot) {
+      activeSlot = null;
+      video.srcObject = null;
+      camStatus.textContent = 'CAM: waiting';
+      camStatus.className = 'dot-wait';
+    }
+  }
+
+  connect();
+</script>
+</body>
+</html>

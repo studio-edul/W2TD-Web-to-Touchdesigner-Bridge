@@ -6,13 +6,17 @@ MAX_CLIENTS = 20
 
 
 SENSOR_COLS = [
-	'slot', 'connected',
+	'slot', 'connected', 'name',
 	'ax', 'ay', 'az',
 	'ga', 'gb', 'gg',
 	'oa', 'ob', 'og',
 	'lat', 'lon',
 	'touch_count',
 	'trig',
+	'css_width', 'css_height',
+	'physical_width', 'physical_height',
+	'screen_width', 'screen_height',
+	'device_pixel_ratio',
 ]
 
 # ── Persistent state (survives module reload via op('/').store/fetch) ──────────
@@ -25,6 +29,10 @@ def _slots():
 def _free():
 	"""Returns free_slots list."""
 	return op('/').fetch('wob_free_slots', list(range(1, MAX_CLIENTS + 1)))
+
+def _client_names():
+	"""Returns client_names dict {slot: name}."""
+	return op('/').fetch('wob_client_names', {})
 
 def _touch():
 	"""Returns touch_count dict {slot: count}."""
@@ -39,6 +47,9 @@ def _save_free(lst):
 def _save_touch(d):
 	op('/').store('wob_touch_count', d)
 
+def _save_client_names(d):
+	op('/').store('wob_client_names', d)
+
 def _find_row(t, slot):
 	"""Return the row index in sensor_table whose 'slot' column matches slot, or None."""
 	for r in range(1, t.numRows):
@@ -48,6 +59,76 @@ def _find_row(t, slot):
 		except Exception:
 			pass
 	return None
+
+def _cam_receiver_addr():
+	"""Returns stored cam_receiver WebSocket address, or None."""
+	return op('/').fetch('wob_cam_receiver_addr', None)
+
+def _save_cam_receiver_addr(addr):
+	op('/').store('wob_cam_receiver_addr', addr)
+
+def _addr_for_slot(slot):
+	"""Return WebSocket addr for a given slot number, or None."""
+	for addr, s in _slots().items():
+		if s == slot:
+			return addr
+	return None
+
+def _release_slot(addr, slot):
+	"""Return a slot to the free pool and remove sensor_table row."""
+	slots = _slots()
+	slots.pop(addr, None)
+	_save_slots(slots)
+	free = _free()
+	if slot not in free:
+		free.append(slot)
+		free.sort()
+	_save_free(free)
+	t = op('sensor_table')
+	if t is not None:
+		row = _find_row(t, slot)
+		if row is not None:
+			t.deleteRow(row)
+
+def _handle_cam_receiver_msg(webServerDAT, addr, msg):
+	"""Process messages from cam_receiver.html (Web Render TOP)."""
+	msg_type = msg.get('type')
+
+	if msg_type == 'cam_answer':
+		sdp = msg.get('sdp')
+		slot = msg.get('slot')
+		if not sdp or slot is None:
+			return
+		mobile_addr = _addr_for_slot(slot)
+		if mobile_addr is None:
+			print(f'[WOB Cam] cam_answer: no mobile addr for slot {slot}')
+			return
+		try:
+			webServerDAT.webSocketSendText(mobile_addr, json.dumps({
+				'type': 'webrtc_answer_cam',
+				'sdp': sdp,
+			}))
+			print(f'[WOB Cam] cam_answer relayed -> slot {slot}')
+		except Exception as e:
+			print(f'[WOB Cam] cam_answer relay error: {e}')
+
+	elif msg_type == 'cam_ice':
+		candidate = msg.get('candidate')
+		slot = msg.get('slot')
+		if not candidate or slot is None:
+			return
+		mobile_addr = _addr_for_slot(slot)
+		if mobile_addr is None:
+			return
+		try:
+			webServerDAT.webSocketSendText(mobile_addr, json.dumps({
+				'type': 'webrtc_ice_cam',
+				'candidate': candidate,
+				'sdpMLineIndex': msg.get('sdpMLineIndex', 0),
+				'sdpMid': msg.get('sdpMid', ''),
+			}))
+		except Exception as e:
+			print(f'[WOB Cam] cam_ice relay error: {e}')
 
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -72,7 +153,7 @@ def init_tables():
 	cfg = _read_config()
 	if 'max_clients' in cfg:
 		try:
-			MAX_CLIENTS = max(1, int(cfg['max_clients']))
+			MAX_CLIENTS = max(1, int(cfg['max_clients']))  # Minimum 1, can be any positive number
 		except ValueError:
 			pass
 
@@ -141,6 +222,196 @@ def broadcast_config(webServerDAT):
 	print(f'[WOB] Config broadcast -> {len(_slots())} clients')
 
 
+def send_haptic_to_client(webServerDAT, slot, pattern):
+	"""Send haptic feedback pattern to a specific client.
+	
+	Args:
+		webServerDAT: Web Server DAT operator
+		slot: Client slot number (int)
+		pattern: List of vibration durations in milliseconds
+			Example: [200, 100, 200] = vibrate 200ms, pause 100ms, vibrate 200ms
+			Single value: [200] = vibrate 200ms once
+	
+	Usage in TD:
+		op('web_server_dat').module.send_haptic_to_client(op('web_server_dat'), 1, [200, 100, 200])
+		op('web_server_dat').module.send_haptic_to_all(op('web_server_dat'), [200])
+	"""
+	addr = _addr_for_slot(slot)
+	if addr is None:
+		print(f'[WOB Haptic] No client found for slot {slot}')
+		return False
+	
+	if not isinstance(pattern, list) or len(pattern) == 0:
+		print(f'[WOB Haptic] Invalid pattern: {pattern}')
+		return False
+	
+	try:
+		msg = json.dumps({
+			'type': 'haptic',
+			'pattern': pattern
+		})
+		webServerDAT.webSocketSendText(addr, msg)
+		print(f'[WOB Haptic] Sent pattern {pattern} to slot {slot}')
+		return True
+	except Exception as e:
+		print(f'[WOB Haptic] Send failed for slot {slot}: {e}')
+		return False
+
+
+def send_haptic_to_all(webServerDAT, pattern):
+	"""Send haptic feedback pattern to all connected clients.
+	
+	Args:
+		webServerDAT: Web Server DAT operator
+		pattern: List of vibration durations in milliseconds
+	
+	Usage in TD:
+		op('web_server_dat').module.send_haptic_to_all(op('web_server_dat'), [200, 100, 200])
+	"""
+	success_count = 0
+	for slot in _slots().values():
+		if send_haptic_to_client(webServerDAT, slot, pattern):
+			success_count += 1
+	print(f'[WOB Haptic] Sent pattern {pattern} to {success_count} clients')
+	return success_count
+
+
+def send_haptic_state(webServerDAT, slot, state):
+	"""Send haptic state (0 or 1) to a specific client.
+	
+	Args:
+		webServerDAT: Web Server DAT operator
+		slot: Client slot number (int)
+		state: Vibration state (0 = stop, 1 = vibrate continuously)
+	
+	Usage in TD:
+		op('web_server_dat').module.send_haptic_state(op('web_server_dat'), 1, 1)  # slot 1 vibrate
+		op('web_server_dat').module.send_haptic_state(op('web_server_dat'), 1, 0)  # slot 1 stop
+	"""
+	addr = _addr_for_slot(slot)
+	if addr is None:
+		return False
+	
+	if state not in (0, 1):
+		print(f'[WOB Haptic] Invalid state: {state} (must be 0 or 1)')
+		return False
+	
+	try:
+		msg = json.dumps({
+			'type': 'haptic',
+			'state': state
+		})
+		webServerDAT.webSocketSendText(addr, msg)
+		return True
+	except Exception as e:
+		print(f'[WOB Haptic] Send state failed for slot {slot}: {e}')
+		return False
+
+
+def broadcast_haptic_from_chop(webServerDAT, chop_name='wob_haptic'):
+	"""Read haptic CHOP and send state to all connected clients.
+	
+	CHOP structure:
+		- Channel names: 'slot1', 'slot2', ... or 'ch1', 'ch2', ... or '1', '2', ...
+		- Values: 0 = stop vibration, 1 = vibrate continuously
+		- Non-zero values are treated as 1
+	
+	Args:
+		webServerDAT: Web Server DAT operator
+		chop_name: Name of the CHOP operator (default: 'wob_haptic')
+	
+	Usage in TD (Timer CHOP or Execute DAT):
+		op('web_server_dat').module.broadcast_haptic_from_chop(op('web_server_dat'))
+		op('web_server_dat').module.broadcast_haptic_from_chop(op('web_server_dat'), 'my_haptic_chop')
+	
+	Setup:
+		1. Create a Constant CHOP or any CHOP named 'wob_haptic' (or custom name)
+		2. Add channels: 'slot1', 'slot2', ... (or 'ch1', 'ch2', ... or '1', '2', ...)
+		3. Connect Timer CHOP or Execute DAT to call this function periodically
+	"""
+	chop = op(chop_name)
+	if chop is None:
+		return 0
+	
+	success_count = 0
+	active_slots = _slots().values()
+	
+	# Try different channel naming conventions
+	for slot in active_slots:
+		state = 0
+		
+		# Try channel names: 'slot1', 'slot2', ...
+		channel_name = f'slot{slot}'
+		if channel_name in chop.chans:
+			try:
+				val = chop[channel_name][0]
+				state = 1 if val != 0 else 0
+			except Exception:
+				pass
+
+		# Fallback: try 'ch1', 'ch2', ...
+		if state == 0 and f'ch{slot}' in chop.chans:
+			try:
+				val = chop[f'ch{slot}'][0]
+				state = 1 if val != 0 else 0
+			except Exception:
+				pass
+
+		# Fallback: try numeric channel names '1', '2', ...
+		if state == 0 and str(slot) in chop.chans:
+			try:
+				val = chop[str(slot)][0]
+				state = 1 if val != 0 else 0
+			except Exception:
+				pass
+
+		# Fallback: try channel index (slot-1 as index)
+		if state == 0 and slot - 1 < len(chop.chans):
+			try:
+				val = chop[slot - 1][0]
+				state = 1 if val != 0 else 0
+			except Exception:
+				pass
+		
+		# Send state to client
+		if send_haptic_state(webServerDAT, slot, state):
+			success_count += 1
+	
+	return success_count
+
+
+def send_heartbeat(webServerDAT, slot=None):
+	"""Send heartbeat ping to a specific client or all clients.
+	
+	Args:
+		webServerDAT: Web Server DAT operator
+		slot: Client slot number (int). If None, sends to all clients.
+	
+	Usage in TD (Timer CHOP or Execute DAT):
+		op('web_server_dat').module.send_heartbeat(op('web_server_dat'))  # all clients
+		op('web_server_dat').module.send_heartbeat(op('web_server_dat'), 1)  # slot 1 only
+	"""
+	if slot is not None:
+		addr = _addr_for_slot(slot)
+		if addr is None:
+			return False
+		try:
+			webServerDAT.webSocketSendText(addr, json.dumps({'type': 'ping'}))
+			return True
+		except Exception:
+			return False
+	else:
+		# Send to all clients
+		success_count = 0
+		for addr in list(_slots().keys()):
+			try:
+				webServerDAT.webSocketSendText(addr, json.dumps({'type': 'ping'}))
+				success_count += 1
+			except Exception:
+				pass
+		return success_count
+
+
 def onHTTPRequest(webServerDAT, request, response):
 	"""Redirect to GitHub Pages with TD address as param."""
 	stored_url = op('/').fetch('wob_url', '')
@@ -202,9 +473,12 @@ def onWebSocketOpen(webServerDAT, client):
 
 		t = op('sensor_table')
 		if t is not None:
-			t.appendRow([slot, 1] + [0.0] * (len(SENSOR_COLS) - 2))
+			# Default name: Slot {slot}
+			default_name = f'Slot {slot}'
+			# Initialize with default screen info (will be updated when screen_info message arrives)
+			t.appendRow([slot, 1, default_name] + [0.0] * (len(SENSOR_COLS) - 3))
 
-		print(f'[WOB] Connected -> slot {slot} | {addr} | {MAX_CLIENTS - len(free)} active')
+		print(f'[WOB] Connected -> slot {slot} | {addr} | {len(slots)}/{MAX_CLIENTS} active')
 		webServerDAT.webSocketSendText(client, json.dumps({'type': 'ack', 'slot': slot}))
 
 		# Push current config to the newly connected client
@@ -216,6 +490,13 @@ def onWebSocketOpen(webServerDAT, client):
 
 def onWebSocketClose(webServerDAT, client):
 	addr = str(client)
+
+	# cam_receiver disconnect
+	if addr == _cam_receiver_addr():
+		_save_cam_receiver_addr(None)
+		print(f'[WOB Cam] cam_receiver disconnected: {addr}')
+		return
+
 	slots = _slots()
 	slot = slots.pop(addr, None)
 
@@ -259,11 +540,21 @@ def onWebSocketClose(webServerDAT, client):
 		op('/').store(f'wob_webrtc_addr_{conn_id}', None)
 		op('/').store(f'wob_webrtc_slot_to_uuid_{slot}', None)
 
-	print(f'[WOB] Disconnected -> slot {slot} | {addr} | {MAX_CLIENTS - len(free)} active')
+		print(f'[WOB] Disconnected -> slot {slot} | {addr} | {len(slots)}/{MAX_CLIENTS} active')
 
 
 def onWebSocketReceiveText(webServerDAT, client, data):
 	addr = str(client)
+
+	# cam_receiver.html messages are routed separately (no slot)
+	if addr == _cam_receiver_addr():
+		try:
+			msg = json.loads(data)
+		except Exception:
+			return
+		_handle_cam_receiver_msg(webServerDAT, addr, msg)
+		return
+
 	slots = _slots()
 	slot = slots.get(addr)
 
@@ -277,7 +568,10 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 		_save_free(free)
 		t2 = op('sensor_table')
 		if t2 is not None and _find_row(t2, slot) is None:
-			t2.appendRow([slot, 1] + [0.0] * (len(SENSOR_COLS) - 2))
+			# Get client name if exists
+			names = _client_names()
+			client_name = names.get(slot, f'Slot {slot}')
+			t2.appendRow([slot, 1, client_name] + [0.0] * (len(SENSOR_COLS) - 3))
 		print(f'[WOB] Recovered slot {slot} for {addr}')
 
 	try:
@@ -300,15 +594,38 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 		trig = op('/').fetch(trig_key, 0)
 		if trig:
 			op('/').store(trig_key, 0)
+		# Get client name
+		names = _client_names()
+		client_name = names.get(slot, f'Slot {slot}')
+		
+		# Get screen resolution (stored separately)
+		screen_info = op('/').fetch(f'wob_screen_{slot}', {})
+		css_width = screen_info.get('width', 0)
+		css_height = screen_info.get('height', 0)
+		physical_width = screen_info.get('physicalWidth', 0)
+		physical_height = screen_info.get('physicalHeight', 0)
+		screen_width = screen_info.get('screenWidth', 0)
+		screen_height = screen_info.get('screenHeight', 0)
+		device_pixel_ratio = screen_info.get('devicePixelRatio', 1.0)
+		
 		t.replaceRow(row, [
-			slot, 1,
+			slot, 1, client_name,
 			g('ax', 0), g('ay', 0), g('az', 0),
 			g('ga', 0), g('gb', 0), g('gg', 0),
 			g('oa', 0), g('ob', 0), g('og', 0),
 			g('lat', 0), g('lon', 0),
 			_touch().get(slot, 0),
 			trig,
+			css_width, css_height,
+			physical_width, physical_height,
+			screen_width, screen_height,
+			device_pixel_ratio,
 		])
+		# Send ack signal to indicate data received
+		try:
+			webServerDAT.webSocketSendText(addr, json.dumps({'type': 'data_ack'}))
+		except Exception:
+			pass
 
 	elif msg_type == 'touch':
 		count = msg.get('count', 0)
@@ -333,12 +650,24 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			g = msg.get
 			for i in range(count):
 				tt.appendRow([slot, i, g(f't{i}x', 0), g(f't{i}y', 0), g(f't{i}s', 0)])
+		# Send ack signal for touch data
+		try:
+			webServerDAT.webSocketSendText(addr, json.dumps({'type': 'data_ack'}))
+		except Exception:
+			pass
 
 	elif msg_type == 'trigger':
 		op('/').store(f'wob_trig_{slot}', 1)
 
 	elif msg_type == 'hello':
-		print(f'[WOB] Hello from slot {slot} - OK')
+		role = msg.get('role', '')
+		if role == 'cam_receiver':
+			# cam_receiver.html identified itself — return its slot and track it
+			_release_slot(addr, slot)
+			_save_cam_receiver_addr(addr)
+			print(f'[WOB Cam] cam_receiver registered: {addr}')
+		else:
+			print(f'[WOB] Hello from slot {slot} - OK')
 
 	elif msg_type == 'webrtc_offer':
 		sdp = msg.get('sdp')
@@ -374,3 +703,105 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			wrtc.addIceCandidate(conn_id, candidate, line_index, sdp_mid)
 		except Exception as e:
 			print(f'[WOB WebRTC] addIceCandidate error: {e}')
+
+	elif msg_type == 'webrtc_offer_cam':
+		# Camera offer from mobile → relay to cam_receiver as cam_offer
+		sdp = msg.get('sdp')
+		if not sdp:
+			return
+		receiver_addr = _cam_receiver_addr()
+		if receiver_addr is None:
+			print('[WOB Cam] webrtc_offer_cam received but no cam_receiver connected')
+			return
+		try:
+			webServerDAT.webSocketSendText(receiver_addr, json.dumps({
+				'type': 'cam_offer',
+				'slot': slot,
+				'sdp': sdp,
+			}))
+			print(f'[WOB Cam] cam_offer relayed to receiver (slot {slot})')
+		except Exception as e:
+			print(f'[WOB Cam] cam_offer relay error: {e}')
+
+	elif msg_type == 'webrtc_ice_cam':
+		# ICE from mobile → relay to cam_receiver
+		candidate = msg.get('candidate')
+		if not candidate:
+			return
+		receiver_addr = _cam_receiver_addr()
+		if receiver_addr is None:
+			return
+		try:
+			webServerDAT.webSocketSendText(receiver_addr, json.dumps({
+				'type': 'cam_ice',
+				'slot': slot,
+				'candidate': candidate,
+				'sdpMLineIndex': msg.get('sdpMLineIndex', 0),
+				'sdpMid': msg.get('sdpMid', ''),
+			}))
+		except Exception as e:
+			print(f'[WOB Cam] webrtc_ice_cam relay error: {e}')
+
+	elif msg_type == 'ping':
+		# Heartbeat ping from mobile → respond with pong
+		try:
+			webServerDAT.webSocketSendText(addr, json.dumps({'type': 'pong'}))
+		except Exception:
+			pass
+
+	elif msg_type == 'client_name':
+		# Client name update from mobile
+		client_name = msg.get('name', '').strip()
+		if not client_name:
+			client_name = f'Slot {slot}'
+		
+		# Store name
+		names = _client_names()
+		names[slot] = client_name
+		_save_client_names(names)
+		
+		# Update sensor_table
+		t = op('sensor_table')
+		if t is not None:
+			row = _find_row(t, slot)
+			if row is not None:
+				t[row, 'name'] = client_name
+		
+		print(f'[WOB] Client name updated: slot {slot} -> {client_name}')
+
+	elif msg_type == 'screen_info':
+		# Screen resolution info from mobile
+		css_width = msg.get('width', 0)  # CSS viewport width (web-optimized)
+		css_height = msg.get('height', 0)  # CSS viewport height (web-optimized)
+		physical_width = msg.get('physicalWidth', 0)  # Physical pixel width
+		physical_height = msg.get('physicalHeight', 0)  # Physical pixel height
+		screen_width = msg.get('screenWidth', 0)  # Device screen width
+		screen_height = msg.get('screenHeight', 0)  # Device screen height
+		device_pixel_ratio = msg.get('devicePixelRatio', 1.0)
+		
+		# Store screen info
+		screen_info = {
+			'width': css_width,
+			'height': css_height,
+			'physicalWidth': physical_width,
+			'physicalHeight': physical_height,
+			'screenWidth': screen_width,
+			'screenHeight': screen_height,
+			'devicePixelRatio': device_pixel_ratio
+		}
+		op('/').store(f'wob_screen_{slot}', screen_info)
+		
+		# Update sensor_table
+		t = op('sensor_table')
+		if t is not None:
+			row = _find_row(t, slot)
+			if row is not None:
+				t[row, 'css_width'] = css_width
+				t[row, 'css_height'] = css_height
+				t[row, 'physical_width'] = physical_width
+				t[row, 'physical_height'] = physical_height
+				t[row, 'screen_width'] = screen_width
+				t[row, 'screen_height'] = screen_height
+				t[row, 'device_pixel_ratio'] = device_pixel_ratio
+		
+		print(f'[WOB] Screen info updated: slot {slot} -> CSS: {css_width}x{css_height}, Physical: {physical_width}x{physical_height}, Screen: {screen_width}x{screen_height} (DPR: {device_pixel_ratio})')

@@ -19,6 +19,7 @@
   let audioAutoGain = false;
   let iceServersFromConfig = null;   // from wob_config ice_servers (JSON)
   let iceTransportPolicyFromConfig = null;  // 'relay' | 'all' | null
+  let showTouchPoints = true; // 터치 포인트 표시 여부 (터치패드 모드)
 
   function _isTunnelConnection() {
     const addr = (els.tdAddress && els.tdAddress.value || '').toLowerCase();
@@ -40,6 +41,7 @@
     els.modal = $('connection-modal');
     els.mainUI = $('main-ui');
     els.tdAddress = $('td-address');
+    els.clientName = $('client-name');
     els.btnConnect = $('btn-connect');
     els.connectionStatus = $('connection-status');
     els.connectionLabel = $('connection-label');
@@ -52,11 +54,13 @@
     els.vizContainer = $('viz-container');
     els.vizCanvas = $('viz-canvas');
     els.broadcastStatus = $('broadcast-status');
+    els.dataAckIndicator = $('data-ack-indicator');
     els.btnBroadcast = $('btn-broadcast');
     els.btnTrigger = $('btn-trigger');
     els.touchPad = $('touch-pad');
     els.touchCanvas = $('touch-canvas');
     els.btnExitTouch = $('btn-exit-touch');
+    els.btnToggleTouchPoints = $('btn-toggle-touch-points');
     els.debugInfo = $('debug-info');
     els.userStartOverlay = $('user-start-overlay');
     els.btnUserStart = $('btn-user-start');
@@ -71,10 +75,14 @@
       try {
         const s = JSON.parse(saved);
         if (s.tdAddress) els.tdAddress.value = s.tdAddress;
+        if (s.clientName && els.clientName) els.clientName.value = s.clientName;
         if (s.sensorSelection) {
           for (const [key, val] of Object.entries(s.sensorSelection)) {
             SensorModule.setSensorSelected(key, val);
           }
+        }
+        if (s.showTouchPoints !== undefined) {
+          showTouchPoints = s.showTouchPoints;
         }
       } catch (e) { /* ignore */ }
     }
@@ -83,7 +91,9 @@
   function saveSettings() {
     localStorage.setItem('wob-settings', JSON.stringify({
       tdAddress: els.tdAddress.value,
+      clientName: els.clientName ? els.clientName.value : '',
       sensorSelection: SensorModule.getSelected(),
+      showTouchPoints: showTouchPoints,
     }));
   }
 
@@ -119,6 +129,7 @@
     }
     if (cfg.sensor_camera != null) {
       cameraEnabled = !!parseInt(cfg.sensor_camera);
+      renderSensorList();
     }
     if (cfg.sensor_microphone != null) {
       micEnabled = !!parseInt(cfg.sensor_microphone);
@@ -178,6 +189,9 @@
         touchPadActive = false;
         els.touchPad.classList.add('hidden');
         els.btnExitTouch.classList.remove('hidden');
+        if (els.btnToggleTouchPoints) {
+          els.btnToggleTouchPoints.classList.add('hidden');
+        }
         TouchModule.destroy();
       }
       els.mainUI.classList.remove('hidden');
@@ -210,6 +224,9 @@
     touchPadActive = true;
     els.touchPad.classList.remove('hidden');
     els.btnExitTouch.classList.add('hidden'); // no exit in minimal mode
+    if (els.btnToggleTouchPoints) {
+      els.btnToggleTouchPoints.classList.remove('hidden'); // show toggle button
+    }
     resizeTouchCanvas();
 
     const startSensorsAndBroadcast = () => {
@@ -222,17 +239,28 @@
       els.userStartOverlay.classList.remove('hidden');
       els.btnUserStart.addEventListener('click', async function() {
         els.userStartOverlay.classList.add('hidden');
-        await SensorModule.requestPermissions();
+        // Integrated permission request: sensors + mic + wakeLock
+        await requestAllPermissions();
         startSensorsAndBroadcast();
       }, { once: true });
     } else {
-      startSensorsAndBroadcast();
+      // Non-iOS: request permissions sequentially
+      requestAllPermissions().then(() => {
+        startSensorsAndBroadcast();
+      });
     }
 
     TouchModule.init(els.touchCanvas, (snapshot) => {
-      Visualization.drawTouches(els.touchCanvas, snapshot.touches, false);
+      if (showTouchPoints) {
+        Visualization.drawTouches(els.touchCanvas, snapshot.touches, false);
+      } else {
+        // Clear canvas if touch points are hidden
+        const ctx = els.touchCanvas.getContext('2d');
+        ctx.clearRect(0, 0, els.touchCanvas.width, els.touchCanvas.height);
+      }
       handleTouchData(snapshot);
     });
+    updateTouchPointsToggleUI();
   }
 
   function init() {
@@ -290,14 +318,22 @@
     els.btnEnableSensors.addEventListener('click', handleEnableSensors);
     els.btnFullscreenTouch.addEventListener('click', enterTouchPad);
     els.btnExitTouch.addEventListener('click', exitTouchPad);
+    if (els.btnToggleTouchPoints) {
+      els.btnToggleTouchPoints.addEventListener('click', toggleTouchPoints);
+    }
     els.btnBroadcast.addEventListener('click', toggleBroadcast);
     els.btnTrigger.addEventListener('pointerdown', () => els.btnTrigger.classList.add('triggered'));
     els.btnTrigger.addEventListener('pointerup', sendTrigger);
     els.btnTrigger.addEventListener('pointercancel', () => els.btnTrigger.classList.remove('triggered'));
-    // WebRTC state changes → re-render sensor list to reflect mic state
+    // Mic state changes → re-render sensor list
     WebRTCModule.onStateChange((state) => {
       renderSensorList();
-      addLog('WebRTC: ' + state, state === 'connected' ? 'info' : state === 'failed' ? 'error' : 'warn');
+      addLog('WebRTC mic: ' + state, state === 'connected' ? 'info' : state === 'failed' ? 'error' : 'warn');
+    });
+    // Camera state changes → re-render sensor list
+    WebRTCModule.onCamStateChange((state) => {
+      renderSensorList();
+      addLog('WebRTC cam: ' + state, state === 'connected' ? 'info' : state === 'failed' ? 'error' : 'warn');
     });
 
     setInterval(updatePacketRate, 1000);
@@ -335,11 +371,23 @@
       els.sensorList.appendChild(li);
     });
 
-    // Camera item — Pro license required, always shown as unavailable
+    // Camera item — toggleable via WebRTC (cam_receiver.html in Web Render TOP)
     {
       const li = document.createElement('li');
-      li.className = 'unavailable';
-      li.innerHTML = `<span class="sensor-icon">&#x1F4F7;</span> Camera <small>(Pro)</small>`;
+      const camAvail = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+      if (!camAvail) {
+        li.className = 'unavailable';
+      } else if (cameraEnabled) {
+        li.className = 'available selected' + (WebRTCModule.isCameraActive() ? ' rtc-connected' : '');
+      } else {
+        li.className = 'available deselected';
+      }
+      li.innerHTML = `<span class="sensor-icon">&#x1F4F7;</span> Camera`;
+      if (camAvail) {
+        li.addEventListener('click', async () => {
+          await handleCameraToggle();
+        });
+      }
       els.sensorList.appendChild(li);
     }
 
@@ -384,6 +432,44 @@
         if (status === 'connected') {
           WSClient.send({ type: 'hello' });
           addLog('Hello sent to TD', 'info');
+          
+          // Send client name if provided
+          const clientName = els.clientName ? els.clientName.value.trim() : '';
+          if (clientName) {
+            WSClient.send({ type: 'client_name', name: clientName });
+            addLog(`Client name sent: ${clientName}`, 'info');
+          }
+          
+          // Send screen resolution info
+          // CSS pixel dimensions (viewport size)
+          const cssWidth = window.innerWidth;
+          const cssHeight = window.innerHeight;
+          const devicePixelRatio = window.devicePixelRatio || 1.0;
+          
+          // Physical pixel dimensions (actual screen resolution)
+          const physicalWidth = Math.round(cssWidth * devicePixelRatio);
+          const physicalHeight = Math.round(cssHeight * devicePixelRatio);
+          
+          // Screen dimensions (device screen size)
+          const screenWidth = window.screen.width;
+          const screenHeight = window.screen.height;
+          
+          const screenInfo = {
+            type: 'screen_info',
+            // CSS viewport size (web-optimized resolution)
+            width: cssWidth,
+            height: cssHeight,
+            // Physical pixel resolution
+            physicalWidth: physicalWidth,
+            physicalHeight: physicalHeight,
+            // Device screen size
+            screenWidth: screenWidth,
+            screenHeight: screenHeight,
+            devicePixelRatio: devicePixelRatio
+          };
+          WSClient.send(screenInfo);
+          addLog(`Screen info sent: ${cssWidth}x${cssHeight} CSS (${physicalWidth}x${physicalHeight} physical, DPR: ${devicePixelRatio})`, 'info');
+          
           if (!SensorModule.isEnabled() && devMode) {
             addLog('Enable Sensors 후 Start Broadcast를 눌러 전송 시작', 'warn');
           }
@@ -401,8 +487,16 @@
       },
       onConfig: (cfg) => applyConfig(cfg),
       onWebRTCSignal: (msg) => {
-        if (msg.type === 'webrtc_answer') WebRTCModule.handleAnswer(msg.sdp);
-        else if (msg.type === 'webrtc_ice') WebRTCModule.handleIce(msg);
+        if (msg.type === 'webrtc_answer')         WebRTCModule.handleAnswer(msg.sdp);
+        else if (msg.type === 'webrtc_ice')        WebRTCModule.handleIce(msg);
+        else if (msg.type === 'webrtc_answer_cam') WebRTCModule.handleCameraAnswer(msg.sdp);
+        else if (msg.type === 'webrtc_ice_cam')    WebRTCModule.handleCameraIce(msg);
+      },
+        onHaptic: (data) => {
+          handleHapticFeedback(data);
+        },
+      onDataAck: () => {
+        updateDataAckIndicator();
       },
     });
 
@@ -440,6 +534,16 @@
     els.userStartOverlay.classList.add('hidden');
     els.wobLoading.classList.add('hidden');
     els.mainUI.classList.add('hidden');
+    
+    // Stop haptic vibration on disconnect
+    if (hapticInterval !== null) {
+      clearInterval(hapticInterval);
+      hapticInterval = null;
+      hapticState = 0;
+      if (navigator.vibrate) {
+        navigator.vibrate(0);
+      }
+    }
     els.modal.classList.add('active');
   }
 
@@ -450,7 +554,7 @@
       showToast('Warning: Mic over tunnel may fail. Cross-network requires a TURN server.', 4500);
     }
     const ok = await WebRTCModule.start(_webrtcStartOpts({
-      camera: cameraEnabled, mic: micEnabled,
+      mic: micEnabled,
       echoCancellation: audioEchoCancellation,
       noiseSuppression: audioNoiseSuppression,
       autoGainControl: audioAutoGain,
@@ -624,18 +728,31 @@
     stopVizTouch();
     els.touchPad.classList.remove('hidden');
     els.btnExitTouch.classList.remove('hidden'); // always visible in dev_mode=1
+    if (els.btnToggleTouchPoints) {
+      els.btnToggleTouchPoints.classList.remove('hidden'); // show toggle button
+    }
     resizeTouchCanvas();
 
     TouchModule.init(els.touchCanvas, (snapshot) => {
-      Visualization.drawTouches(els.touchCanvas, snapshot.touches, devMode);
+      if (showTouchPoints) {
+        Visualization.drawTouches(els.touchCanvas, snapshot.touches, devMode);
+      } else {
+        // Clear canvas if touch points are hidden
+        const ctx = els.touchCanvas.getContext('2d');
+        ctx.clearRect(0, 0, els.touchCanvas.width, els.touchCanvas.height);
+      }
       handleTouchData(snapshot);
     });
+    updateTouchPointsToggleUI();
     haptic();
   }
 
   function exitTouchPad() {
     touchPadActive = false;
     els.touchPad.classList.add('hidden');
+    if (els.btnToggleTouchPoints) {
+      els.btnToggleTouchPoints.classList.add('hidden'); // hide toggle button
+    }
     TouchModule.destroy();
     startVizTouch();
     haptic();
@@ -774,6 +891,96 @@
     }
   });
 
+  // Haptic state management (for CHOP-based continuous vibration)
+  let hapticState = 0;  // 0 = stop, 1 = vibrate
+  let hapticInterval = null;
+  const HAPTIC_INTERVAL_MS = 100;  // Vibrate every 100ms when state=1
+
+  /**
+   * Handle haptic feedback from TD.
+   * Supports two modes:
+   * 1. Pattern mode: {"type": "haptic", "pattern": [200, 100, 200]}
+   * 2. State mode: {"type": "haptic", "state": 0 or 1} (CHOP-based)
+   */
+  function handleHapticFeedback(data) {
+    // Check Vibration API support
+    if (!navigator.vibrate) {
+      console.log('[WOB] Vibration API not supported');
+      return;
+    }
+
+    // State-based mode (CHOP): state = 0 (stop) or 1 (vibrate continuously)
+    if (data.state !== undefined) {
+      const newState = data.state === 1 ? 1 : 0;
+      
+      if (newState !== hapticState) {
+        hapticState = newState;
+        
+        // Stop existing vibration interval
+        if (hapticInterval !== null) {
+          clearInterval(hapticInterval);
+          hapticInterval = null;
+          navigator.vibrate(0);  // Stop vibration
+        }
+        
+        // Start continuous vibration if state = 1
+        if (hapticState === 1) {
+          // Vibrate immediately
+          navigator.vibrate(HAPTIC_INTERVAL_MS);
+          
+          // Continue vibrating at intervals
+          hapticInterval = setInterval(() => {
+            if (hapticState === 1) {
+              navigator.vibrate(HAPTIC_INTERVAL_MS);
+            } else {
+              clearInterval(hapticInterval);
+              hapticInterval = null;
+            }
+          }, HAPTIC_INTERVAL_MS);
+          
+          addLog('Haptic: ON (continuous)', 'info');
+        } else {
+          addLog('Haptic: OFF', 'info');
+        }
+      }
+      return;
+    }
+
+    // Pattern-based mode (legacy): pattern = [200, 100, 200]
+    const pattern = data.pattern;
+    if (!pattern || !Array.isArray(pattern) || pattern.length === 0) {
+      console.warn('[WOB] Invalid haptic pattern:', pattern);
+      return;
+    }
+
+    // Stop any continuous vibration before playing pattern
+    if (hapticInterval !== null) {
+      clearInterval(hapticInterval);
+      hapticInterval = null;
+      hapticState = 0;
+    }
+
+    try {
+      // Convert pattern to integers (safety check)
+      const intPattern = pattern.map(v => Math.max(0, Math.min(Number(v) || 0, 10000)));
+      
+      // iOS Safari may not support pattern arrays, fallback to single value
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+      if (isIOS && intPattern.length > 1) {
+        // iOS: use first value only
+        navigator.vibrate(intPattern[0]);
+        addLog(`Haptic (iOS): ${intPattern[0]}ms`, 'info');
+      } else {
+        // Android/Desktop: full pattern support
+        navigator.vibrate(intPattern);
+        addLog(`Haptic pattern: ${intPattern.join(', ')}ms`, 'info');
+      }
+    } catch (e) {
+      console.error('[WOB] Haptic error:', e);
+      addLog('Haptic failed: ' + e.message, 'error');
+    }
+  }
+
   function haptic(duration = 30) {
     if (hapticEnabled && navigator.vibrate) {
       navigator.vibrate(duration);
@@ -784,7 +991,7 @@
 
   async function _startWebRTC() {
     if (!WSClient.isConnected()) return;
-    const ok = await WebRTCModule.start(_webrtcStartOpts({ camera: cameraEnabled, mic: micEnabled }));
+    const ok = await WebRTCModule.start(_webrtcStartOpts({ mic: micEnabled }));
     if (ok === false && micEnabled) {
       const err = WebRTCModule.getLastError();
       let msg = '마이크 활성화 실패';
@@ -796,19 +1003,35 @@
 
   async function handleCameraToggle() {
     haptic();
-    if (WebRTCModule.isCameraActive()) {
-      await WebRTCModule.stop();
+    if (cameraEnabled) {
       cameraEnabled = false;
-    } else {
-      cameraEnabled = true;
-      await WebRTCModule.start(_webrtcStartOpts({
-        camera: true, mic: micEnabled,
-        echoCancellation: audioEchoCancellation,
-        noiseSuppression: audioNoiseSuppression,
-        autoGainControl: audioAutoGain,
-      }));
+      if (WebRTCModule.isCamPCActive()) WebRTCModule.stopCamera();
+      renderSensorList();
+      return;
     }
+    cameraEnabled = true;
     renderSensorList();
+
+    if (!WSClient.isConnected()) {
+      showToast('Connect to TouchDesigner first');
+      cameraEnabled = false;
+      renderSensorList();
+      return;
+    }
+
+    const ok = await WebRTCModule.startCamera(_webrtcStartOpts({}));
+    if (ok === false) {
+      cameraEnabled = false;
+      const err = WebRTCModule.getLastError();
+      if (err === 'NotAllowedError' || err === 'PermissionDeniedError') {
+        showToast('Camera permission denied — allow camera in browser settings');
+      } else if (err === 'NotFoundError') {
+        showToast('Camera not found');
+      } else {
+        showToast('Camera activation failed');
+      }
+      renderSensorList();
+    }
   }
 
   async function handleMicToggle() {
@@ -847,6 +1070,132 @@
     }
     // If already broadcasting, connect immediately
     await _maybeStartWebRTC();
+  }
+
+  /**
+   * Request all permissions in one sequence (for dev_mode=0 integrated start)
+   * Requests: sensors, microphone, wakeLock
+   */
+  async function requestAllPermissions() {
+    const results = {
+      sensors: false,
+      microphone: false,
+      wakeLock: false,
+    };
+
+    try {
+      // 1. Sensor permissions (DeviceMotion, DeviceOrientation)
+      if (SensorModule.needsPermissionRequest()) {
+        await SensorModule.requestPermissions();
+        results.sensors = true;
+        addLog('Sensor permissions granted', 'info');
+      } else {
+        // Non-iOS: sensors work without explicit permission
+        results.sensors = true;
+      }
+
+      // 2. Microphone permission (getUserMedia)
+      // Note: On iOS, getUserMedia can be called in async chain after user gesture (iOS 15+)
+      try {
+        const micOk = await WebRTCModule.acquireMic({
+          echoCancellation: audioEchoCancellation,
+          noiseSuppression: audioNoiseSuppression,
+          autoGainControl: audioAutoGain,
+        });
+        if (micOk) {
+          results.microphone = true;
+          addLog('Microphone permission granted', 'info');
+          // Release immediately - will be reacquired when needed
+          await WebRTCModule.stop();
+        } else {
+          addLog('Microphone permission denied', 'warn');
+        }
+      } catch (e) {
+        addLog('Microphone permission error: ' + (e.message || e.name), 'warn');
+      }
+
+      // 3. WakeLock permission (Screen Wake Lock API)
+      // Note: WakeLock doesn't require explicit permission, but needs user gesture
+      try {
+        if ('wakeLock' in navigator) {
+          const lock = await navigator.wakeLock.request('screen');
+          results.wakeLock = true;
+          addLog('WakeLock activated', 'info');
+          // Release immediately - will be requested again when broadcasting
+          lock.release();
+        } else {
+          addLog('WakeLock not supported', 'info');
+        }
+      } catch (e) {
+        addLog('WakeLock error: ' + (e.message || e.name), 'warn');
+      }
+
+      // Summary
+      const granted = Object.values(results).filter(v => v).length;
+      const total = Object.keys(results).length;
+      addLog(`Permissions: ${granted}/${total} granted`, granted === total ? 'info' : 'warn');
+
+    } catch (e) {
+      addLog('Permission request error: ' + e.message, 'error');
+    }
+
+    return results;
+  }
+
+  /**
+   * Update data acknowledgment indicator (green pulse when TD receives data)
+   */
+  function updateDataAckIndicator() {
+    if (!els.dataAckIndicator) return;
+    
+    // Show indicator
+    els.dataAckIndicator.classList.remove('hidden', 'warning', 'error');
+    els.dataAckIndicator.classList.add('active');
+    
+    // Hide after animation (500ms)
+    setTimeout(() => {
+      if (els.dataAckIndicator) {
+        els.dataAckIndicator.classList.remove('active');
+      }
+    }, 500);
+  }
+
+  /**
+   * Toggle touch points visibility in touchpad mode
+   */
+  function toggleTouchPoints() {
+    showTouchPoints = !showTouchPoints;
+    saveSettings();
+    updateTouchPointsToggleUI();
+    haptic();
+    
+    // If touchpad is active, clear or redraw immediately
+    if (touchPadActive) {
+      const snapshot = TouchModule.getSnapshot();
+      if (snapshot) {
+        if (showTouchPoints) {
+          Visualization.drawTouches(els.touchCanvas, snapshot.touches, devMode);
+        } else {
+          const ctx = els.touchCanvas.getContext('2d');
+          ctx.clearRect(0, 0, els.touchCanvas.width, els.touchCanvas.height);
+        }
+      }
+    }
+  }
+
+  /**
+   * Update touch points toggle button UI state
+   */
+  function updateTouchPointsToggleUI() {
+    if (!els.btnToggleTouchPoints) return;
+    
+    if (showTouchPoints) {
+      els.btnToggleTouchPoints.classList.add('active');
+      els.btnToggleTouchPoints.setAttribute('title', '터치 포인트 표시 끄기');
+    } else {
+      els.btnToggleTouchPoints.classList.remove('active');
+      els.btnToggleTouchPoints.setAttribute('title', '터치 포인트 표시 켜기');
+    }
   }
 
   document.addEventListener('DOMContentLoaded', init);
