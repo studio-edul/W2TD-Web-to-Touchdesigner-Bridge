@@ -211,19 +211,13 @@ const WebRTCModule = (() => {
       });
       if (isFront) camFrontStream = s; else camRearStream = s;
       _log('acquireCamera OK — ' + (isFront ? 'front' : 'rear'));
-      _updatePreview(_getActiveCameraStream());
+      _updatePreview();
       return true;
     } catch (e) {
       _lastError = e.name || 'unknown';
       console.error('[WOB WebRTC] acquireCamera failed:', e.name, e.message);
       return false;
     }
-  }
-
-  function _getActiveCameraStream() {
-    if (camRearStream && camRearStream.getVideoTracks().length > 0) return camRearStream;
-    if (camFrontStream && camFrontStream.getVideoTracks().length > 0) return camFrontStream;
-    return null;
   }
 
   /** Start camera stream (front or rear) and send offer to TD. */
@@ -255,7 +249,7 @@ const WebRTCModule = (() => {
         _setCamState('failed');
         return false;
       }
-      _updatePreview(_getActiveCameraStream());
+      _updatePreview();
     }
 
     const pc = new RTCPeerConnection(_buildRtcConfig(opts.iceServers, opts.iceTransportPolicy));
@@ -300,19 +294,19 @@ const WebRTCModule = (() => {
   function stopCameraFront() {
     if (camFrontStream) { camFrontStream.getTracks().forEach(t => t.stop()); camFrontStream = null; }
     if (camFrontPc) { camFrontPc.close(); camFrontPc = null; }
-    _updatePreview(_getActiveCameraStream());
+    _updatePreview();
   }
 
   function stopCameraRear() {
     if (camRearStream) { camRearStream.getTracks().forEach(t => t.stop()); camRearStream = null; }
     if (camRearPc) { camRearPc.close(); camRearPc = null; }
-    _updatePreview(_getActiveCameraStream());
+    _updatePreview();
   }
 
   function stopCamera() {
     stopCameraFront();
     stopCameraRear();
-    _updatePreview(null);
+    _updatePreview();
     _setCamState('closed');
   }
 
@@ -358,16 +352,22 @@ const WebRTCModule = (() => {
     } catch (e) { console.warn('[WOB WebRTC] Audio analyser setup failed:', e); }
   }
 
-  function _updatePreview(stream) {
-    const preview = document.getElementById('webrtc-preview');
-    if (!preview) return;
-    if (stream && stream.getVideoTracks().length > 0) {
-      preview.srcObject = stream;
-      preview.classList.remove('hidden');
-    } else {
-      preview.srcObject = null;
-      preview.classList.add('hidden');
+  function _updatePreview() {
+    const container = document.getElementById('webrtc-preview-container');
+    if (!container) return;
+    const rearVid  = document.getElementById('webrtc-preview-rear');
+    const frontVid = document.getElementById('webrtc-preview-front');
+    const hasRear  = !!(camRearStream  && camRearStream.getVideoTracks().length  > 0);
+    const hasFront = !!(camFrontStream && camFrontStream.getVideoTracks().length > 0);
+    if (rearVid) {
+      if (hasRear) { rearVid.srcObject = camRearStream;  rearVid.classList.remove('hidden'); }
+      else         { rearVid.srcObject = null;            rearVid.classList.add('hidden'); }
     }
+    if (frontVid) {
+      if (hasFront) { frontVid.srcObject = camFrontStream; frontVid.classList.remove('hidden'); }
+      else          { frontVid.srcObject = null;            frontVid.classList.add('hidden'); }
+    }
+    container.classList.toggle('hidden', !hasRear && !hasFront);
   }
 
   function getMicLevel() {

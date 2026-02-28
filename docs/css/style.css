@@ -687,17 +687,27 @@ input[type="checkbox"] {
 }
 
 /* Local camera preview — picture-in-picture */
-.webrtc-preview {
+.webrtc-preview-container {
   position: fixed;
   bottom: 80px;
   right: 12px;
-  width: 100px;
+  display: flex;
+  flex-direction: row;
   height: 75px;
-  object-fit: cover;
   border-radius: 8px;
   border: 2px solid var(--primary);
   z-index: 490;
+  overflow: hidden;
   background: #000;
+}
+.webrtc-preview-video {
+  width: 100px;
+  height: 75px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.webrtc-preview-video.hidden {
+  display: none;
 }
 
 /* ===== Scrollbar ===== */

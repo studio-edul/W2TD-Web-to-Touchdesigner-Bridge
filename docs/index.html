@@ -107,7 +107,11 @@
   <div id="wob-loading" class="hidden"></div>
 
   <!-- Local camera preview (picture-in-picture, hidden when camera inactive) -->
-  <video id="webrtc-preview" class="webrtc-preview hidden" autoplay muted playsinline></video>
+  <!-- Both rear and front shown side-by-side when both active: rear left, front right -->
+  <div id="webrtc-preview-container" class="webrtc-preview-container hidden">
+    <video id="webrtc-preview-rear"  class="webrtc-preview-video hidden" autoplay muted playsinline></video>
+    <video id="webrtc-preview-front" class="webrtc-preview-video hidden" autoplay muted playsinline></video>
+  </div>
 
   <!-- Log viewer overlay -->
   <div id="log-viewer-overlay" class="log-viewer-overlay hidden">
