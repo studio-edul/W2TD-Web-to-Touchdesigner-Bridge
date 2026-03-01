@@ -39,6 +39,15 @@ const WebRTCModule = (() => {
     console.log('[WOB WebRTC]', msg);
   }
 
+  function _logCamResolution(stream, label) {
+    const track = stream && stream.getVideoTracks()[0];
+    if (!track) return;
+    const s = track.getSettings();
+    const w = s.width || track.getCapabilities?.()?.width?.max || '?';
+    const h = s.height || track.getCapabilities?.()?.height?.max || '?';
+    _log(`[Mobile send] ${label}: ${w}x${h}`);
+  }
+
   function _buildRtcConfig(iceServers, iceTransportPolicy) {
     const ice = Array.isArray(iceServers) && iceServers.length ? iceServers : DEFAULT_ICE_SERVERS;
     const cfg = { iceServers: ice };
@@ -214,6 +223,7 @@ const WebRTCModule = (() => {
         audio: false,
       });
       if (isFront) camFrontStream = s; else camRearStream = s;
+      _logCamResolution(s, isFront ? 'front' : 'rear');
       _log('acquireCamera OK — ' + (isFront ? 'front' : 'rear'));
       _updatePreview();
       return true;
@@ -246,12 +256,13 @@ const WebRTCModule = (() => {
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: facingMode },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
+            width: { ideal: 3840 },
+            height: { ideal: 2160 },
           },
           audio: false,
         });
         if (isFront) camFrontStream = stream; else camRearStream = stream;
+        _logCamResolution(stream, camType);
       } catch (e) {
         _lastError = e.name || 'unknown';
         _setCamState('failed');
