@@ -189,17 +189,7 @@ def _handle_cam_receiver_msg(webServerDAT, addr, msg):
 		w = msg.get('width')
 		h = msg.get('height')
 		if w is not None and h is not None and w > 0 and h > 0:
-			try:
-				wr = op('web_render_top')
-				if wr is not None:
-					wr.par.outputresolution = 'custom'
-					wr.par.resolutionw = int(w)
-					wr.par.resolutionh = int(h)
-					if hasattr(wr, 'cook'):
-						wr.cook(force=True)
-					print(f'[WOB Cam] web_render_top resolution set to {int(w)}x{int(h)} (video resolution)')
-			except Exception as e:
-				print(f'[WOB Cam] Failed to set web_render_top resolution: {e}')
+			print(f'[WOB Cam] Received video resolution: {int(w)}x{int(h)} (set web_render_top Resolution manually if needed)')
 
 # ──────────────────────────────────────────────────────────────────────────────
 

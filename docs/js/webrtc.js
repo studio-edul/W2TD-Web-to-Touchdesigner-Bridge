@@ -5,6 +5,10 @@
  * Signaling for both uses the existing WebSocket (TD Web Server DAT).
  */
 const WebRTCModule = (() => {
+  // ── Camera resolution preset (change to '4k' for 3840x2160) ─────────────────
+  const CAM_RESOLUTION = { width: 1920, height: 1080, maxBitrate: 4000000 };
+  // const CAM_RESOLUTION = { width: 3840, height: 2160, maxBitrate: 8000000 }; // 4K
+
   const DEFAULT_ICE_SERVERS = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
@@ -217,8 +221,8 @@ const WebRTCModule = (() => {
       const s = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: facingMode },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
+          width: { ideal: CAM_RESOLUTION.width },
+          height: { ideal: CAM_RESOLUTION.height },
         },
         audio: false,
       });
@@ -256,8 +260,8 @@ const WebRTCModule = (() => {
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: facingMode },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
+            width: { ideal: CAM_RESOLUTION.width },
+            height: { ideal: CAM_RESOLUTION.height },
           },
           audio: false,
         });
@@ -318,10 +322,10 @@ const WebRTCModule = (() => {
       const params = sender.getParameters();
       params.encodings = params.encodings || [{}];
       params.encodings[0].scaleResolutionDownBy = 1;
-      params.encodings[0].maxBitrate = 4000000;
+      params.encodings[0].maxBitrate = CAM_RESOLUTION.maxBitrate;
       params.degradationPreference = 'maintain-resolution';
       await sender.setParameters(params);
-      _log('Cam sender: FHD 1080p, scaleResolutionDownBy=1, maxBitrate=4Mbps');
+      _log(`Cam sender: ${CAM_RESOLUTION.width}x${CAM_RESOLUTION.height}, maxBitrate=${CAM_RESOLUTION.maxBitrate / 1e6}Mbps`);
     } catch (e) {
       console.warn('[WOB WebRTC] setParameters failed:', e.message);
     }
