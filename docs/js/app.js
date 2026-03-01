@@ -829,7 +829,7 @@
 
   function enterCameraMonitor() {
     if (!WebRTCModule.isCameraActive()) {
-      showToast('카메라를 먼저 활성화하세요 (Rear 또는 Front)');
+      showToast('Enable camera first (Rear or Front)');
       haptic();
       return;
     }
