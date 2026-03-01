@@ -322,6 +322,13 @@ const WebRTCModule = (() => {
     _updatePreview();
   }
 
+  /** Close camera WebRTC connections only — keep streams for reconnect on next Start Broadcast. */
+  function disconnectCamera() {
+    if (camFrontPc) { camFrontPc.close(); camFrontPc = null; }
+    if (camRearPc) { camRearPc.close(); camRearPc = null; }
+    _setCamState('closed');
+  }
+
   function stopCamera() {
     stopCameraFront();
     stopCameraRear();
@@ -407,7 +414,7 @@ const WebRTCModule = (() => {
     isMicActive:  () => micActive,
     isPCActive:   () => micPc !== null,
     // Camera
-    acquireCamera, startCamera, stopCamera,
+    acquireCamera, startCamera, stopCamera, disconnectCamera,
     stopCameraFront, stopCameraRear,
     handleCameraAnswer, handleCameraIce,
     onCamStateChange,

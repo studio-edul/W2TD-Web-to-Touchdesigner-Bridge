@@ -668,9 +668,7 @@
 
     if (cameraRearEnabled && !WebRTCModule.isCameraRearActive()) {
       const ok = await WebRTCModule.acquireCamera('environment');
-      if (ok) {
-        await WebRTCModule.startCamera('environment', _webrtcStartOpts({}));
-      } else {
+      if (!ok) {
         cameraRearEnabled = false;
         const err = WebRTCModule.getLastError();
         if (err === 'NotAllowedError' || err === 'PermissionDeniedError') showToast('Camera permission denied');
@@ -680,9 +678,7 @@
     }
     if (cameraFrontEnabled && !WebRTCModule.isCameraFrontActive()) {
       const ok = await WebRTCModule.acquireCamera('user');
-      if (ok) {
-        await WebRTCModule.startCamera('user', _webrtcStartOpts({}));
-      } else {
+      if (!ok) {
         cameraFrontEnabled = false;
         const err = WebRTCModule.getLastError();
         if (err === 'NotAllowedError' || err === 'PermissionDeniedError') showToast('Camera permission denied');
@@ -699,6 +695,25 @@
     els.btnEnableSensors.classList.add('btn-active');
 
     startVizLoop();
+    renderSensorList();
+  }
+
+  async function _maybeStartCamera() {
+    if (!WSClient.isConnected() || !broadcasting) return;
+    if (cameraRearEnabled) {
+      const ok = await WebRTCModule.startCamera('environment', _webrtcStartOpts({}));
+      if (ok === false) {
+        const err = WebRTCModule.getLastError();
+        if (err) addLog('Cam rear start failed: ' + err, 'warn');
+      }
+    }
+    if (cameraFrontEnabled) {
+      const ok = await WebRTCModule.startCamera('user', _webrtcStartOpts({}));
+      if (ok === false) {
+        const err = WebRTCModule.getLastError();
+        if (err) addLog('Cam front start failed: ' + err, 'warn');
+      }
+    }
     renderSensorList();
   }
 
@@ -751,6 +766,7 @@
     }, interval);
 
     await _maybeStartWebRTC();
+    await _maybeStartCamera();
   }
 
   function stopBroadcast() {
@@ -760,6 +776,7 @@
       broadcastInterval = null;
     }
     WebRTCModule.disconnect();
+    WebRTCModule.disconnectCamera();
     els.btnBroadcast.textContent = 'Start Broadcast';
     els.btnBroadcast.classList.remove('broadcasting');
     if (els.packetRate) els.packetRate.classList.remove('broadcasting');
@@ -1107,7 +1124,7 @@
       renderSensorList();
       return;
     }
-    const ok = await WebRTCModule.startCamera('environment', _webrtcStartOpts({}));
+    const ok = await WebRTCModule.acquireCamera('environment');
     if (ok === false) {
       cameraRearEnabled = false;
       const err = WebRTCModule.getLastError();
@@ -1138,7 +1155,7 @@
       renderSensorList();
       return;
     }
-    const ok = await WebRTCModule.startCamera('user', _webrtcStartOpts({}));
+    const ok = await WebRTCModule.acquireCamera('user');
     if (ok === false) {
       cameraFrontEnabled = false;
       const err = WebRTCModule.getLastError();
