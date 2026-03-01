@@ -206,7 +206,11 @@ const WebRTCModule = (() => {
     if (isFront) camFrontStream = null; else camRearStream = null;
     try {
       const s = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: facingMode } },
+        video: {
+          facingMode: { ideal: facingMode },
+          width: { ideal: 3840 },
+          height: { ideal: 2160 },
+        },
         audio: false,
       });
       if (isFront) camFrontStream = s; else camRearStream = s;
@@ -240,7 +244,11 @@ const WebRTCModule = (() => {
       if (isFront) camFrontStream = null; else camRearStream = null;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: facingMode } },
+          video: {
+            facingMode: { ideal: facingMode },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
           audio: false,
         });
         if (isFront) camFrontStream = stream; else camRearStream = stream;
