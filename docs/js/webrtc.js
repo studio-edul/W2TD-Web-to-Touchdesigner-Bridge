@@ -221,8 +221,8 @@ const WebRTCModule = (() => {
       const s = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: facingMode },
-          width: { ideal: CAM_RESOLUTION.width },
-          height: { ideal: CAM_RESOLUTION.height },
+          width:  { ideal: CAM_RESOLUTION.width,  max: Math.max(CAM_RESOLUTION.width, CAM_RESOLUTION.height) },
+          height: { ideal: CAM_RESOLUTION.height, max: Math.max(CAM_RESOLUTION.width, CAM_RESOLUTION.height) },
         },
         audio: false,
       });
@@ -260,8 +260,8 @@ const WebRTCModule = (() => {
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: facingMode },
-            width: { ideal: CAM_RESOLUTION.width },
-            height: { ideal: CAM_RESOLUTION.height },
+            width:  { ideal: CAM_RESOLUTION.width,  max: Math.max(CAM_RESOLUTION.width, CAM_RESOLUTION.height) },
+            height: { ideal: CAM_RESOLUTION.height, max: Math.max(CAM_RESOLUTION.width, CAM_RESOLUTION.height) },
           },
           audio: false,
         });
@@ -321,11 +321,22 @@ const WebRTCModule = (() => {
     try {
       const params = sender.getParameters();
       params.encodings = params.encodings || [{}];
-      params.encodings[0].scaleResolutionDownBy = 1;
+      const track = sender.track;
+      const s = track && track.getSettings ? track.getSettings() : {};
+      const w = s.width || CAM_RESOLUTION.width;
+      const h = s.height || CAM_RESOLUTION.height;
+      const maxPx = Math.max(CAM_RESOLUTION.width, CAM_RESOLUTION.height);
+      const minPx = Math.min(CAM_RESOLUTION.width, CAM_RESOLUTION.height);
+      const scale = Math.max(
+        Math.ceil(Math.max(w, h) / maxPx),
+        Math.ceil(Math.min(w, h) / minPx),
+        1
+      );
+      params.encodings[0].scaleResolutionDownBy = scale;
       params.encodings[0].maxBitrate = CAM_RESOLUTION.maxBitrate;
       params.degradationPreference = 'maintain-resolution';
       await sender.setParameters(params);
-      _log(`Cam sender: ${CAM_RESOLUTION.width}x${CAM_RESOLUTION.height}, maxBitrate=${CAM_RESOLUTION.maxBitrate / 1e6}Mbps`);
+      _log(`Cam sender: ${w}x${h} → scale ${scale} → FHD, maxBitrate=${CAM_RESOLUTION.maxBitrate / 1e6}Mbps`);
     } catch (e) {
       console.warn('[WOB WebRTC] setParameters failed:', e.message);
     }
