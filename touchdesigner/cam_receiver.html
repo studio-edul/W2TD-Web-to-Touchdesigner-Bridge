@@ -43,7 +43,9 @@
   const viewportH = window.innerHeight;
   console.log('[CAM-RCV] Web Render TOP viewport:', viewportW, 'x', viewportH);
   const protocol = useTls ? 'wss' : 'ws';
-  const wsUrl = protocol + '://localhost:' + port;
+  // Use page's own hostname (local IP) so TLS cert matches; falls back to localhost
+  const wsHost = location.hostname || 'localhost';
+  const wsUrl = protocol + '://' + wsHost + ':' + port;
 
   const ICE_SERVERS = [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -110,8 +112,7 @@
 
     pc.ontrack = (e) => {
       if (e.streams && e.streams[0] && videoEl) {
-        videoEl.srcObject = e.streams[0];
-        videoEl.classList.remove('hidden');
+        // Attach metadata handler BEFORE setting srcObject to avoid missing the event
         videoEl.onloadedmetadata = () => {
           const vw = videoEl.videoWidth, vh = videoEl.videoHeight;
           console.log('[CAM-RCV] Received video:', vw, 'x', vh, '| viewport:', viewportW, 'x', viewportH);
@@ -124,6 +125,10 @@
             }
           }
         };
+        videoEl.srcObject = e.streams[0];
+        videoEl.classList.remove('hidden');
+        // Explicit play() — Web Render TOP Chromium may not honour autoplay attribute alone
+        videoEl.play().catch(err => console.warn('[CAM-RCV] play() failed:', err.message));
       }
     };
 

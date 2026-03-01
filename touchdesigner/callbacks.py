@@ -113,7 +113,13 @@ def _wt_remove_by_slot(slot):
 	t = _wt_table()
 	if t is None:
 		return
-	rows_to_del = [r for r in range(1, t.numRows) if int(t[r, 'slot']) == slot]
+	rows_to_del = []
+	for r in range(1, t.numRows):
+		try:
+			if int(t[r, 'slot']) == slot:
+				rows_to_del.append(r)
+		except (ValueError, TypeError):
+			pass
 	for r in reversed(rows_to_del):
 		t.deleteRow(r)
 
@@ -444,31 +450,33 @@ def broadcast_haptic_from_chop(webServerDAT, chop_name='wob_haptic'):
 	active_slots = _slots().values()
 	
 	# Try different channel naming conventions
+	# Note: chop.chans is a collection of Channel objects — use chop[name] to look up by name
 	for slot in active_slots:
 		state = 0
-		
+
 		# Try channel names: 'slot1', 'slot2', ...
-		channel_name = f'slot{slot}'
-		if channel_name in chop.chans:
-			try:
-				val = chop[channel_name][0]
-				state = 1 if val != 0 else 0
-			except Exception:
-				pass
+		try:
+			ch = chop[f'slot{slot}']
+			if ch is not None:
+				state = 1 if ch[0] != 0 else 0
+		except Exception:
+			pass
 
 		# Fallback: try 'ch1', 'ch2', ...
-		if state == 0 and f'ch{slot}' in chop.chans:
+		if state == 0:
 			try:
-				val = chop[f'ch{slot}'][0]
-				state = 1 if val != 0 else 0
+				ch = chop[f'ch{slot}']
+				if ch is not None:
+					state = 1 if ch[0] != 0 else 0
 			except Exception:
 				pass
 
 		# Fallback: try numeric channel names '1', '2', ...
-		if state == 0 and str(slot) in chop.chans:
+		if state == 0:
 			try:
-				val = chop[str(slot)][0]
-				state = 1 if val != 0 else 0
+				ch = chop[str(slot)]
+				if ch is not None:
+					state = 1 if ch[0] != 0 else 0
 			except Exception:
 				pass
 
