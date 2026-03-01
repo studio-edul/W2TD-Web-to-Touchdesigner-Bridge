@@ -115,6 +115,7 @@
         videoEl.onloadedmetadata = () => {
           const vw = videoEl.videoWidth, vh = videoEl.videoHeight;
           console.log('[CAM-RCV] Received video:', vw, 'x', vh, '| viewport:', viewportW, 'x', viewportH);
+          send({ type: 'cam_resolution', width: vw, height: vh });
           if (debugRes) {
             const dbg = document.getElementById('res-debug');
             if (dbg) {

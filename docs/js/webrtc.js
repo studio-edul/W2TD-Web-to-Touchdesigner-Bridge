@@ -301,12 +301,28 @@ const WebRTCModule = (() => {
     try {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
+      await _setCameraSenderParams(pc);
       const sent = WSClient.send({ type: 'webrtc_offer_cam', sdp: offer.sdp, camType });
       _log(sent ? 'Cam ' + camType + ' offer sent' : 'Cam offer FAILED');
       return sent ? true : false;
     } catch (e) {
       _setCamState('failed');
       return false;
+    }
+  }
+
+  async function _setCameraSenderParams(pc) {
+    const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+    if (!sender) return;
+    try {
+      const params = sender.getParameters();
+      params.encodings = params.encodings || [{}];
+      params.encodings[0].scaleResolutionDownBy = 1;
+      params.degradationPreference = 'maintain-resolution';
+      await sender.setParameters(params);
+      _log('Cam sender: scaleResolutionDownBy=1, maintain-resolution');
+    } catch (e) {
+      console.warn('[WOB WebRTC] setParameters failed:', e.message);
     }
   }
 
