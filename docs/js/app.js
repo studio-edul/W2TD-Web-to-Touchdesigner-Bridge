@@ -55,7 +55,6 @@
     els.vizContainer = $('viz-container');
     els.vizCanvas = $('viz-canvas');
     els.broadcastStatus = $('broadcast-status');
-    els.btnBroadcast = $('btn-broadcast');
     els.btnTrigger = $('btn-trigger');
     els.touchPad = $('touch-pad');
     els.touchCanvas = $('touch-canvas');
@@ -125,7 +124,7 @@
       if (rate > 0 && rate !== sampleRate) {
         sampleRate = rate;
         addLog(`Config: sample_rate=${rate}Hz`, 'info');
-        if (broadcasting) { stopBroadcast(); startBroadcast(); }
+        if (broadcasting) { stopBroadcast(); _startDataBroadcast(); }
       }
     }
     if (cfg.wake_lock != null) {
@@ -362,7 +361,6 @@
     if (els.btnToggleTouchPoints) {
       els.btnToggleTouchPoints.addEventListener('click', toggleTouchPoints);
     }
-    els.btnBroadcast.addEventListener('click', toggleBroadcast);
     els.btnTrigger.addEventListener('pointerdown', () => els.btnTrigger.classList.add('triggered'));
     els.btnTrigger.addEventListener('pointerup', sendTrigger);
     els.btnTrigger.addEventListener('pointercancel', () => els.btnTrigger.classList.remove('triggered'));
@@ -475,7 +473,9 @@
         if (status === 'connected') {
           WSClient.send({ type: 'hello' });
           addLog('Hello sent to TD', 'info');
-          
+          if (SensorModule.isEnabled() && WSClient.isConnected()) {
+            _startDataBroadcast();
+          }
           // Send client name if provided
           const clientName = els.clientName ? els.clientName.value.trim() : '';
           if (clientName) {
@@ -514,7 +514,7 @@
           addLog(`Screen info sent: ${cssWidth}x${cssHeight} CSS (${physicalWidth}x${physicalHeight} physical, DPR: ${devicePixelRatio})`, 'info');
           
           if (!SensorModule.isEnabled() && devMode) {
-            addLog('Enable Sensors 후 Start Broadcast를 눌러 전송 시작', 'warn');
+            addLog('Enable Sensors를 누르면 전송 시작', 'warn');
           }
         }
         // If connection fails while loading screen is up, fall back to modal
@@ -623,6 +623,7 @@
     haptic();
 
     if (SensorModule.isEnabled()) {
+      stopBroadcast();
       SensorModule.stopListening();
       if (WebRTCModule.isMicActive()) await WebRTCModule.stop();
       if (WebRTCModule.isCamPCActive()) WebRTCModule.stopCamera();
@@ -696,6 +697,10 @@
 
     startVizLoop();
     renderSensorList();
+
+    if (WSClient.isConnected()) {
+      _startDataBroadcast();
+    }
   }
 
   async function _maybeStartCamera() {
@@ -729,34 +734,18 @@
     loop();
   }
 
-  function toggleBroadcast() {
-    if (broadcasting) stopBroadcast();
-    else startBroadcast();
-  }
-
   function showBroadcastStatus(msg, isError) {
     if (!els.broadcastStatus) return;
     els.broadcastStatus.textContent = msg;
     els.broadcastStatus.className = 'broadcast-status' + (isError ? ' error' : '');
   }
 
-  async function startBroadcast() {
-    if (!WSClient.isConnected()) {
-      const msg = '1. TouchDesigner에 연결하세요 (Connect to TD)';
-      showBroadcastStatus(msg, true);
-      return;
-    }
-    if (!SensorModule.isEnabled()) {
-      const msg = '2. 먼저 [Enable Sensors] 버튼을 눌러 센서를 활성화하세요';
-      showBroadcastStatus(msg, true);
-      return;
-    }
+  async function _startDataBroadcast() {
+    if (!WSClient.isConnected()) return;
+    if (!SensorModule.isEnabled()) return;
 
     showBroadcastStatus('', false);
-    haptic();
     broadcasting = true;
-    els.btnBroadcast.textContent = 'Stop Broadcast';
-    els.btnBroadcast.classList.add('broadcasting');
     if (els.packetRate) els.packetRate.classList.add('broadcasting');
     updateDebug('Broadcasting... ' + sampleRate + ' Hz');
 
@@ -777,8 +766,6 @@
     }
     WebRTCModule.disconnect();
     WebRTCModule.disconnectCamera();
-    els.btnBroadcast.textContent = 'Start Broadcast';
-    els.btnBroadcast.classList.remove('broadcasting');
     if (els.packetRate) els.packetRate.classList.remove('broadcasting');
     showBroadcastStatus('', false);
     updateDebug('Broadcast 중지됨');
