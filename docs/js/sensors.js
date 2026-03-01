@@ -300,10 +300,6 @@ const SensorModule = (() => {
     return Math.max(min, Math.min(max, val));
   }
 
-  function hasAnySelected() {
-    return selected.motion || selected.orientation || selected.geolocation || selected.touch;
-  }
-
   return {
     detect,
     needsPermissionRequest,
@@ -316,7 +312,6 @@ const SensorModule = (() => {
     getAllData,
     getAvailability: () => ({ ...availability }),
     getSelected: () => ({ ...selected }),
-    hasAnySelected,
     isEnabled: () => sensorsEnabled,
     isSimulating: () => simulationMode,
     setDebugCallback: (cb) => { onDebug = cb; },
