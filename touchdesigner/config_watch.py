@@ -11,6 +11,36 @@
 
 import json
 
+WOB_BASE = 'WOB'
+
+
+def _wob_base():
+	try:
+		p = parent(1)
+		if p:
+			return p
+	except NameError:
+		pass
+	for p in ('project1', 'project'):
+		w = op(f'{p}/{WOB_BASE}')
+		if w:
+			return w
+	root = op('/')
+	if root and root.children:
+		w = root.children[0].op(WOB_BASE)
+		if w:
+			return w
+	return op(WOB_BASE)
+
+
+def _op(path_suffix, fallback_name=None):
+	base = _wob_base()
+	if base:
+		o = base.op(path_suffix)
+		if o is not None:
+			return o
+	return op(fallback_name or path_suffix.split('/')[-1])
+
 # Debouncing: wait 300ms after last change before broadcasting
 _debounce_timer = None
 DEBOUNCE_DELAY = 0.3  # seconds
@@ -18,7 +48,7 @@ DEBOUNCE_DELAY = 0.3  # seconds
 
 def _read_config():
 	"""Read settings from wob_config Table DAT (key | value)."""
-	cfg = op('wob_config')
+	cfg = _op('wob_config')
 	if cfg is None:
 		return {}
 	out = {}
@@ -59,7 +89,7 @@ def _build_config_msg(cfg):
 
 def _do_broadcast():
 	"""Send config to all connected clients. Uses web operator methods only (no web.module)."""
-	web = op('web_server_dat')
+	web = _op('web_server_dat')
 	if web is None:
 		return
 	cfg = _read_config()
@@ -85,10 +115,11 @@ def _debounced_broadcast():
 		_debounce_timer = None
 
 	delay_frames = max(1, int(DEBOUNCE_DELAY * 60))
+	watch = _op('config_watch')
 	_debounce_timer = run(
 		"op('config_watch').module._do_broadcast()",
 		delayFrames=delay_frames,
-		fromOP=op('config_watch')
+		fromOP=watch or op('config_watch')
 	)
 
 

@@ -2,9 +2,39 @@ import json
 import os
 
 GITHUB_PAGES_URL = 'https://studio-edul.github.io/Web-Osc-Bridge/'
-# Default - overridden by config_table DAT at init_tables() time
 MAX_CLIENTS = 20
 
+WOB_BASE = 'WOB'
+WOB_AUDIO = f'{WOB_BASE}/webrtc_audio_container'
+
+
+def _wob_base():
+	"""Get WOB container: parent(1) when in Web Server DAT, or project/WOB."""
+	try:
+		p = parent(1)
+		if p:
+			return p
+	except NameError:
+		pass
+	for proj_name in ('project1', 'project'):
+		w = op(f'{proj_name}/{WOB_BASE}')
+		if w:
+			return w
+	root = op('/')
+	if root and root.children:
+		w = root.children[0].op(WOB_BASE)
+		if w:
+			return w
+	return op(WOB_BASE)
+
+
+def _op(path_suffix, fallback_name=None):
+	base = _wob_base()
+	if base:
+		o = base.op(path_suffix)
+		if o is not None:
+			return o
+	return op(fallback_name or path_suffix.split('/')[-1])
 
 SENSOR_COLS = [
 	'slot', 'connected', 'name',
@@ -62,6 +92,12 @@ def _find_row(t, slot):
 			pass
 	return None
 
+def _wt_table():
+	return _op('webrtc_audio_container/webrtc_table', 'webrtc_table')
+
+def _wt_dat():
+	return _op('webrtc_audio_container/webrtc_dat', 'webrtc_dat')
+
 def _wt_find_row(t, conn_id):
 	"""Find row in webrtc_table by conn_id."""
 	for r in range(1, t.numRows):
@@ -74,7 +110,7 @@ def _wt_find_row(t, conn_id):
 
 def _wt_remove_by_slot(slot):
 	"""Remove all webrtc_table rows for the given slot (e.g. before re-add on new offer)."""
-	t = op('webrtc_table')
+	t = _wt_table()
 	if t is None:
 		return
 	rows_to_del = [r for r in range(1, t.numRows) if int(t[r, 'slot']) == slot]
@@ -83,8 +119,9 @@ def _wt_remove_by_slot(slot):
 
 def _wt_add(slot, conn_id):
 	"""Add row to webrtc_table when a WebRTC offer arrives."""
-	t = op('webrtc_table')
+	t = _wt_table()
 	if t is None:
+		print('[WOB] webrtc_table not found - create under WOB/webrtc_audio_container')
 		return
 	_wt_remove_by_slot(slot)
 	name = _client_names().get(slot, f'Slot {slot}')
@@ -92,7 +129,7 @@ def _wt_add(slot, conn_id):
 
 def _wt_remove(conn_id):
 	"""Remove row from webrtc_table when connection closes."""
-	t = op('webrtc_table')
+	t = _wt_table()
 	if t is None:
 		return
 	row = _wt_find_row(t, conn_id)
@@ -101,7 +138,7 @@ def _wt_remove(conn_id):
 
 def _wt_update_name(slot, name):
 	"""Update name for all webrtc_table rows matching slot."""
-	t = op('webrtc_table')
+	t = _wt_table()
 	if t is None:
 		return
 	for r in range(1, t.numRows):
@@ -135,7 +172,7 @@ def _release_slot(addr, slot):
 		free.append(slot)
 		free.sort()
 	_save_free(free)
-	t = op('sensor_table')
+	t = _op('sensor_table')
 	if t is not None:
 		row = _find_row(t, slot)
 		if row is not None:
@@ -195,7 +232,7 @@ def _handle_cam_receiver_msg(webServerDAT, addr, msg):
 
 def _read_config():
 	"""Read settings from wob_config Table DAT (key | value)."""
-	cfg = op('wob_config')
+	cfg = _op('wob_config')
 	if cfg is None:
 		return {}
 	out = {}
@@ -223,7 +260,7 @@ def init_tables():
 	_save_free(list(range(1, MAX_CLIENTS + 1)))
 	_save_touch({})
 
-	t = op('sensor_table')
+	t = _op('sensor_table')
 	if t is not None:
 		t.clear()
 		t.appendRow(SENSOR_COLS)
@@ -231,7 +268,7 @@ def init_tables():
 	else:
 		print('[WOB] sensor_table DAT not found - create a Table DAT named "sensor_table"')
 
-	tt = op('touch_table')
+	tt = _op('touch_table')
 	if tt is not None:
 		tt.clear()
 		tt.appendRow(['slot', 'touch_id', 'x', 'y', 'state'])
@@ -239,7 +276,7 @@ def init_tables():
 	else:
 		print('[WOB] touch_table DAT not found - create a Table DAT named "touch_table"')
 
-	wt = op('webrtc_table')
+	wt = _wt_table()
 	if wt is not None:
 		wt.clear()
 		wt.appendRow(WEBRTC_COLS)
@@ -541,7 +578,6 @@ def onHTTPRequest(webServerDAT, request, response):
 def onWebSocketOpen(webServerDAT, client):
 	try:
 		# Store web server DAT path so webrtc_callbacks.py can find it
-		op('/').store('wob_webserver_op', webServerDAT.path)
 
 		addr = str(client)
 		free = _free()
@@ -560,7 +596,7 @@ def onWebSocketOpen(webServerDAT, client):
 		_save_slots(slots)
 		_save_free(free)
 
-		t = op('sensor_table')
+		t = _op('sensor_table')
 		if t is not None:
 			# Default name: Slot {slot}
 			default_name = f'Slot {slot}'
@@ -602,13 +638,13 @@ def onWebSocketClose(webServerDAT, client):
 	touch.pop(slot, None)
 	_save_touch(touch)
 
-	t = op('sensor_table')
+	t = _op('sensor_table')
 	if t is not None:
 		row = _find_row(t, slot)
 		if row is not None:
 			t.deleteRow(row)
 
-	tt = op('touch_table')
+	tt = _op('touch_table')
 	if tt is not None:
 		rows_to_delete = [
 			r for r in range(1, tt.numRows)
@@ -620,7 +656,7 @@ def onWebSocketClose(webServerDAT, client):
 	# Clean up WebRTC state for this slot
 	conn_id = op('/').fetch(f'wob_webrtc_slot_to_uuid_{slot}', None)
 	if conn_id:
-		wrtc = op('webrtc_dat')
+		wrtc = _wt_dat()
 		if wrtc is not None:
 			try:
 				wrtc.closeConnection(conn_id)
@@ -628,9 +664,10 @@ def onWebSocketClose(webServerDAT, client):
 				pass
 		op('/').store(f'wob_webrtc_addr_{conn_id}', None)
 		op('/').store(f'wob_webrtc_slot_to_uuid_{slot}', None)
-		_wt_remove(conn_id)
+	# slot 기준으로 webrtc_table 정리 (conn_id 없어도 동작)
+	_wt_remove_by_slot(slot)
 
-		print(f'[WOB] Disconnected -> slot {slot} | {addr} | {len(slots)}/{MAX_CLIENTS} active')
+	print(f'[WOB] Disconnected -> slot {slot} | {addr} | {len(slots)}/{MAX_CLIENTS} active')
 
 
 def onWebSocketReceiveText(webServerDAT, client, data):
@@ -656,7 +693,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 		slots[addr] = slot
 		_save_slots(slots)
 		_save_free(free)
-		t2 = op('sensor_table')
+		t2 = _op('sensor_table')
 		if t2 is not None and _find_row(t2, slot) is None:
 			# Get client name if exists
 			names = _client_names()
@@ -672,7 +709,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 	msg_type = msg.get('type')
 
 	if msg_type == 'sensor':
-		t = op('sensor_table')
+		t = _op('sensor_table')
 		if t is None:
 			return
 		row = _find_row(t, slot)
@@ -723,13 +760,13 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 		touch[slot] = count
 		_save_touch(touch)
 
-		t = op('sensor_table')
+		t = _op('sensor_table')
 		if t is not None:
 			row = _find_row(t, slot)
 			if row is not None:
 				t[row, 'touch_count'] = count
 
-		tt = op('touch_table')
+		tt = _op('touch_table')
 		if tt is not None:
 			rows_to_delete = [
 				r for r in range(1, tt.numRows)
@@ -763,9 +800,9 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 		sdp = msg.get('sdp')
 		if not sdp:
 			return
-		wrtc = op('webrtc_dat')
+		wrtc = _wt_dat()
 		if wrtc is None:
-			print('[WOB] webrtc_dat not found — create a WebRTC DAT named "webrtc_dat"')
+			print('[WOB] webrtc_dat not found - create WebRTC DAT under WOB/webrtc_audio_container')
 			return
 		old_conn = op('/').fetch(f'wob_webrtc_slot_to_uuid_{slot}', None)
 		if old_conn:
@@ -790,7 +827,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 		candidate = msg.get('candidate')
 		if not candidate:
 			return
-		wrtc = op('webrtc_dat')
+		wrtc = _wt_dat()
 		if wrtc is None:
 			return
 		conn_id = op('/').fetch(f'wob_webrtc_slot_to_uuid_{slot}', None)
@@ -864,7 +901,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 		_save_client_names(names)
 		
 		# Update sensor_table
-		t = op('sensor_table')
+		t = _op('sensor_table')
 		if t is not None:
 			row = _find_row(t, slot)
 			if row is not None:
@@ -896,7 +933,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 		op('/').store(f'wob_screen_{slot}', screen_info)
 		
 		# Update sensor_table
-		t = op('sensor_table')
+		t = _op('sensor_table')
 		if t is not None:
 			row = _find_row(t, slot)
 			if row is not None:

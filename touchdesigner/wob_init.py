@@ -4,6 +4,38 @@ import subprocess
 import sys
 import platform
 
+WOB_BASE = 'WOB'
+WOB_AUDIO = f'{WOB_BASE}/webrtc_audio_container'
+
+
+def _wob_base():
+	try:
+		p = parent(1)
+		if p:
+			return p
+	except NameError:
+		pass
+	for p in ('project1', 'project'):
+		w = op(f'{p}/{WOB_BASE}')
+		if w:
+			return w
+	root = op('/')
+	if root and root.children:
+		w = root.children[0].op(WOB_BASE)
+		if w:
+			return w
+	return op(WOB_BASE)
+
+
+def _op(path_suffix, fallback_name=None):
+	base = _wob_base()
+	if base:
+		o = base.op(path_suffix)
+		if o is not None:
+			return o
+	return op(fallback_name or path_suffix.split('/')[-1])
+
+
 def get_local_ip():
 	try:
 		s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -31,7 +63,7 @@ SENSOR_COLS = [
 MAX_CLIENTS = 20
 
 def _init_tables():
-	t = op('sensor_table')
+	t = _op('sensor_table')
 	if t is not None:
 		t.clear()
 		t.appendRow(SENSOR_COLS)
@@ -40,7 +72,7 @@ def _init_tables():
 	else:
 		print('[WOB] sensor_table DAT not found - create a Table DAT named "sensor_table"')
 
-	tt = op('touch_table')
+	tt = _op('touch_table')
 	if tt is not None:
 		tt.clear()
 		tt.appendRow(['slot', 'touch_id', 'x', 'y', 'state'])
@@ -48,7 +80,7 @@ def _init_tables():
 	else:
 		print('[WOB] touch_table DAT not found - create a Table DAT named "touch_table"')
 
-	wt = op('webrtc_table')
+	wt = _op('webrtc_audio_container/webrtc_table', 'webrtc_table')
 	if wt is not None:
 		wt.clear()
 		wt.appendRow(['slot', 'name', 'conn_id', 'state'])
@@ -58,7 +90,7 @@ def _init_tables():
 
 def _init_webrtc_ice():
 	"""Configure WebRTC DAT TURN servers for cross-network (tunnel/cloudflared)."""
-	w = op('webrtc_dat')
+	w = _op('webrtc_audio_container/webrtc_dat', 'webrtc_dat')
 	if w is None:
 		return
 
@@ -151,7 +183,7 @@ def onStart():
 
 def _read_config():
 	"""Read settings from wob_config Table DAT (key | value)."""
-	cfg = op('wob_config')
+	cfg = _op('wob_config')
 	if cfg is None:
 		return {}
 	out = {}
@@ -224,13 +256,14 @@ def generate():
 		url = f'https://{ip}:{port}'
 		print(f'[WOB] Local fallback URL (same network only): {ip}:{port}')
 
-	op('/').store('wob_url', url)  # Store URL internally for callbacks.py
+	op('/').store('wob_url', url)
 
-	# Build QR URL: point directly to GitHub Pages with ?td= parametereter
 	host = url.replace('https://', '').replace('http://', '').strip()
 	GITHUB_PAGES_URL = 'https://studio-edul.github.io/Web-Osc-Bridge/'
 	qr_url = GITHUB_PAGES_URL + '?td=' + host
-	op('wob_url_text').par.text = qr_url
+	u = _op('wob_url_text')
+	if u:
+		u.par.text = qr_url
 	print(f'[WOB] QR URL: {qr_url}')
 
 	# 3. Generate QR code
@@ -256,7 +289,7 @@ def generate():
 
 	# 5. Reload Movie File In TOP
 	try:
-		movie_top = op('qr_movie_top')
+		movie_top = _op('qr_movie_top')
 		if movie_top is None:
 			print('[WOB] qr_movie_top not found - check node name')
 			return
@@ -271,11 +304,10 @@ def generate():
 	# 6. Set Web Render TOP URL to cam_receiver (served locally via TD Web Server)
 	# Serving locally avoids GitHub Pages dependency and mixed-content WS/WSS issues.
 	try:
-		web_render = op('web_render_top')
+		web_render = _op('web_render_top')
 		if web_render is not None:
-			# Detect TLS (try all known parameter names across TD versions)
 			tls_on = False
-			web_srv = op('web_server_dat')
+			web_srv = _op('web_server_dat')
 			if web_srv is not None:
 				for _par in ('secure', 'tls', 'https', 'usessl'):
 					if bool(getattr(web_srv.par, _par, False)):

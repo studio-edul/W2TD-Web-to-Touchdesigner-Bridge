@@ -51,7 +51,6 @@
     els.sensorPanel = $('sensor-panel');
     els.btnFullscreenTouch = $('btn-fullscreen-touch');
     els.sensorList = $('sensor-list');
-    els.btnEnableSensors = $('btn-enable-sensors');
     els.vizContainer = $('viz-container');
     els.vizCanvas = $('viz-canvas');
     els.broadcastStatus = $('broadcast-status');
@@ -354,7 +353,6 @@
     if (els.btnShowLog = $('btn-show-log')) els.btnShowLog.addEventListener('click', showLogViewer);
     if (els.btnShowLogTop = $('btn-show-log-top')) els.btnShowLogTop.addEventListener('click', showLogViewer);
     if (els.btnCloseLog = $('btn-close-log')) els.btnCloseLog.addEventListener('click', hideLogViewer);
-    els.btnEnableSensors.addEventListener('click', handleEnableSensors);
     els.btnFullscreenTouch.addEventListener('click', enterTouchPad);
     els.btnExitTouch.addEventListener('click', exitTouchPad);
     if (els.btnCameraMonitor) els.btnCameraMonitor.addEventListener('click', enterCameraMonitor);
@@ -400,12 +398,7 @@
       li.innerHTML = `<span class="sensor-icon">${s.icon}</span> ${s.name}`;
 
       if (isAvailable) {
-        li.addEventListener('click', () => {
-          SensorModule.toggleSensor(s.key);
-          haptic(15);
-          renderSensorList();
-          saveSettings();
-        });
+        li.addEventListener('click', () => handleSensorToggle(s.key));
       }
 
       els.sensorList.appendChild(li);
@@ -513,8 +506,8 @@
           WSClient.send(screenInfo);
           addLog(`Screen info sent: ${cssWidth}x${cssHeight} CSS (${physicalWidth}x${physicalHeight} physical, DPR: ${devicePixelRatio})`, 'info');
           
-          if (!SensorModule.isEnabled() && devMode) {
-            addLog('Enable Sensors 후 Start Broadcast를 눌러 전송 시작', 'warn');
+          if (!SensorModule.hasAnySelected() && devMode) {
+            addLog('센서 선택 후 Start Broadcast를 눌러 전송 시작', 'warn');
           }
         }
         // If connection fails while loading screen is up, fall back to modal
@@ -619,83 +612,32 @@
     renderSensorList();
   }
 
-  async function handleEnableSensors() {
-    haptic();
+  async function handleSensorToggle(key) {
+    haptic(15);
+    SensorModule.toggleSensor(key);
+    const sel = SensorModule.getSelected();
+    const dataSensors = ['motion', 'orientation', 'geolocation'];
+    const anyDataOn = dataSensors.some(k => sel[k]);
 
-    if (SensorModule.isEnabled()) {
-      SensorModule.stopListening();
-      if (WebRTCModule.isMicActive()) await WebRTCModule.stop();
-      if (WebRTCModule.isCamPCActive()) WebRTCModule.stopCamera();
-      els.btnEnableSensors.textContent = 'Enable Sensors';
-      els.btnEnableSensors.classList.remove('btn-active');
-      updateDebug('Sensors deactivated');
-      renderSensorList();
-      return;
-    }
-
-    if (SensorModule.needsPermissionRequest()) {
-      if (!window.isSecureContext) {
-        updateDebug('iOS 센서 권한은 HTTPS 필요.');
-        return;
-      }
-      updateDebug('Requesting permissions...');
-      const perms = await SensorModule.requestPermissions();
-      updateDebug('Permissions: ' + JSON.stringify(perms));
-    } else {
-      updateDebug('No permission request needed (non-iOS)');
-    }
-
-    SensorModule.startListening();
-
-    if (micEnabled && !WebRTCModule.isMicActive()) {
-      const ok = await WebRTCModule.acquireMic({
-        echoCancellation: audioEchoCancellation,
-        noiseSuppression: audioNoiseSuppression,
-        autoGainControl: audioAutoGain,
-      });
-      if (ok === false) {
-        micEnabled = false;
-        const err = WebRTCModule.getLastError();
-        if (err === 'NotAllowedError' || err === 'PermissionDeniedError') {
-          showToast('Mic permission denied — allow microphone in browser settings');
-        } else if (err === 'NotFoundError') {
-          showToast('Microphone not found');
-        } else {
-          showToast('Mic activation failed');
+    if (anyDataOn && !SensorModule.isEnabled()) {
+      if (SensorModule.needsPermissionRequest()) {
+        if (!window.isSecureContext) {
+          updateDebug('iOS 센서 권한은 HTTPS 필요.');
+          renderSensorList();
+          saveSettings();
+          return;
         }
+        const perms = await SensorModule.requestPermissions();
+        updateDebug('Permissions: ' + JSON.stringify(perms));
       }
+      SensorModule.startListening();
+      startVizLoop();
+    } else if (!anyDataOn && SensorModule.isEnabled()) {
+      SensorModule.stopListening();
     }
 
-    if (cameraRearEnabled && !WebRTCModule.isCameraRearActive()) {
-      const ok = await WebRTCModule.acquireCamera('environment');
-      if (!ok) {
-        cameraRearEnabled = false;
-        const err = WebRTCModule.getLastError();
-        if (err === 'NotAllowedError' || err === 'PermissionDeniedError') showToast('Camera permission denied');
-        else if (err === 'NotFoundError') showToast('Camera not found');
-        else showToast('Rear camera activation failed');
-      }
-    }
-    if (cameraFrontEnabled && !WebRTCModule.isCameraFrontActive()) {
-      const ok = await WebRTCModule.acquireCamera('user');
-      if (!ok) {
-        cameraFrontEnabled = false;
-        const err = WebRTCModule.getLastError();
-        if (err === 'NotAllowedError' || err === 'PermissionDeniedError') showToast('Camera permission denied');
-        else if (err === 'NotFoundError') showToast('Camera not found');
-        else showToast('Front camera activation failed');
-      }
-    }
-
-    if (SensorModule.isSimulating()) {
-      els.btnEnableSensors.textContent = 'Deactivate (Simulating)';
-    } else {
-      els.btnEnableSensors.textContent = 'Deactivate Sensors';
-    }
-    els.btnEnableSensors.classList.add('btn-active');
-
-    startVizLoop();
     renderSensorList();
+    saveSettings();
   }
 
   async function _maybeStartCamera() {
@@ -746,10 +688,22 @@
       showBroadcastStatus(msg, true);
       return;
     }
-    if (!SensorModule.isEnabled()) {
-      const msg = '2. 먼저 [Enable Sensors] 버튼을 눌러 센서를 활성화하세요';
+    if (!SensorModule.hasAnySelected()) {
+      const msg = '2. 센서를 선택하세요 (Motion, Orientation, GPS, Touch 중 하나 이상)';
       showBroadcastStatus(msg, true);
       return;
+    }
+    if (!SensorModule.isEnabled() && SensorModule.hasAnySelected()) {
+      const dataSensors = ['motion', 'orientation', 'geolocation'];
+      const sel = SensorModule.getSelected();
+      if (dataSensors.some(k => sel[k])) {
+        if (SensorModule.needsPermissionRequest()) {
+          const perms = await SensorModule.requestPermissions();
+          updateDebug('Permissions: ' + JSON.stringify(perms));
+        }
+        SensorModule.startListening();
+        startVizLoop();
+      }
     }
 
     showBroadcastStatus('', false);

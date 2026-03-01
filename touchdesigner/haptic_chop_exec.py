@@ -5,11 +5,42 @@
 #   3. Value Change: 체크 ✅
 #   4. 이 파일을 Script DAT에 연결
 #
-# Every Frame 폴링 방식보다 효율적 — 값이 실제로 바뀔 때만 실행됨.
+# Runs only when value changes (more efficient than Every Frame polling).
+
+WOB_BASE = 'WOB'
+
+
+def _wob_base():
+	try:
+		p = parent(1)
+		if p:
+			return p
+	except NameError:
+		pass
+	for p in ('project1', 'project'):
+		w = op(f'{p}/{WOB_BASE}')
+		if w:
+			return w
+	root = op('/')
+	if root and root.children:
+		w = root.children[0].op(WOB_BASE)
+		if w:
+			return w
+	return op(WOB_BASE)
+
+
+def _op_web():
+	base = _wob_base()
+	if base:
+		w = base.op('web_server_dat')
+		if w:
+			return w
+	return op('web_server_dat')
+
 
 def onValueChange(channel, sampleIndex, val, prev):
-    """wob_haptic 채널 값이 바뀌면 해당 슬롯에 진동 상태 전송."""
-    web = op('web_server_dat')
+	"""Send haptic state to slot when wob_haptic channel value changes."""
+	web = _op_web()
     if web is None:
         return
 
