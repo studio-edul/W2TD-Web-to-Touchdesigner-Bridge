@@ -108,10 +108,26 @@ def _wt_set_state(conn_id, state):
 			pass
 
 
+def _wt_remove(conn_id):
+	"""Remove row from webrtc_table when WebRTC connection closes."""
+	t = op('webrtc_table')
+	if t is None:
+		return
+	for r in range(1, t.numRows):
+		try:
+			if str(t[r, 'conn_id']) == str(conn_id):
+				t.deleteRow(r)
+				return
+		except Exception:
+			pass
+
 def onConnectionStateChange(webrtcDAT, connectionId, state):
 	"""Called when the overall connection state changes."""
 	print(f'[WOB WebRTC] connectionId={connectionId} state={state}')
-	_wt_set_state(connectionId, state)
+	if state in ('failed', 'closed', 'disconnected'):
+		_wt_remove(connectionId)
+	else:
+		_wt_set_state(connectionId, state)
 	if state in ('failed', 'closed', 'disconnected'):
 		# Notify client
 		_send_to_client(connectionId, {

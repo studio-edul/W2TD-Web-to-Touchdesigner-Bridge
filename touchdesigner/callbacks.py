@@ -72,11 +72,21 @@ def _wt_find_row(t, conn_id):
 			pass
 	return None
 
+def _wt_remove_by_slot(slot):
+	"""Remove all webrtc_table rows for the given slot (e.g. before re-add on new offer)."""
+	t = op('webrtc_table')
+	if t is None:
+		return
+	rows_to_del = [r for r in range(1, t.numRows) if int(t[r, 'slot']) == slot]
+	for r in reversed(rows_to_del):
+		t.deleteRow(r)
+
 def _wt_add(slot, conn_id):
 	"""Add row to webrtc_table when a WebRTC offer arrives."""
 	t = op('webrtc_table')
 	if t is None:
 		return
+	_wt_remove_by_slot(slot)
 	name = _client_names().get(slot, f'Slot {slot}')
 	t.appendRow([slot, name, conn_id, 'connecting'])
 
@@ -174,6 +184,22 @@ def _handle_cam_receiver_msg(webServerDAT, addr, msg):
 			}))
 		except Exception as e:
 			print(f'[WOB Cam] cam_ice relay error: {e}')
+
+	elif msg_type == 'cam_resolution':
+		w = msg.get('width')
+		h = msg.get('height')
+		if w is not None and h is not None and w > 0 and h > 0:
+			try:
+				wr = op('web_render_top')
+				if wr is not None:
+					wr.par.outputresolution = 'custom'
+					wr.par.resolutionw = int(w)
+					wr.par.resolutionh = int(h)
+					if hasattr(wr, 'cook'):
+						wr.cook(force=True)
+					print(f'[WOB Cam] web_render_top resolution set to {int(w)}x{int(h)} (video resolution)')
+			except Exception as e:
+				print(f'[WOB Cam] Failed to set web_render_top resolution: {e}')
 
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -751,6 +777,14 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 		if wrtc is None:
 			print('[WOB] webrtc_dat not found — create a WebRTC DAT named "webrtc_dat"')
 			return
+		old_conn = op('/').fetch(f'wob_webrtc_slot_to_uuid_{slot}', None)
+		if old_conn:
+			try:
+				wrtc.closeConnection(old_conn)
+			except Exception:
+				pass
+			op('/').store(f'wob_webrtc_addr_{old_conn}', None)
+			_wt_remove(old_conn)
 		try:
 			conn_id = wrtc.openConnection()
 			op('/').store(f'wob_webrtc_addr_{conn_id}', addr)

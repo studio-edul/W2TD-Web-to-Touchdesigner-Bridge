@@ -217,8 +217,8 @@ const WebRTCModule = (() => {
       const s = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: facingMode },
-          width: { ideal: 3840 },
-          height: { ideal: 2160 },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
         },
         audio: false,
       });
@@ -256,8 +256,8 @@ const WebRTCModule = (() => {
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: facingMode },
-            width: { ideal: 3840 },
-            height: { ideal: 2160 },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
           },
           audio: false,
         });
@@ -318,9 +318,10 @@ const WebRTCModule = (() => {
       const params = sender.getParameters();
       params.encodings = params.encodings || [{}];
       params.encodings[0].scaleResolutionDownBy = 1;
+      params.encodings[0].maxBitrate = 4000000;
       params.degradationPreference = 'maintain-resolution';
       await sender.setParameters(params);
-      _log('Cam sender: scaleResolutionDownBy=1, maintain-resolution');
+      _log('Cam sender: FHD 1080p, scaleResolutionDownBy=1, maxBitrate=4Mbps');
     } catch (e) {
       console.warn('[WOB WebRTC] setParameters failed:', e.message);
     }
