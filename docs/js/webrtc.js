@@ -356,18 +356,11 @@ const WebRTCModule = (() => {
       const s = track && track.getSettings ? track.getSettings() : {};
       const w = s.width || res.width;
       const h = s.height || res.height;
-      const maxPx = Math.max(res.width, res.height);
-      const minPx = Math.min(res.width, res.height);
-      const scale = Math.max(
-        Math.ceil(Math.max(w, h) / maxPx),
-        Math.ceil(Math.min(w, h) / minPx),
-        1
-      );
-      params.encodings[0].scaleResolutionDownBy = scale;
+      params.encodings[0].scaleResolutionDownBy = 1;
       params.encodings[0].maxBitrate = res.maxBitrate;
       params.degradationPreference = 'maintain-resolution';
       await sender.setParameters(params);
-      _log(`Cam sender: ${w}x${h} → scale ${scale}, maxBitrate=${res.maxBitrate / 1e6}Mbps`);
+      _log(`Cam sender: ${w}x${h} → scale 1 (native), maxBitrate=${res.maxBitrate / 1e6}Mbps`);
     } catch (e) {
       console.warn('[W2TD WebRTC] setParameters failed:', e.message);
     }
