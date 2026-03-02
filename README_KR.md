@@ -133,7 +133,7 @@ pip install qrcode pillow pycloudflared
 
 - TD Web Server DAT가 포트 `9980`에서 대기 (TLS 없음)
 - `w2td_init.py`가 Cloudflare 터널 시작 → 공개 주소 `wss://xxxx.trycloudflare.com`
-- QR 코드는 `https://studio-edul.github.io/Web-Osc-Bridge/?td=xxxx.trycloudflare.com` 인코딩
+- QR 코드는 `https://studio-edul.github.io/Integrated-Web-to-TouchDesigner-Bridge/?td=xxxx.trycloudflare.com` 인코딩
 - 모바일이 GitHub Pages에 직접 접속 → Cloudflare 터널 경유 WebSocket 연결
 - 마이크: WebRTC offer/answer → `webrtc_dat` → Audio Stream In CHOP
 - 카메라: WebRTC 릴레이 → `web_render_top` (cam_receiver.html)

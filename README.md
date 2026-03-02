@@ -133,7 +133,7 @@ Copy `touchdesigner/callbacks.py` into the Web Server DAT's Callbacks Script DAT
 
 - TD Web Server DAT listens on port `9980` (no TLS)
 - `w2td_init.py` starts a Cloudflare tunnel → public `wss://xxxx.trycloudflare.com`
-- QR code encodes `https://studio-edul.github.io/Web-Osc-Bridge/?td=xxxx.trycloudflare.com`
+- QR code encodes `https://studio-edul.github.io/Integrated-Web-to-TouchDesigner-Bridge/?td=xxxx.trycloudflare.com`
 - Mobile opens GitHub Pages directly — WebSocket connects via Cloudflare tunnel
 - Mic audio: WebRTC offer/answer via WebSocket → `webrtc_dat` → Audio Stream In CHOP
 - Camera: WebRTC relay via WebSocket → `web_render_top` (cam_receiver.html)

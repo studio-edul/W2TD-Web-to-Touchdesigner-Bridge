@@ -259,7 +259,7 @@ def generate():
 	op('/').store('w2td_url', url)
 
 	host = url.replace('https://', '').replace('http://', '').strip()
-	GITHUB_PAGES_URL = 'https://studio-edul.github.io/Web-Osc-Bridge/'
+	GITHUB_PAGES_URL = 'https://studio-edul.github.io/Integrated-Web-to-TouchDesigner-Bridge/'
 	qr_url = GITHUB_PAGES_URL + '?td=' + host
 	u = _op('w2td_url_text')
 	if u:
