@@ -6,28 +6,28 @@ Each TOP loads cam_receiver.html?slot=N for that slot.
 Setup in TD:
   1. Create webrtc_video_container (Container COMP)
   2. Create DAT Execute DAT inside webrtc_video_container
-  3. Set "DATs" to: ../sensor_table (상대경로 — sensor_table이 한 단계 위에 있을 때)
+  3. Set "DATs" to: ../sensor_table (relative path when sensor_table is one level up)
   4. Enable "Table Change"
   5. Paste this script
-상대 경로: DAT Execute가 webrtc_video_container 안에 있으면 ../sensor_table
+Relative path: ../sensor_table when DAT Execute is inside webrtc_video_container
 """
 NODE_OFFSET_Y = 100
 
 
 def _w2td_video():
-	"""webrtc_video_container. DAT Execute가 그 안에 있으면 me.parent() 사용."""
+	"""webrtc_video_container. Uses me.parent() when DAT Execute is inside it."""
 	try:
 		p = me.parent()
 		if p and p.op('topnet'):
 			return p
-		# DAT Execute가 W2TD 등에 있으면, 형제 webrtc_video_container 찾기
+		# When DAT Execute is under W2TD etc., find sibling webrtc_video_container
 		if p and p.parent():
 			c = p.parent().op('webrtc_video_container')
 			if c:
 				return c
 	except (NameError, AttributeError):
 		pass
-	# fallback: webrtc_audio_container와 동일 구조 (W2TD 아래)
+	# fallback: same structure as webrtc_audio_container (under W2TD)
 	for proj in ('project1', 'project'):
 		for path in (f'{proj}/W2TD/webrtc_video_container', f'{proj}/webrtc_video_container'):
 			c = op(path)
@@ -59,10 +59,10 @@ def _get_container():
 
 
 def _read_connected_slots(table_dat=None):
-	"""sensor_table에서 연결된 slot 목록. table_dat 있으면 사용 (onTableChange에서 전달, 경로 불필요)."""
+	"""List connected slots from sensor_table. Uses table_dat if provided (passed from onTableChange, path not needed)."""
 	t = table_dat
 	if t is None:
-		# fallback: DAT Execute 부모의 형제에서 sensor_table
+		# fallback: sensor_table from DAT Execute parent's sibling
 		try:
 			p = me.parent()
 			if p and p.parent():
@@ -123,17 +123,55 @@ def _get_tls_flag():
 	return bool(op('/').fetch('w2td_cam_tls', False))
 
 
+def _read_config():
+	"""Read w2td_config Table DAT."""
+	cfg_op = op('w2td_config') or op('project1/W2TD/w2td_config') or op('project/W2TD/w2td_config')
+	if cfg_op is None or not hasattr(cfg_op, 'numRows') or cfg_op.numRows < 2:
+		return {}
+	out = {}
+	for r in range(1, cfg_op.numRows):
+		try:
+			out[str(cfg_op[r, 0])] = str(cfg_op[r, 1])
+		except Exception:
+			pass
+	return out
+
+
+def _cfg_str(cfg, *keys, default=''):
+	for k in keys:
+		if k in cfg and cfg.get(k) is not None:
+			return str(cfg[k]).strip()
+	return default
+
+
+def _get_cam_resolution_dims(cfg=None):
+	"""Read Resolution, Screenmode from w2td_config and return (w, h). Synced with webrtc.js and callbacks.py."""
+	if cfg is None:
+		cfg = _read_config()
+	res = _cfg_str(cfg, 'Resolution', 'resolution', default='Non-Commercial')
+	mode = (_cfg_str(cfg, 'Screenmode', 'screenmode', default='Portrait') or '').strip().lower()
+	# Synced with webrtc.js: portrait=tall(vertical), landscape=wide(horizontal) — natural mapping
+	presets = {
+		'Non-Commercial': {'portrait': (540, 960), 'landscape': (960, 540)},
+		'FHD': {'portrait': (1080, 1920), 'landscape': (1920, 1080)},
+		'4K': {'portrait': (2160, 3840), 'landscape': (3840, 2160)},
+	}
+	p = presets.get(res, presets['Non-Commercial'])
+	w, h = (p['portrait'] if mode == 'portrait' else p['landscape'])
+	return (int(w), int(h))
+
+
 def sync(table_dat=None):
-	"""sensor_table과 동기화: Web Render TOP 생성/삭제, URL 설정. table_dat 있으면 사용 (경로 불필요)."""
+	"""Sync with sensor_table: create/remove Web Render TOPs, set URLs. Uses table_dat if provided (path not needed)."""
 	container = _get_container()
 	if container is None:
 		shown = op('/').fetch('w2td_cam_render_container_err', False)
 		if not shown:
-			print('[Cam Render Sync] 에러 webrtc_video_container not found - create W2TD/webrtc_video_container (Container COMP) and place DAT Execute inside it')
+			print('[Cam Render Sync] Error webrtc_video_container not found - create W2TD/webrtc_video_container (Container COMP) and place DAT Execute inside it')
 			op('/').store('w2td_cam_render_container_err', True)
 		return
 
-	op('/').store('w2td_cam_render_container_err', False)  # 성공 시 리셋
+	op('/').store('w2td_cam_render_container_err', False)  # Reset on success
 	slots = _read_connected_slots(table_dat)
 	base_url = _get_cam_base_url()
 	port = _get_cam_port()
@@ -142,7 +180,7 @@ def sync(table_dat=None):
 	target_names = [f'web_render_top_{i}' for i in range(1, len(slots) + 1)]
 	slot_list = slots  # [1, 2, 3] for 3 connected
 
-	# 기존 Web Render TOP 조회
+	# Query existing Web Render TOPs
 	existing = {}
 	if container:
 		for i in range(1, 32):
@@ -151,7 +189,7 @@ def sync(table_dat=None):
 			if top:
 				existing[name] = top
 
-	# 삭제 (web_render_top만). 제거될 TOP의 slot cam_receiver 클리어 → offer pending 유도
+	# Remove (web_render_top only). Clear cam_receiver for removed slot → trigger offer pending
 	prev_slots = tuple(op('/').fetch('w2td_cam_render_last_slots', ()))
 	for name in list(existing.keys()):
 		if name not in target_names:
@@ -165,9 +203,9 @@ def sync(table_dat=None):
 				existing[name].destroy()
 				print(f'[Cam Render Sync] Destroyed {name}')
 			except Exception as e:
-				print(f'[Cam Render Sync] 에러 Destroy {name} failed: {e}')
+				print(f'[Cam Render Sync] Error Destroy {name} failed: {e}')
 
-	# 생성 및 URL 설정
+	# Create and set URL
 	for i, name in enumerate(target_names):
 		top = existing.get(name) or container.op(name)
 		if top is None:
@@ -175,25 +213,25 @@ def sync(table_dat=None):
 				top = container.create('webrenderTOP', name)
 				print(f'[Cam Render Sync] Created {name}')
 			except Exception as e:
-				print(f'[Cam Render Sync] 에러 Create {name} failed: {e}')
+				print(f'[Cam Render Sync] Error Create {name} failed: {e}')
 				continue
 		slot = slot_list[i] if i < len(slot_list) else (i + 1)
 		url = f'{base_url}/cam_receiver.html?port={port}&slot={slot}'
 		if tls:
 			url += '&tls=1'
 		try:
-			# URL 변경 시에만 설정 — 동일 URL 반복 설정 시 ERR_ABORTED 유발
+			# Set only when URL changes — repeated same URL can cause ERR_ABORTED
 			if getattr(top.par, 'url', None) != url:
 				top.par.url = url
 			top.par.active = 1
 			top.nodeX = 0
 			top.nodeY = -i * NODE_OFFSET_Y
 		except Exception as e:
-			print(f'[Cam Render Sync] 에러 Set {name} url failed: {e}')
-		# cam_resolution 수신 시 해당 slot의 web_render_top 찾기용
+			print(f'[Cam Render Sync] Error Set {name} url failed: {e}')
+		# Lookup web_render_top for slot when cam_resolution is received
 		op('/').store(f'w2td_web_render_slot_{slot}', top.path)
 
-		# web_render_top → layout1 직접 연결
+		# Direct connect web_render_top → layout1
 		try:
 			layout1 = (container.op('layout1') if container else None) or (_w2td_video().op('layout1') if _w2td_video() else None)
 			if not layout1 and _w2td_video() and _w2td_video().parent():
@@ -203,7 +241,7 @@ def sync(table_dat=None):
 		except Exception:
 			pass
 
-	# 삭제된 slot 매핑 정리
+	# Clear mapping for removed slots
 	for s in range(1, 21):
 		if s not in slot_list:
 			op('/').store(f'w2td_web_render_slot_{s}', None)
@@ -214,14 +252,15 @@ def sync(table_dat=None):
 		if tuple(slots) != prev:
 			print(f'[Cam Render Sync] {len(slots)} web render TOPs synced (slots {slots})')
 			op('/').store('w2td_cam_render_last_slots', tuple(slots))
-		# layout1 해상도: 연결된 영상 수에 맞춰 수평 배치 (540x960 each → 540*n x 960)
+		# layout1 resolution: horizontal layout based on w2td_config Resolution/Screenmode
 		try:
 			layout1 = (container.op('layout1') if container else None) or (_w2td_video().op('layout1') if _w2td_video() else None)
 			if not layout1 and _w2td_video() and _w2td_video().parent():
 				layout1 = _w2td_video().parent().op('layout1')
 			if layout1:
 				n = len(slots)
-				w, h = 540 * n, 960
+				cw, ch = _get_cam_resolution_dims()
+				w, h = cw * n, ch
 				if hasattr(layout1.par, 'outputresolution'):
 					try:
 						layout1.par.outputresolution = 'custom'
@@ -245,7 +284,7 @@ def sync(table_dat=None):
 
 
 def onTableChange(dat, prevDAT, info):
-	"""DAT Execute DAT의 onTableChange에서 호출. dat=sensor_table (경로 무관)."""
+	"""Called from DAT Execute DAT's onTableChange. dat=sensor_table (path not needed)."""
 	sync(table_dat=dat)
 
 

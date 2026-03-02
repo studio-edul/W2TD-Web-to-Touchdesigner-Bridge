@@ -1,6 +1,6 @@
 /**
- * HTTPS dev server - iOS 센서 권한 필요 시 사용
- * npm run dev:https 실행 전에 npm run cert 생성 필요
+ * HTTPS dev server - required for iOS sensor permissions
+ * Run npm run cert before npm run dev:https
  */
 const https = require('https');
 const fs = require('fs');
@@ -51,8 +51,8 @@ const keyPath = path.join(CERTS_DIR, 'key.pem');
 const certPath = path.join(CERTS_DIR, 'cert.pem');
 
 if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
-  console.error('\n[HTTPS Server] 인증서 없음. 먼저 실행: npm run cert');
-  console.error('  생성될 파일: certs/key.pem, certs/cert.pem\n');
+  console.error('\n[HTTPS Server] No certificate. Run first: npm run cert');
+  console.error('  Will create: certs/key.pem, certs/cert.pem\n');
   process.exit(1);
 }
 
@@ -76,10 +76,10 @@ server.listen(HTTP_PORT, () => {
   }
 
   console.log('\n=== W2TD Dev Server (HTTPS) ===');
-  console.log(`Local:   https://localhost:${HTTP_PORT} (인증서 경고 무시 가능)`);
+  console.log(`Local:   https://localhost:${HTTP_PORT} (certificate warning can be ignored)`);
   console.log(`Network: https://${localIp}:${HTTP_PORT}`);
-  console.log('\niOS 센서 권한: 모바일에서 위 Network URL로 접속');
-  console.log('처음 접속 시 "연결이 비공개가 아닙니다" 경고 → 고급 → 계속\n');
+  console.log('\niOS sensor permission: access above Network URL from mobile');
+  console.log('First visit: "Connection not private" warning → Advanced → Proceed\n');
 });
 
 process.on('SIGINT', () => {

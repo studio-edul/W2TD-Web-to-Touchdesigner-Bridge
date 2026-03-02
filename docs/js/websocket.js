@@ -59,7 +59,7 @@ const WSClient = (() => {
     try {
       ws = new WebSocket(serverUrl);
     } catch (e) {
-      const msg = 'WebSocket 생성 실패: ' + (e.message || e);
+      const msg = 'WebSocket creation failed: ' + (e.message || e);
       console.error('[WS]', msg);
       _reportError(msg);
       _updateStatus('error');
@@ -128,7 +128,7 @@ const WSClient = (() => {
     ws.onerror = () => {
       _updateStatus('error');
       if (!ws || ws.readyState === WebSocket.CLOSING || ws.readyState === WebSocket.CLOSED) {
-        _reportError('연결 거부/타임아웃: ' + serverUrl + ' - 서버 없음, 방화벽, IP/포트 확인');
+        _reportError('Connection refused/timeout: ' + serverUrl + ' - check server, firewall, IP/port');
       }
     };
   }

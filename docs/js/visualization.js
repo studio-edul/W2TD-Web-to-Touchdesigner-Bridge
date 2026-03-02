@@ -49,7 +49,7 @@ const Visualization = (() => {
       key: 'mic',
       label: 'Mic\nlevel',
       channels: [
-        { key: 'mic_level', label: 'L', color: '#ff66aa', axis: 'level', norm: v => (v - 0.5) * 2, decimals: 3 }, // 0→bottom, 1→top, 소수 3자리로 미세 변화 가시화
+        { key: 'mic_level', label: 'L', color: '#ff66aa', axis: 'level', norm: v => (v - 0.5) * 2, decimals: 3 }, // 0→bottom, 1→top, 3 decimals for fine change visibility
       ],
     },
   ];

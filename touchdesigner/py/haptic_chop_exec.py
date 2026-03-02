@@ -1,9 +1,9 @@
-# Execute CHOP — w2td_haptic 채널 값 변경 시 모바일 진동 제어
+# Execute CHOP — controls mobile haptic when w2td_haptic channel value changes
 # Setup in TD:
-#   1. Execute CHOP 생성
-#   2. CHOPs 파라미터: w2td_haptic
-#   3. Value Change: 체크 ✅
-#   4. 이 파일을 Script DAT에 연결
+#   1. Create Execute CHOP
+#   2. CHOPs parameter: w2td_haptic
+#   3. Value Change: checked ✅
+#   4. Connect this file to Script DAT
 #
 # Runs only when value changes (more efficient than Every Frame polling).
 
@@ -52,12 +52,12 @@ def onValueChange(channel, sampleIndex, val, prev):
 	try:
 		web.module.send_haptic_state(web, slot=slot, state=state)
 	except Exception as e:
-		print(f'[W2TD Haptic] 에러 onValueChange error: {e}')
+		print(f'[W2TD Haptic] Error onValueChange: {e}')
 
 
 def _parse_slot(name):
-	"""채널 이름에서 슬롯 번호를 파싱.
-	지원 형식: 'slot1', 'ch1', '1'
+	"""Parse slot number from channel name.
+	Supported formats: 'slot1', 'ch1', '1'
 	"""
 	if name.startswith('slot'):
 		try:

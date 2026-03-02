@@ -16,29 +16,29 @@
       <p class="subtitle">Web to TouchDesigner Bridge</p>
 
       <div class="form-group">
-        <label for="td-address">TouchDesigner 주소</label>
+        <label for="td-address">TouchDesigner Address</label>
         <input type="text" id="td-address" placeholder="192.168.0.100:9980" autocomplete="off">
-        <small>TD PC의 로컬 IP와 포트 입력 (예: 192.168.0.100:9980)</small>
+        <small>Enter TD PC local IP and port (e.g. 192.168.0.100:9980)</small>
       </div>
 
       <div class="form-group">
-        <label for="client-name">기기 이름 (선택사항)</label>
+        <label for="client-name">Device Name (optional)</label>
         <input type="text" id="client-name" placeholder="" autocomplete="off" maxlength="50">
-        <small>TD에서 슬롯 대신 표시될 이름 (예: iPhone_이지원, iPad_전시용)</small>
+        <small>Name shown in TD instead of slot (e.g. iPhone_John, iPad_Display)</small>
       </div>
 
       <button id="btn-connect" class="btn btn-primary">Connect to TD</button>
-      <button id="btn-show-log" class="btn btn-small" style="margin-top:8px">로그 보기</button>
+      <button id="btn-show-log" class="btn btn-small" style="margin-top:8px">Show Log</button>
 
       <div class="help-box">
-        <p><strong>처음 사용 시 (1회만):</strong></p>
+        <p><strong>First time (one-time setup):</strong></p>
         <ol>
-          <li>TD Web Server DAT → Port 9980, TLS 설정, Active On</li>
-          <li>모바일에서 <code>https://[TD-IP]:9980</code> 접속</li>
-          <li>"연결이 비공개가 아닙니다" 경고 → <strong>고급 → 계속</strong></li>
-          <li>자동으로 이 앱으로 이동 + 주소 자동 입력됨</li>
+          <li>TD Web Server DAT → Port 9980, TLS setting, Active On</li>
+          <li>On mobile, open <code>https://[TD-IP]:9980</code></li>
+          <li>"Connection not private" warning → <strong>Advanced → Proceed</strong></li>
+          <li>Redirects to this app and auto-fills the address</li>
         </ol>
-        <p><strong>이후 접속:</strong> 바로 주소 입력 후 Connect</p>
+        <p><strong>Later:</strong> Enter address and Connect</p>
       </div>
     </div>
   </div>
@@ -112,8 +112,8 @@
   <div id="log-viewer-overlay" class="log-viewer-overlay hidden">
     <div id="log-viewer-box" class="log-viewer-box">
       <div class="log-viewer-header">
-        <span>로그</span>
-        <button id="btn-close-log" class="btn btn-small">닫기</button>
+        <span>Log</span>
+        <button id="btn-close-log" class="btn btn-small">Close</button>
       </div>
       <pre id="log-viewer-content" class="log-viewer-content"></pre>
     </div>

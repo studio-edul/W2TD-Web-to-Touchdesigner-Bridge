@@ -64,7 +64,7 @@ def _auto_select_audio_chop(webrtcDAT, connectionId):
 	"""When WebRTC connects, auto-set webrtc_audio_1 Connection."""
 	audio_chop = _op_audio_chop('webrtc_audio_1')
 	if audio_chop is None:
-		print('[W2TD WebRTC] 에러 webrtc_audio_1 not found - create Audio Stream In CHOP named "webrtc_audio_1"')
+		print('[W2TD WebRTC] Error webrtc_audio_1 not found - create Audio Stream In CHOP named "webrtc_audio_1"')
 		return
 	# TD version differences: try all known Connection parameter names.
 	# Note: getTracks() is not a valid TD Python API — connection-only is sufficient.
@@ -79,7 +79,7 @@ def _auto_select_audio_chop(webrtcDAT, connectionId):
 				matched_par = par_name
 				break
 			except Exception as e:
-				print(f'[W2TD WebRTC] 에러 Set {par_name} failed: {e}')
+				print(f'[W2TD WebRTC] Error Set {par_name} failed: {e}')
 	if not set_ok:
 		# Dump all par names containing webrtc/connect/track so we can find the correct one
 		try:
@@ -95,18 +95,18 @@ def _send_to_client(connectionId, data):
 	"""Send a JSON message back to the mobile client via Web Server DAT."""
 	ws = _op_web()
 	if ws is None:
-		print('[W2TD WebRTC] 에러 Web Server DAT not found - create web_server_dat under W2TD')
+		print('[W2TD WebRTC] Error Web Server DAT not found - create web_server_dat under W2TD')
 		return
 
 	addr = op('/').fetch(f'w2td_webrtc_addr_{connectionId}', None)
 	if addr is None:
-		print(f'[W2TD WebRTC] 에러 No client addr for connectionId={connectionId}')
+		print(f'[W2TD WebRTC] Error No client addr for connectionId={connectionId}')
 		return
 
 	try:
 		ws.webSocketSendText(addr, json.dumps(data))
 	except Exception as e:
-		print(f'[W2TD WebRTC] 에러 Send failed for connectionId={connectionId}: {e}')
+		print(f'[W2TD WebRTC] Error Send failed for connectionId={connectionId}: {e}')
 
 
 def onOffer(webrtcDAT, connectionId, localSdp):
@@ -197,7 +197,7 @@ def _slot_for_conn_id(conn_id):
 	return None
 
 def _defer_wt_update(webrtcDAT, connectionId, state, slot):
-	"""webrtc_table 수정을 다음 프레임으로 지연 (cook dependency loop 방지)."""
+	"""Defer webrtc_table update to next frame (prevents cook dependency loop)."""
 	def _do():
 		if state in ('failed', 'closed', 'disconnected'):
 			_wt_remove(connectionId)
@@ -205,13 +205,13 @@ def _defer_wt_update(webrtcDAT, connectionId, state, slot):
 				_wt_remove_by_slot(slot)
 		else:
 			_wt_set_state(connectionId, state)
-		# sync 및 auto_select는 지연 실행
+		# sync and auto_select run deferred
 		sync_mod = _op_webrtc_sync()
 		if sync_mod is not None and hasattr(sync_mod, 'module') and hasattr(sync_mod.module, 'sync'):
 			try:
 				sync_mod.module.sync()
 			except Exception as e:
-				print(f'[W2TD WebRTC] 에러 webrtc_table_sync failed: {e}')
+				print(f'[W2TD WebRTC] Error webrtc_table_sync failed: {e}')
 		if state == 'connected':
 			_auto_select_audio_chop(webrtcDAT, connectionId)
 
@@ -222,11 +222,11 @@ def onConnectionStateChange(webrtcDAT, connectionId, state):
 	"""Called when the overall connection state changes."""
 	print(f'[W2TD WebRTC] connectionId={connectionId} state={state}')
 	slot = _slot_for_conn_id(connectionId) if state in ('failed', 'closed', 'disconnected') else None
-	# webrtc_table 수정·sync·auto_select를 다음 프레임으로 지연 → cook dependency loop 방지
+	# Defer webrtc_table update, sync, auto_select to next frame → prevents cook dependency loop
 	_defer_wt_update(webrtcDAT, connectionId, state, slot)
 
 	if state in ('failed', 'closed', 'disconnected'):
-		# Notify client는 즉시 (WebSocket은 cook과 무관)
+		# Notify client immediately (WebSocket is independent of cook)
 		_send_to_client(connectionId, {
 			'type': 'webrtc_state',
 			'state': state,

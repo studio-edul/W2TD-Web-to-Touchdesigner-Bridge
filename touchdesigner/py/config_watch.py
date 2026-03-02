@@ -80,7 +80,7 @@ def _cfg_str(cfg, *keys, default=''):
 
 
 def _build_config_msg(cfg):
-	"""Build config JSON dict — w2td_config 키 이름에 맞춤 (Samplerate, Wakelock, Motion, Geolocation, ...)."""
+	"""Build config JSON dict — keys from w2td_config (Samplerate, Wakelock, Motion, Geolocation, ...)."""
 	out = {
 		'type': 'config',
 		'sample_rate': _cfg_val(cfg, 'Samplerate', 'samplerate', 'sample_rate', default=30),
@@ -108,12 +108,45 @@ def _build_config_msg(cfg):
 	return out
 
 
+def _get_cam_resolution_dims(cfg=None):
+	"""w2td_config Resolution/Screenmode → (w, h). Synced with webrtc.js and callbacks."""
+	if cfg is None:
+		cfg = _read_config()
+	res = _cfg_str(cfg, 'Resolution', 'resolution', default='Non-Commercial')
+	mode = (_cfg_str(cfg, 'Screenmode', 'screenmode', default='Portrait') or '').strip().lower()
+	presets = {
+		'Non-Commercial': {'portrait': (540, 960), 'landscape': (960, 540)},
+		'FHD': {'portrait': (1080, 1920), 'landscape': (1920, 1080)},
+		'4K': {'portrait': (2160, 3840), 'landscape': (3840, 2160)},
+	}
+	p = presets.get(res, presets['Non-Commercial'])
+	w, h = (p['portrait'] if mode == 'portrait' else p['landscape'])
+	return (int(w), int(h))
+
+
+def _update_cam_top_resolutions(cfg):
+	"""Update existing web_render_top resolutions based on config."""
+	tw, th = _get_cam_resolution_dims(cfg)
+	for slot in range(1, 21):
+		path = op('/').fetch(f'w2td_web_render_slot_{slot}', None)
+		if path:
+			top = op(path)
+			if top:
+				try:
+					top.par.outputresolution = 'custom'
+					top.par.resolutionw = tw
+					top.par.resolutionh = th
+				except Exception:
+					pass
+
+
 def _do_broadcast():
-	"""Send config to actually connected clients only (w2td_client_slots만 보면 끊긴 주소 포함됨)."""
+	"""Send config to actually connected clients only (w2td_client_slots may include disconnected addresses)."""
 	web = _op('web_server_dat')
 	if web is None:
 		return
 	cfg = _read_config()
+	_update_cam_top_resolutions(cfg)
 	msg = json.dumps(_build_config_msg(cfg))
 	slots = op('/').fetch('w2td_client_slots', {})
 	active = set()
@@ -156,7 +189,7 @@ def onTableChange(dat):
 	try:
 		_debounced_broadcast()
 	except Exception as e:
-		print(f'[W2TD Config Watch] 에러 Table change error: {e}')
+		print(f'[W2TD Config Watch] Error Table change: {e}')
 
 
 # Required stubs

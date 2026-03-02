@@ -5,8 +5,7 @@
  * Signaling for both uses the existing WebSocket (TD Web Server DAT).
  */
 const WebRTCModule = (() => {
-  // Resolution presets: Non-Commercial (540x960), FHD (1920x1080), 4K (3840x2160)
-  // Screenmode: Portrait = height > width, Landscape = width > height
+  // Portrait = tall(h>w), Landscape = wide(w>h)
   const RESOLUTION_PRESETS = {
     'Non-Commercial': { portrait: { w: 540, h: 960 }, landscape: { w: 960, h: 540 }, maxBitrate: 1500000 },
     'FHD':             { portrait: { w: 1080, h: 1920 }, landscape: { w: 1920, h: 1080 }, maxBitrate: 4000000 },
@@ -19,7 +18,8 @@ const WebRTCModule = (() => {
     const res = (resolution || DEFAULT_RESOLUTION).trim();
     const preset = RESOLUTION_PRESETS[res] || RESOLUTION_PRESETS[DEFAULT_RESOLUTION];
     const mode = (screenmode || DEFAULT_SCREENMODE).trim().toLowerCase();
-    const dims = (mode === 'landscape' ? preset.landscape : preset.portrait);
+    // Portrait = tall(vertical), Landscape = wide(horizontal) — natural mapping
+    const dims = (mode === 'portrait' ? preset.portrait : preset.landscape);
     return { width: dims.w, height: dims.h, maxBitrate: preset.maxBitrate };
   }
 

@@ -62,7 +62,7 @@ def _check_zombies():
 				try:
 					ws_module._release_slot(addr, slot)
 				except Exception as e:
-					print(f'[W2TD Zombie] 에러 _release_slot error: {e}')
+					print(f'[W2TD Zombie] Error _release_slot error: {e}')
 				try:
 					ws_module._wt_remove_by_slot(slot)
 				except Exception:
@@ -88,4 +88,4 @@ def onFrameStart(frame):
 	try:
 		_check_zombies()
 	except Exception as e:
-		print(f'[W2TD Zombie] 에러 Error: {e}')
+		print(f'[W2TD Zombie] Error Error: {e}')

@@ -57,8 +57,8 @@ httpServer.listen(HTTP_PORT, () => {
   console.log(`\n=== W2TD Dev Server ===`);
   console.log(`Local:   http://localhost:${HTTP_PORT}`);
   console.log(`Network: http://${localIp}:${HTTP_PORT}`);
-  console.log(`\nMobile에서 Network URL로 접속하세요.`);
-  console.log(`TouchDesigner WebSocket DAT의 주소를 입력하면 바로 연결됩니다.\n`);
+  console.log(`\nAccess from mobile using the Network URL.`);
+  console.log(`Enter the TouchDesigner WebSocket DAT address to connect.\n`);
 });
 
 process.on('SIGINT', () => {
