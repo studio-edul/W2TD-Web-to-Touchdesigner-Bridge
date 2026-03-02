@@ -1,5 +1,5 @@
 /**
- * WOB WebRTC Module
+ * W2TD WebRTC Module
  * Mic  → RTCPeerConnection(micPc)  → TD WebRTC DAT → Audio Stream In CHOP
  * Cam  → RTCPeerConnection(camPc)  → Web Render TOP (cam_receiver.html)
  * Signaling for both uses the existing WebSocket (TD Web Server DAT).
@@ -40,7 +40,7 @@ const WebRTCModule = (() => {
 
   function _log(msg) {
     if (_onLog) _onLog(msg);
-    console.log('[WOB WebRTC]', msg);
+    console.log('[W2TD WebRTC]', msg);
   }
 
   function _logCamResolution(stream, label) {
@@ -85,7 +85,7 @@ const WebRTCModule = (() => {
       _log('acquireMic OK — mic:' + micActive);
     } catch (e) {
       _lastError = e.name || 'unknown';
-      console.error('[WOB WebRTC] acquireMic failed:', e.name, e.message);
+      console.error('[W2TD WebRTC] acquireMic failed:', e.name, e.message);
       return false;
     }
     if (micActive) _setupAnalyser(micStream);
@@ -118,7 +118,7 @@ const WebRTCModule = (() => {
         _log('getUserMedia (mic) OK — mic:' + micActive);
       } catch (e) {
         _lastError = e.name || 'unknown';
-        console.error('[WOB WebRTC] getUserMedia mic failed:', e.name, e.message);
+        console.error('[W2TD WebRTC] getUserMedia mic failed:', e.name, e.message);
         _setMicState('failed');
         return false;
       }
@@ -143,13 +143,13 @@ const WebRTCModule = (() => {
 
     micPc.onconnectionstatechange = () => {
       const s = micPc.connectionState;
-      console.log('[WOB WebRTC] mic connectionState:', s);
+      console.log('[W2TD WebRTC] mic connectionState:', s);
       _setMicState(s);
       if (s === 'failed' || s === 'closed') stop();
     };
 
     micPc.oniceconnectionstatechange = () => {
-      console.log('[WOB WebRTC] mic iceState:', micPc.iceConnectionState);
+      console.log('[W2TD WebRTC] mic iceState:', micPc.iceConnectionState);
     };
 
     _setMicState('connecting');
@@ -160,7 +160,7 @@ const WebRTCModule = (() => {
       const sent = WSClient.send({ type: 'webrtc_offer', sdp: offer.sdp });
       _log(sent ? 'Mic offer sent to TD' : 'Mic offer FAILED — WebSocket not connected');
     } catch (e) {
-      console.error('[WOB WebRTC] mic createOffer failed:', e);
+      console.error('[W2TD WebRTC] mic createOffer failed:', e);
       _setMicState('failed');
     }
   }
@@ -173,23 +173,23 @@ const WebRTCModule = (() => {
     if (micPc) { micPc.close(); micPc = null; }
     micActive = false;
     _setMicState('closed');
-    console.log('[WOB WebRTC] Mic stopped');
+    console.log('[W2TD WebRTC] Mic stopped');
   }
 
   /** Close mic PC only — keep micStream and analyser alive (for reuse). */
   function disconnect() {
     if (micPc) { micPc.close(); micPc = null; }
     _setMicState('closed');
-    console.log('[WOB WebRTC] Mic disconnected (stream kept)');
+    console.log('[W2TD WebRTC] Mic disconnected (stream kept)');
   }
 
   async function handleAnswer(sdp) {
     if (!micPc) return;
     try {
       await micPc.setRemoteDescription({ type: 'answer', sdp });
-      console.log('[WOB WebRTC] Mic remote description set');
+      console.log('[W2TD WebRTC] Mic remote description set');
     } catch (e) {
-      console.error('[WOB WebRTC] mic setRemoteDescription failed:', e);
+      console.error('[W2TD WebRTC] mic setRemoteDescription failed:', e);
     }
   }
 
@@ -233,7 +233,7 @@ const WebRTCModule = (() => {
       return true;
     } catch (e) {
       _lastError = e.name || 'unknown';
-      console.error('[WOB WebRTC] acquireCamera failed:', e.name, e.message);
+      console.error('[W2TD WebRTC] acquireCamera failed:', e.name, e.message);
       return false;
     }
   }
@@ -338,7 +338,7 @@ const WebRTCModule = (() => {
       await sender.setParameters(params);
       _log(`Cam sender: ${w}x${h} → scale ${scale} → FHD, maxBitrate=${CAM_RESOLUTION.maxBitrate / 1e6}Mbps`);
     } catch (e) {
-      console.warn('[WOB WebRTC] setParameters failed:', e.message);
+      console.warn('[W2TD WebRTC] setParameters failed:', e.message);
     }
   }
 
@@ -374,7 +374,7 @@ const WebRTCModule = (() => {
     try {
       await pc.setRemoteDescription({ type: 'answer', sdp });
     } catch (e) {
-      console.error('[WOB WebRTC] cam setRemoteDescription failed:', e);
+      console.error('[W2TD WebRTC] cam setRemoteDescription failed:', e);
     }
   }
 
@@ -407,7 +407,7 @@ const WebRTCModule = (() => {
       _analyser.fftSize = 256;
       _analyser.smoothingTimeConstant = 0.8;
       source.connect(_analyser);
-    } catch (e) { console.warn('[WOB WebRTC] Audio analyser setup failed:', e); }
+    } catch (e) { console.warn('[W2TD WebRTC] Audio analyser setup failed:', e); }
   }
 
   function _updatePreview() {

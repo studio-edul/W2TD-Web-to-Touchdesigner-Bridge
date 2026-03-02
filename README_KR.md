@@ -1,4 +1,4 @@
-# WOB — Web-OSC-Bridge
+# WOB — Web-to-TouchDesigner Bridge
 
 모바일 브라우저의 센서 데이터(모션, 오리엔테이션, 터치, GPS)를 WebSocket으로 TouchDesigner에 실시간 전송하는 시스템.
 

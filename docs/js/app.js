@@ -1,5 +1,5 @@
 /**
- * WOB Main App Controller
+ * W2TD Main App Controller
  * Direct WebSocket connection to TouchDesigner.
  * Settings (sample rate, wake lock, haptic) are pushed from TD via config message.
  */
@@ -18,7 +18,7 @@
   let audioEchoCancellation = false;  // config: 0=raw, 1=on
   let audioNoiseSuppression = false;
   let audioAutoGain = false;
-  let iceServersFromConfig = null;   // from wob_config ice_servers (JSON)
+  let iceServersFromConfig = null;   // from w2td_config ice_servers (JSON)
   let iceTransportPolicyFromConfig = null;  // 'relay' | 'all' | null
   let showTouchPoints = true;
 
@@ -116,7 +116,7 @@
 
   /**
    * Apply config pushed from TD via {type:'config'} message.
-   * wob_config keys: sample_rate, wake_lock, haptic, sensors, dev_mode
+   * w2td_config keys: sample_rate, wake_lock, haptic, sensors, dev_mode
    */
   function applyConfig(cfg) {
     if (cfg.sample_rate != null) {
@@ -303,7 +303,7 @@
 
   function init() {
     cacheDom();
-    addLog('WOB 시작 (protocol: ' + window.location.protocol + ')', 'info');
+    addLog('W2TD 시작 (protocol: ' + window.location.protocol + ')', 'info');
     // Apply cached dev mode instantly to prevent flash of wrong UI
     const _cached = localStorage.getItem('wob-dev-mode');
     if (_cached !== null) {
@@ -361,9 +361,18 @@
     if (els.btnToggleTouchPoints) {
       els.btnToggleTouchPoints.addEventListener('click', toggleTouchPoints);
     }
-    els.btnTrigger.addEventListener('pointerdown', () => els.btnTrigger.classList.add('triggered'));
-    els.btnTrigger.addEventListener('pointerup', sendTrigger);
-    els.btnTrigger.addEventListener('pointercancel', () => els.btnTrigger.classList.remove('triggered'));
+    els.btnTrigger.addEventListener('pointerdown', () => {
+      els.btnTrigger.classList.add('triggered');
+      sendTrigger(1);
+    });
+    els.btnTrigger.addEventListener('pointerup', () => {
+      els.btnTrigger.classList.remove('triggered');
+      sendTrigger(0);
+    });
+    els.btnTrigger.addEventListener('pointercancel', () => {
+      els.btnTrigger.classList.remove('triggered');
+      sendTrigger(0);
+    });
     // Mic state changes → re-render sensor list
     WebRTCModule.onStateChange((state) => {
       renderSensorList();
@@ -772,11 +781,10 @@
     renderSensorList();
   }
 
-  function sendTrigger() {
-    els.btnTrigger.classList.remove('triggered');
+  function sendTrigger(value) {
     if (!WSClient.isConnected()) return;
-    WSClient.send({ type: 'trigger' });
-    haptic(50);
+    WSClient.send({ type: 'trigger', value: value });
+    if (value) haptic(50);
   }
 
   function handleTouchData(snapshot) {
@@ -925,7 +933,7 @@
     logLines.push(line);
     if (logLines.length > LOG_MAX) logLines.shift();
     _renderLog();
-    console.log('[WOB]', msg);
+    console.log('[W2TD]', msg);
   }
 
   function _renderLog() {
@@ -995,7 +1003,7 @@
   function handleHapticFeedback(data) {
     // Check Vibration API support
     if (!navigator.vibrate) {
-      console.log('[WOB] Vibration API not supported');
+      console.log('[W2TD] Vibration API not supported');
       return;
     }
 
@@ -1039,7 +1047,7 @@
     // Pattern-based mode (legacy): pattern = [200, 100, 200]
     const pattern = data.pattern;
     if (!pattern || !Array.isArray(pattern) || pattern.length === 0) {
-      console.warn('[WOB] Invalid haptic pattern:', pattern);
+      console.warn('[W2TD] Invalid haptic pattern:', pattern);
       return;
     }
 
@@ -1066,7 +1074,7 @@
         addLog(`Haptic pattern: ${intPattern.join(', ')}ms`, 'info');
       }
     } catch (e) {
-      console.error('[WOB] Haptic error:', e);
+      console.error('[W2TD] Haptic error:', e);
       addLog('Haptic failed: ' + e.message, 'error');
     }
   }

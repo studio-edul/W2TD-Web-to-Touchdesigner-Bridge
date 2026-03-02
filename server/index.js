@@ -54,7 +54,7 @@ httpServer.listen(HTTP_PORT, () => {
     }
   }
 
-  console.log(`\n=== WOB Dev Server ===`);
+  console.log(`\n=== W2TD Dev Server ===`);
   console.log(`Local:   http://localhost:${HTTP_PORT}`);
   console.log(`Network: http://${localIp}:${HTTP_PORT}`);
   console.log(`\nMobile에서 Network URL로 접속하세요.`);

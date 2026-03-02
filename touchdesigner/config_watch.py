@@ -11,7 +11,7 @@
 
 import json
 
-WOB_BASE = 'WOB'
+W2TD_BASE = 'W2TD'
 
 
 def _wob_base():
@@ -22,15 +22,15 @@ def _wob_base():
 	except NameError:
 		pass
 	for p in ('project1', 'project'):
-		w = op(f'{p}/{WOB_BASE}')
+		w = op(f'{p}/{W2TD_BASE}')
 		if w:
 			return w
 	root = op('/')
 	if root and root.children:
-		w = root.children[0].op(WOB_BASE)
+		w = root.children[0].op(W2TD_BASE)
 		if w:
 			return w
-	return op(WOB_BASE)
+	return op(W2TD_BASE)
 
 
 def _op(path_suffix, fallback_name=None):
@@ -48,7 +48,7 @@ DEBOUNCE_DELAY = 0.3  # seconds
 
 def _read_config():
 	"""Read settings from wob_config Table DAT (key | value)."""
-	cfg = _op('wob_config')
+	cfg = _op('w2td_config')
 	if cfg is None:
 		return {}
 	out = {}
@@ -94,13 +94,13 @@ def _do_broadcast():
 		return
 	cfg = _read_config()
 	msg = json.dumps(_build_config_msg(cfg))
-	slots = op('/').fetch('wob_client_slots', {})
+	slots = op('/').fetch('w2td_client_slots', {})
 	for addr in list(slots.keys()):
 		try:
 			web.webSocketSendText(addr, msg)
 		except Exception:
 			pass
-	print(f'[WOB] Config broadcast -> {len(slots)} clients')
+	print(f'[W2TD] Config broadcast -> {len(slots)} clients')
 
 
 def _debounced_broadcast():
@@ -128,7 +128,7 @@ def onTableChange(dat):
 	try:
 		_debounced_broadcast()
 	except Exception as e:
-		print(f'[WOB Config Watch] Table change error: {e}')
+		print(f'[W2TD Config Watch] Table change error: {e}')
 
 
 # Required stubs

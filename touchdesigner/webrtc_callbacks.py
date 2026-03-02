@@ -1,14 +1,14 @@
 """
-WOB WebRTC DAT Callbacks
+W2TD WebRTC DAT Callbacks
 ========================
 Set this file as the "Callbacks DAT" parameter of the WebRTC DAT named 'webrtc_dat'.
-Nodes are under WOB/webrtc_audio_container (relative path).
+Nodes are under W2TD/webrtc_audio_container (relative path).
 """
 
 import json
 
-WOB_BASE = 'WOB'
-WOB_AUDIO = f'{WOB_BASE}/webrtc_audio_container'
+W2TD_BASE = 'W2TD'
+W2TD_AUDIO = f'{W2TD_BASE}/webrtc_audio_container'
 
 
 def _wob_base():
@@ -19,15 +19,15 @@ def _wob_base():
 	except NameError:
 		pass
 	for p in ('project1', 'project'):
-		w = op(f'{p}/{WOB_BASE}')
+		w = op(f'{p}/{W2TD_BASE}')
 		if w:
 			return w
 	root = op('/')
 	if root and root.children:
-		w = root.children[0].op(WOB_BASE)
+		w = root.children[0].op(W2TD_BASE)
 		if w:
 			return w
-	return op(WOB_BASE)
+	return op(W2TD_BASE)
 
 
 def _op_web():
@@ -63,7 +63,7 @@ def _auto_select_audio_chop(webrtcDAT, connectionId):
 	"""When WebRTC connects, auto-set webrtc_audio_1 Connection."""
 	audio_chop = _op_audio_chop('webrtc_audio_1')
 	if audio_chop is None:
-		print('[WOB WebRTC] webrtc_audio_1 not found - create Audio Stream In CHOP named "webrtc_audio_1"')
+		print('[W2TD WebRTC] webrtc_audio_1 not found - create Audio Stream In CHOP named "webrtc_audio_1"')
 		return
 	# TD version differences: try all known Connection parameter names.
 	# Note: getTracks() is not a valid TD Python API — connection-only is sufficient.
@@ -78,34 +78,34 @@ def _auto_select_audio_chop(webrtcDAT, connectionId):
 				matched_par = par_name
 				break
 			except Exception as e:
-				print(f'[WOB WebRTC] Set {par_name} failed: {e}')
+				print(f'[W2TD WebRTC] Set {par_name} failed: {e}')
 	if not set_ok:
 		# Dump all par names containing webrtc/connect/track so we can find the correct one
 		try:
 			relevant = [p.name for p in audio_chop.pars()
 			            if any(k in p.name.lower() for k in ('webrtc', 'connect', 'track', 'stream'))]
-			print(f'[WOB WebRTC] webrtc_audio_1 relevant pars: {relevant}')
+			print(f'[W2TD WebRTC] webrtc_audio_1 relevant pars: {relevant}')
 		except Exception:
 			pass
-	print(f'[WOB WebRTC] webrtc_audio_1 conn={connectionId!r} type={type(connectionId).__name__} par={matched_par} ok={set_ok}')
+	print(f'[W2TD WebRTC] webrtc_audio_1 conn={connectionId!r} type={type(connectionId).__name__} par={matched_par} ok={set_ok}')
 
 
 def _send_to_client(connectionId, data):
 	"""Send a JSON message back to the mobile client via Web Server DAT."""
 	ws = _op_web()
 	if ws is None:
-		print('[WOB WebRTC] Web Server DAT not found - create web_server_dat under WOB')
+		print('[W2TD WebRTC] Web Server DAT not found - create web_server_dat under W2TD')
 		return
 
-	addr = op('/').fetch(f'wob_webrtc_addr_{connectionId}', None)
+	addr = op('/').fetch(f'w2td_webrtc_addr_{connectionId}', None)
 	if addr is None:
-		print(f'[WOB WebRTC] No client addr for connectionId={connectionId}')
+		print(f'[W2TD WebRTC] No client addr for connectionId={connectionId}')
 		return
 
 	try:
 		ws.webSocketSendText(addr, json.dumps(data))
 	except Exception as e:
-		print(f'[WOB WebRTC] Send failed for connectionId={connectionId}: {e}')
+		print(f'[W2TD WebRTC] Send failed for connectionId={connectionId}: {e}')
 
 
 def onOffer(webrtcDAT, connectionId, localSdp):
@@ -118,7 +118,7 @@ def onAnswer(webrtcDAT, connectionId, localSdp):
 	"""Called after createAnswer() — set local description and send answer to browser."""
 	webrtcDAT.setLocalDescription(connectionId, 'answer', localSdp, stereo=False)
 	_send_to_client(connectionId, {'type': 'webrtc_answer', 'sdp': localSdp})
-	print(f'[WOB WebRTC] Answer sent to connectionId={connectionId}')
+	print(f'[W2TD WebRTC] Answer sent to connectionId={connectionId}')
 
 
 def onIceCandidate(webrtcDAT, connectionId, candidate, lineIndex, sdpMid):
@@ -190,14 +190,14 @@ def _wt_remove_by_slot(slot):
 def _slot_for_conn_id(conn_id):
 	"""Find slot number for a given conn_id from stored mapping."""
 	for slot in range(1, 21):
-		stored = op('/').fetch(f'wob_webrtc_slot_to_uuid_{slot}', None)
+		stored = op('/').fetch(f'w2td_webrtc_slot_to_uuid_{slot}', None)
 		if stored is not None and str(stored) == str(conn_id):
 			return slot
 	return None
 
 def onConnectionStateChange(webrtcDAT, connectionId, state):
 	"""Called when the overall connection state changes."""
-	print(f'[WOB WebRTC] connectionId={connectionId} state={state}')
+	print(f'[W2TD WebRTC] connectionId={connectionId} state={state}')
 	if state in ('failed', 'closed', 'disconnected'):
 		_wt_remove(connectionId)
 		# conn_id로 못 찾았을 때 slot으로 한 번 더 시도
@@ -218,7 +218,7 @@ def onConnectionStateChange(webrtcDAT, connectionId, state):
 			try:
 				sync_mod.module.sync()
 			except Exception as e:
-				print(f'[WOB WebRTC] webrtc_table_sync failed: {e}')
+				print(f'[W2TD WebRTC] webrtc_table_sync failed: {e}')
 				_auto_select_audio_chop(webrtcDAT, connectionId)
 		else:
 			_auto_select_audio_chop(webrtcDAT, connectionId)
@@ -226,4 +226,4 @@ def onConnectionStateChange(webrtcDAT, connectionId, state):
 
 def onIceConnectionStateChange(webrtcDAT, connectionId, state):
 	"""Called when the ICE connection state changes."""
-	print(f'[WOB WebRTC] ICE connectionId={connectionId} iceState={state}')
+	print(f'[W2TD WebRTC] ICE connectionId={connectionId} iceState={state}')

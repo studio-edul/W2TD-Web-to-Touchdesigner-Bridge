@@ -75,7 +75,7 @@ server.listen(HTTP_PORT, () => {
     }
   }
 
-  console.log('\n=== WOB Dev Server (HTTPS) ===');
+  console.log('\n=== W2TD Dev Server (HTTPS) ===');
   console.log(`Local:   https://localhost:${HTTP_PORT} (인증서 경고 무시 가능)`);
   console.log(`Network: https://${localIp}:${HTTP_PORT}`);
   console.log('\niOS 센서 권한: 모바일에서 위 Network URL로 접속');

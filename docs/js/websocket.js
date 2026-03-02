@@ -1,5 +1,5 @@
 /**
- * WOB WebSocket Client
+ * W2TD WebSocket Client
  * Connects directly to TouchDesigner WebSocket DAT.
  * Sends flat JSON that TD can parse easily.
  */

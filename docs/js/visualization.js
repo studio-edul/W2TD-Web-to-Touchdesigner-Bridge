@@ -1,5 +1,5 @@
 /**
- * WOB Visualization Module
+ * W2TD Visualization Module
  * Canvas-based sparklines grouped by sensor type.
  * Channels within the same group (e.g. accel x/y/z) overlap on one row.
  */

@@ -1,5 +1,5 @@
 /**
- * WOB Sensor Module
+ * W2TD Sensor Module
  * Detects available sensors, handles permissions, collects and normalizes data.
  */
 const SensorModule = (() => {

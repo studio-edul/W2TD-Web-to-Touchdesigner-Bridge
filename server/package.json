@@ -1,6 +1,6 @@
 {
   "name": "wob-dev-server",
   "version": "1.0.0",
-  "description": "WOB Dev Server - serves frontend for local testing",
+  "description": "W2TD Dev Server - serves frontend for local testing",
   "main": "index.js"
 }

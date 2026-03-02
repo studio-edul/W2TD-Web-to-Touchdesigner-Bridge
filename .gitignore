@@ -19,6 +19,20 @@ development/
 # TouchDesigner
 touchdesigner/qr.png
 touchdesigner/Backup/
+touchdesigner/.venv/
+touchdesigner/__pycache__/
+touchdesigner/TDPyEnvManagerContext.yaml
+touchdesigner/example.50.toe
+touchdesigner/webrender_webrtc_test.html
+touchdesigner/webrender_ws_test.html
+
+# Python virtual environments
+.venv/
+venv/
+
+# Backup files
+*.backup
+.backup/
 
 # Python (소스 파일은 포함, 캐시/컴파일 파일만 제외)
 __pycache__/

@@ -7,7 +7,7 @@
 #
 # Runs only when value changes (more efficient than Every Frame polling).
 
-WOB_BASE = 'WOB'
+W2TD_BASE = 'W2TD'
 
 
 def _wob_base():
@@ -18,15 +18,15 @@ def _wob_base():
 	except NameError:
 		pass
 	for p in ('project1', 'project'):
-		w = op(f'{p}/{WOB_BASE}')
+		w = op(f'{p}/{W2TD_BASE}')
 		if w:
 			return w
 	root = op('/')
 	if root and root.children:
-		w = root.children[0].op(WOB_BASE)
+		w = root.children[0].op(W2TD_BASE)
 		if w:
 			return w
-	return op(WOB_BASE)
+	return op(W2TD_BASE)
 
 
 def _op_web():

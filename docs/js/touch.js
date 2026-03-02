@@ -1,5 +1,5 @@
 /**
- * WOB Touch Module
+ * W2TD Touch Module
  * Multi-touch tracking with coordinate normalization.
  */
 const TouchModule = (() => {

@@ -1,4 +1,4 @@
-# WOB — Web-OSC-Bridge
+# WOB — Web-to-TouchDesigner Bridge
 
 Stream mobile browser sensors (motion, orientation, touch, GPS) to TouchDesigner in real time via WebSocket.
 

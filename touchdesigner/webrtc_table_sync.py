@@ -2,11 +2,11 @@
 WOB webrtc_table -> Audio Stream In CHOP sync
 ============================================
 Called from DAT Execute DAT on webrtc_table change.
-Nodes under WOB/webrtc_audio_container (relative path).
+Nodes under W2TD/webrtc_audio_container (relative path).
 """
 
-WOB_BASE = 'WOB'
-WOB_AUDIO = f'{WOB_BASE}/webrtc_audio_container'
+W2TD_BASE = 'W2TD'
+W2TD_AUDIO = f'{W2TD_BASE}/webrtc_audio_container'
 
 
 def _wob_audio():
@@ -16,22 +16,22 @@ def _wob_audio():
 		if p:
 			if p.name == 'webrtc_audio_container':
 				return p
-			if p.name == 'WOB':
+			if p.name == 'W2TD':
 				c = p.op('webrtc_audio_container')
 				if c:
 					return c
 	except NameError:
 		pass
 	for proj in ('project1', 'project'):
-		c = op(f'{proj}/{WOB_AUDIO}')
+		c = op(f'{proj}/{W2TD_AUDIO}')
 		if c:
 			return c
 	root = op('/')
 	if root and root.children:
-		c = root.children[0].op(WOB_AUDIO)
+		c = root.children[0].op(W2TD_AUDIO)
 		if c:
 			return c
-	return op(WOB_AUDIO)
+	return op(W2TD_AUDIO)
 
 
 def _get_container():
@@ -171,7 +171,7 @@ def sync():
 		print('[WOB WebRTC Sync] webrtc_audio_container not found - create under WOB')
 		return
 	if merge_chop is None:
-		print('[WOB WebRTC Sync] webrtc_audio_merge not found - create Merge CHOP under WOB/webrtc_audio_container')
+		print('[WOB WebRTC Sync] webrtc_audio_merge not found - create Merge CHOP under W2TD/webrtc_audio_container')
 		return
 
 	rows = _read_rows()

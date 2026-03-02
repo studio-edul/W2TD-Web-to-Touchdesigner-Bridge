@@ -1,7 +1,7 @@
 {
   "name": "web-osc-bridge",
   "version": "1.0.0",
-  "description": "WOB - Web OSC Bridge: Browser sensor data to OSC/UDP bridge",
+  "description": "W2TD - Web OSC Bridge: Browser sensor data to OSC/UDP bridge",
   "scripts": {
     "dev": "node server/index.js",
     "dev:https": "node server/server-https.js",
