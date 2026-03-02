@@ -239,14 +239,22 @@ const WebRTCModule = (() => {
 
   /** Start canvas rotation: landscape srcStream → portrait canvas stream (w×h). */
   function _startPortraitCanvas(srcStream, w, h) {
+    const offscreen = 'position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;';
     const video = document.createElement('video');
     video.srcObject = srcStream;
     video.muted = true;
     video.playsInline = true;
+    video.autoplay = true;
+    video.setAttribute('style', offscreen);
+    document.body.appendChild(video);
     video.play().catch(() => {});
+
     const canvas = document.createElement('canvas');
     canvas.width = w;
     canvas.height = h;
+    canvas.setAttribute('style', offscreen);
+    document.body.appendChild(canvas);
+
     const ctx = canvas.getContext('2d');
     const state = { video, canvas, rafId: null, canvasStream: canvas.captureStream(30) };
     function draw() {
@@ -267,7 +275,8 @@ const WebRTCModule = (() => {
     if (!state) return;
     if (state.rafId) { cancelAnimationFrame(state.rafId); state.rafId = null; }
     if (state.canvasStream) { state.canvasStream.getTracks().forEach(t => t.stop()); }
-    if (state.video) { state.video.srcObject = null; }
+    if (state.video) { state.video.srcObject = null; if (state.video.parentNode) state.video.parentNode.removeChild(state.video); }
+    if (state.canvas && state.canvas.parentNode) state.canvas.parentNode.removeChild(state.canvas);
   }
 
   // ── Camera public API (Front / Rear) ───────────────────────────────────────
