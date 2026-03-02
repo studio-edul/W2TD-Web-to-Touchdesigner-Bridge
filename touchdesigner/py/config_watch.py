@@ -71,6 +71,14 @@ def _cfg_val(cfg, *keys, default=0):
 	return default
 
 
+def _cfg_str(cfg, *keys, default=''):
+	"""Try keys in order; return string."""
+	for k in keys:
+		if k in cfg and cfg[k] is not None:
+			return str(cfg[k]).strip()
+	return default
+
+
 def _build_config_msg(cfg):
 	"""Build config JSON dict — w2td_config 키 이름에 맞춤 (Samplerate, Wakelock, Motion, Geolocation, ...)."""
 	out = {
@@ -89,6 +97,8 @@ def _build_config_msg(cfg):
 		'audio_echo_cancellation': _cfg_val(cfg, 'Echocancellation', 'echocancellation', 'audio_echo_cancellation', default=0),
 		'audio_noise_suppression': _cfg_val(cfg, 'Noisesuppression', 'noisesuppression', 'audio_noise_suppression', default=0),
 		'audio_auto_gain': _cfg_val(cfg, 'Audiogain', 'audiogain', 'audio_auto_gain', default=0),
+		'camera_resolution': _cfg_str(cfg, 'Resolution', 'resolution', 'camera_resolution', default='Non-Commercial'),
+		'camera_screenmode': _cfg_str(cfg, 'Screenmode', 'screenmode', 'camera_screenmode', default='Portrait'),
 	}
 	ice_srv = (cfg.get('ice_servers') or cfg.get('Ice_servers') or '').strip()
 	if ice_srv:

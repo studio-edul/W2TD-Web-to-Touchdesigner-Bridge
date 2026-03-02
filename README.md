@@ -58,6 +58,8 @@ Create a Table DAT named `w2td_config` to override defaults without editing code
 | `ice_servers` | _(optional)_ | Custom TURN server URL |
 | `ice_username` | _(optional)_ | TURN username |
 | `ice_credential` | _(optional)_ | TURN credential |
+| `Resolution` | `Non-Commercial` | Camera: `Non-Commercial` (540×960), `FHD` (1920×1080), `4K` (3840×2160) |
+| `Screenmode` | `Portrait` | Camera: `Portrait` (세로), `Landscape` (가로) |
 
 #### w2td_init.py (Execute DAT)
 

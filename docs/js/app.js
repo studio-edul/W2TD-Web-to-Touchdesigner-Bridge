@@ -22,6 +22,8 @@ const W2TD_VERSION = '1.0.0';
   let audioAutoGain = false;
   let iceServersFromConfig = null;   // from w2td_config ice_servers (JSON)
   let iceTransportPolicyFromConfig = null;  // 'relay' | 'all' | null
+  let cameraResolutionFromConfig = 'Non-Commercial';  // Non-Commercial | FHD | 4K
+  let cameraScreenmodeFromConfig = 'Portrait';        // Portrait | Landscape
   let showTouchPoints = true;
 
   function _isTunnelConnection() {
@@ -203,6 +205,29 @@ const W2TD_VERSION = '1.0.0';
       showTouchPoints = !!parseInt(cfg.show_dots);
       updateTouchPointsToggleUI();
     }
+    let cameraConfigChanged = false;
+    if (cfg.camera_resolution != null) {
+      const v = String(cfg.camera_resolution).trim();
+      if (['Non-Commercial', 'FHD', '4K'].includes(v) && v !== cameraResolutionFromConfig) {
+        cameraResolutionFromConfig = v;
+        cameraConfigChanged = true;
+      }
+    }
+    if (cfg.camera_screenmode != null) {
+      const v = String(cfg.camera_screenmode).trim();
+      if (['Portrait', 'Landscape'].includes(v) && v !== cameraScreenmodeFromConfig) {
+        cameraScreenmodeFromConfig = v;
+        cameraConfigChanged = true;
+      }
+    }
+    if (cameraConfigChanged && (cameraRearEnabled || cameraFrontEnabled) && WebRTCModule.isCamPCActive()) {
+      WebRTCModule.stopCamera();
+      (async () => {
+        if (cameraRearEnabled) await WebRTCModule.acquireCamera('environment', _cameraOpts());
+        if (cameraFrontEnabled) await WebRTCModule.acquireCamera('user', _cameraOpts());
+        if (broadcasting && WSClient.isConnected()) await _maybeStartCamera();
+      })();
+    }
   }
 
   function _webrtcStartOpts(opts) {
@@ -213,7 +238,13 @@ const W2TD_VERSION = '1.0.0';
     if (iceTransportPolicyFromConfig) {
       o.iceTransportPolicy = iceTransportPolicyFromConfig;
     }
+    o.cameraResolution = cameraResolutionFromConfig;
+    o.cameraScreenmode = cameraScreenmodeFromConfig;
     return o;
+  }
+
+  function _cameraOpts() {
+    return { cameraResolution: cameraResolutionFromConfig, cameraScreenmode: cameraScreenmodeFromConfig };
   }
 
   // ── Dev Mode ─────────────────────────────────────────────────────────────
@@ -685,7 +716,7 @@ const W2TD_VERSION = '1.0.0';
     }
 
     if (cameraRearEnabled && !WebRTCModule.isCameraRearActive()) {
-      const ok = await WebRTCModule.acquireCamera('environment');
+      const ok = await WebRTCModule.acquireCamera('environment', _cameraOpts());
       if (!ok) {
         cameraRearEnabled = false;
         const err = WebRTCModule.getLastError();
@@ -695,7 +726,7 @@ const W2TD_VERSION = '1.0.0';
       }
     }
     if (cameraFrontEnabled && !WebRTCModule.isCameraFrontActive()) {
-      const ok = await WebRTCModule.acquireCamera('user');
+      const ok = await WebRTCModule.acquireCamera('user', _cameraOpts());
       if (!ok) {
         cameraFrontEnabled = false;
         const err = WebRTCModule.getLastError();
@@ -1139,7 +1170,7 @@ const W2TD_VERSION = '1.0.0';
       renderSensorList();
       return;
     }
-    const ok = await WebRTCModule.acquireCamera('environment');
+    const ok = await WebRTCModule.acquireCamera('environment', _cameraOpts());
     if (ok === false) {
       cameraRearEnabled = false;
       const err = WebRTCModule.getLastError();
@@ -1173,7 +1204,7 @@ const W2TD_VERSION = '1.0.0';
       renderSensorList();
       return;
     }
-    const ok = await WebRTCModule.acquireCamera('user');
+    const ok = await WebRTCModule.acquireCamera('user', _cameraOpts());
     if (ok === false) {
       cameraFrontEnabled = false;
       const err = WebRTCModule.getLastError();
@@ -1272,7 +1303,7 @@ const W2TD_VERSION = '1.0.0';
       if (cameraRearEnabled || cameraFrontEnabled) {
         try {
           const mode = cameraRearEnabled ? 'environment' : 'user';
-          const camOk = await WebRTCModule.acquireCamera(mode);
+          const camOk = await WebRTCModule.acquireCamera(mode, _cameraOpts());
           if (camOk) {
             results.camera = true;
             addLog('Camera permission granted', 'info');

@@ -387,6 +387,14 @@ def _config_val(cfg, *keys, default=0):
 	return default
 
 
+def _config_str(cfg, *keys, default=''):
+	"""w2td_config에서 키 시도 후 문자열 반환."""
+	for k in keys:
+		if k in cfg and cfg[k] is not None:
+			return str(cfg[k]).strip()
+	return default
+
+
 def _config_msg(cfg):
 	"""Build config JSON dict from w2td_config (Samplerate, Wakelock, Motion, Geolocation, ...)."""
 	out = {
@@ -405,6 +413,8 @@ def _config_msg(cfg):
 		'audio_echo_cancellation': _config_val(cfg, 'Echocancellation', 'echocancellation', 'audio_echo_cancellation', default=0),
 		'audio_noise_suppression': _config_val(cfg, 'Noisesuppression', 'noisesuppression', 'audio_noise_suppression', default=0),
 		'audio_auto_gain':    _config_val(cfg, 'Audiogain', 'audiogain', 'audio_auto_gain', default=0),
+		'camera_resolution':  _config_str(cfg, 'Resolution', 'resolution', 'camera_resolution', default='Non-Commercial'),
+		'camera_screenmode':  _config_str(cfg, 'Screenmode', 'screenmode', 'camera_screenmode', default='Portrait'),
 	}
 	ice_srv = (cfg.get('ice_servers') or cfg.get('Ice_servers') or '').strip()
 	if ice_srv:

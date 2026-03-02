@@ -1,4 +1,4 @@
-﻿import socket
+import socket
 import os
 import subprocess
 import sys
@@ -272,12 +272,44 @@ def generate():
 	host = url.replace('https://', '').replace('http://', '').strip()
 	GITHUB_PAGES_URL = 'https://studio-edul.github.io/Integrated-Web-to-TouchDesigner-Bridge/'
 	qr_url = GITHUB_PAGES_URL + '?td=' + host
-	w2td = op('../W2TD') or _w2td_base()
-	if w2td and hasattr(w2td.par, 'url'):
-		try:
-			w2td.par.url = qr_url
-		except Exception as e:
-			print(f'[W2TD] 에러 W2TD.par.url set failed: {e}')
+	# Find W2TD base comp — try multiple paths (Execute DAT may be inside or beside W2TD)
+	w2td = None
+	try:
+		p = parent(1)
+		if p and p.name == W2TD_BASE:
+			w2td = p
+		elif p:
+			w2td = p.op(W2TD_BASE)
+	except NameError:
+		pass
+	if w2td is None:
+		w2td = op(f'project1/{W2TD_BASE}') or op(f'project/{W2TD_BASE}') or op(W2TD_BASE) or _w2td_base()
+	if w2td:
+		print(f'[W2TD] Base comp found: {w2td.path}')
+	url_set = False
+	if w2td:
+		for par_name in ('url', 'Url', 'loadurl', 'Loadurl'):
+			if hasattr(w2td.par, par_name):
+				try:
+					setattr(w2td.par, par_name, qr_url)
+					url_set = True
+					print(f'[W2TD] Base comp URL set via par.{par_name}')
+					break
+				except Exception as e:
+					print(f'[W2TD] 에러 par.{par_name} set failed: {e}')
+		if not url_set:
+			for child_name in ('url_text', 'w2td_url_text', 'qr_url'):
+				txt = w2td.op(child_name)
+				if txt is not None and hasattr(txt, 'text'):
+					try:
+						txt.text = qr_url
+						url_set = True
+						print(f'[W2TD] URL set via {child_name} Text DAT')
+						break
+					except Exception as e:
+						print(f'[W2TD] 에러 {child_name} set failed: {e}')
+		if not url_set:
+			print('[W2TD] URL not set to base comp — add Custom Parameter "url" (String) to W2TD, or create Text DAT named url_text')
 	print(f'[W2TD] QR URL: {qr_url}')
 
 	# 3. Generate QR code
