@@ -398,21 +398,27 @@ def _config_str(cfg, *keys, default=''):
 
 
 def _get_cam_resolution_dims(cfg=None):
-	"""Read Resolution, Screenmode from w2td_config and return (w, h). Same logic as mobile webrtc.js — Portrait=tall, Landscape=wide."""
+	"""Read Resolution from w2td_config and return (w, h). Synced with webrtc.js. Orientation in TD."""
 	if cfg is None:
 		cfg = _read_config()
 	res = _config_str(cfg, 'Resolution', 'resolution', default='Non-Commercial')
-	mode = (_config_str(cfg, 'Screenmode', 'screenmode', default='Portrait') or '').strip().lower()
-	# Synced with webrtc.js: portrait=tall(vertical), landscape=wide(horizontal) — natural mapping
 	presets = {
-		'Non-Commercial': {'portrait': (540, 960), 'landscape': (960, 540)},
-		'FHD': {'portrait': (1080, 1920), 'landscape': (1920, 1080)},
-		'4K': {'portrait': (2160, 3840), 'landscape': (3840, 2160)},
+		'Non-Commercial': (540, 960),
+		'FHD': (1080, 1920),
+		'4K': (2160, 3840),
 	}
-	p = presets.get(res, presets['Non-Commercial'])
-	# Swap: config Landscape → Portrait display (540x960), config Portrait → Landscape display (960x540)
-	w, h = (p['portrait'] if mode == 'landscape' else p['landscape'])
+	w, h = presets.get(res, presets['Non-Commercial'])
 	return (int(w), int(h))
+
+
+def _refresh_cam_top_resolutions(cfg):
+	"""Refresh web_render_top resolutions from config — call when config is sent (fallback if config_watch not set up)."""
+	try:
+		cw = _op('config_watch') or op('config_watch')
+		if cw and hasattr(cw, 'module') and hasattr(cw.module, '_update_cam_top_resolutions'):
+			cw.module._update_cam_top_resolutions(cfg)
+	except Exception:
+		pass
 
 
 def _config_msg(cfg):
@@ -434,7 +440,6 @@ def _config_msg(cfg):
 		'audio_noise_suppression': _config_val(cfg, 'Noisesuppression', 'noisesuppression', 'audio_noise_suppression', default=0),
 		'audio_auto_gain':    _config_val(cfg, 'Audiogain', 'audiogain', 'audio_auto_gain', default=0),
 		'camera_resolution':  _config_str(cfg, 'Resolution', 'resolution', 'camera_resolution', default='Non-Commercial'),
-		'camera_screenmode':  _config_str(cfg, 'Screenmode', 'screenmode', 'camera_screenmode', default='Portrait'),
 	}
 	ice_srv = (cfg.get('ice_servers') or cfg.get('Ice_servers') or '').strip()
 	if ice_srv:
@@ -889,6 +894,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			webServerDAT.webSocketSendText(client, json.dumps(_config_msg(cfg)))
 		except Exception:
 			pass
+		_refresh_cam_top_resolutions(cfg)
 
 	op('/').store(f'w2td_last_seen_{slot}', time.time())
 
@@ -1057,6 +1063,14 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			}))
 		except Exception as e:
 			print(f'[W2TD Cam] Error webrtc_ice_cam relay error: {e}')
+
+	elif msg_type == 'config_request':
+		cfg = _read_config()
+		try:
+			webServerDAT.webSocketSendText(client, json.dumps(_config_msg(cfg)))
+		except Exception:
+			pass
+		_refresh_cam_top_resolutions(cfg)
 
 	elif msg_type == 'ping':
 		# Heartbeat ping from mobile → respond with pong

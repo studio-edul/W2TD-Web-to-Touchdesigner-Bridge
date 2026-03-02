@@ -23,7 +23,6 @@ const W2TD_VERSION = '1.0.0';
   let iceServersFromConfig = null;   // from w2td_config ice_servers (JSON)
   let iceTransportPolicyFromConfig = null;  // 'relay' | 'all' | null
   let cameraResolutionFromConfig = 'Non-Commercial';  // Non-Commercial | FHD | 4K
-  let cameraScreenmodeFromConfig = 'Portrait';        // Portrait | Landscape
   let showTouchPoints = true;
 
   function _isTunnelConnection() {
@@ -213,13 +212,6 @@ const W2TD_VERSION = '1.0.0';
         cameraConfigChanged = true;
       }
     }
-    if (cfg.camera_screenmode != null) {
-      const v = String(cfg.camera_screenmode).trim();
-      if (['Portrait', 'Landscape'].includes(v) && v !== cameraScreenmodeFromConfig) {
-        cameraScreenmodeFromConfig = v;
-        cameraConfigChanged = true;
-      }
-    }
     if (cameraConfigChanged && (cameraRearEnabled || cameraFrontEnabled) && WebRTCModule.isCamPCActive()) {
       WebRTCModule.stopCamera();
       (async () => {
@@ -239,12 +231,11 @@ const W2TD_VERSION = '1.0.0';
       o.iceTransportPolicy = iceTransportPolicyFromConfig;
     }
     o.cameraResolution = cameraResolutionFromConfig;
-    o.cameraScreenmode = cameraScreenmodeFromConfig;
     return o;
   }
 
   function _cameraOpts() {
-    return { cameraResolution: cameraResolutionFromConfig, cameraScreenmode: cameraScreenmodeFromConfig };
+    return { cameraResolution: cameraResolutionFromConfig };
   }
 
   // ── Dev Mode ─────────────────────────────────────────────────────────────

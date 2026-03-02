@@ -5,22 +5,18 @@
  * Signaling for both uses the existing WebSocket (TD Web Server DAT).
  */
 const WebRTCModule = (() => {
-  // Portrait = tall(h>w), Landscape = wide(w>h)
+  // Resolution only — orientation/rotation handled in TD
   const RESOLUTION_PRESETS = {
-    'Non-Commercial': { portrait: { w: 540, h: 960 }, landscape: { w: 960, h: 540 }, maxBitrate: 1500000 },
-    'FHD':             { portrait: { w: 1080, h: 1920 }, landscape: { w: 1920, h: 1080 }, maxBitrate: 4000000 },
-    '4K':              { portrait: { w: 2160, h: 3840 }, landscape: { w: 3840, h: 2160 }, maxBitrate: 8000000 },
+    'Non-Commercial': { w: 540, h: 960, maxBitrate: 1500000 },
+    'FHD':             { w: 1080, h: 1920, maxBitrate: 4000000 },
+    '4K':              { w: 2160, h: 3840, maxBitrate: 8000000 },
   };
   const DEFAULT_RESOLUTION = 'Non-Commercial';
-  const DEFAULT_SCREENMODE = 'Portrait';
 
-  function _getCameraResolution(resolution, screenmode) {
+  function _getCameraResolution(resolution) {
     const res = (resolution || DEFAULT_RESOLUTION).trim();
     const preset = RESOLUTION_PRESETS[res] || RESOLUTION_PRESETS[DEFAULT_RESOLUTION];
-    const mode = (screenmode || DEFAULT_SCREENMODE).trim().toLowerCase();
-    // Swap: config Landscape → capture portrait (540x960), config Portrait → capture landscape (960x540) — matches TD display
-    const dims = (mode === 'landscape' ? preset.portrait : preset.landscape);
-    return { width: dims.w, height: dims.h, maxBitrate: preset.maxBitrate };
+    return { width: preset.w, height: preset.h, maxBitrate: preset.maxBitrate };
   }
 
   const DEFAULT_ICE_SERVERS = [
@@ -238,7 +234,7 @@ const WebRTCModule = (() => {
   }
 
   /** Acquire camera stream — facingMode: 'user' (front) or 'environment' (rear).
-   * opts: { cameraResolution, cameraScreenmode } from config */
+   * opts: { cameraResolution } from config */
   async function acquireCamera(facingMode = 'environment', opts = {}) {
     _lastError = null;
     const isFront = facingMode === 'user';
@@ -246,7 +242,7 @@ const WebRTCModule = (() => {
     if (stream && stream.getVideoTracks().length > 0) return true;
     if (stream) { stream.getTracks().forEach(t => t.stop()); }
     if (isFront) camFrontStream = null; else camRearStream = null;
-    const res = _getCameraResolution(opts.cameraResolution, opts.cameraScreenmode);
+    const res = _getCameraResolution(opts.cameraResolution);
     const maxDim = Math.max(res.width, res.height);
     try {
       const s = await navigator.mediaDevices.getUserMedia({
@@ -270,7 +266,7 @@ const WebRTCModule = (() => {
   }
 
   /** Start camera stream (front or rear) and send offer to TD.
-   * opts: { cameraResolution, cameraScreenmode, iceServers, iceTransportPolicy } */
+   * opts: { cameraResolution, iceServers, iceTransportPolicy } */
   async function startCamera(facingMode = 'environment', opts = {}) {
     _lastError = null;
     const isFront = facingMode === 'user';
@@ -288,7 +284,7 @@ const WebRTCModule = (() => {
     if (!stream || stream.getVideoTracks().length === 0) {
       if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
       if (isFront) camFrontStream = null; else camRearStream = null;
-      const res = _getCameraResolution(opts.cameraResolution, opts.cameraScreenmode);
+      const res = _getCameraResolution(opts.cameraResolution);
       const maxDim = Math.max(res.width, res.height);
       try {
         stream = await navigator.mediaDevices.getUserMedia({
@@ -353,7 +349,7 @@ const WebRTCModule = (() => {
     const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
     if (!sender) return;
     try {
-      const res = _getCameraResolution(opts.cameraResolution, opts.cameraScreenmode);
+      const res = _getCameraResolution(opts.cameraResolution);
       const params = sender.getParameters();
       params.encodings = params.encodings || [{}];
       const track = sender.track;

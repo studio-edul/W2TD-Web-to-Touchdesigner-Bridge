@@ -145,20 +145,16 @@ def _cfg_str(cfg, *keys, default=''):
 
 
 def _get_cam_resolution_dims(cfg=None):
-	"""Read Resolution, Screenmode from w2td_config and return (w, h). Synced with webrtc.js and callbacks.py."""
+	"""Read Resolution from w2td_config and return (w, h). Synced with webrtc.js. Orientation in TD."""
 	if cfg is None:
 		cfg = _read_config()
 	res = _cfg_str(cfg, 'Resolution', 'resolution', default='Non-Commercial')
-	mode = (_cfg_str(cfg, 'Screenmode', 'screenmode', default='Portrait') or '').strip().lower()
-	# Synced with webrtc.js: portrait=tall(vertical), landscape=wide(horizontal) — natural mapping
 	presets = {
-		'Non-Commercial': {'portrait': (540, 960), 'landscape': (960, 540)},
-		'FHD': {'portrait': (1080, 1920), 'landscape': (1920, 1080)},
-		'4K': {'portrait': (2160, 3840), 'landscape': (3840, 2160)},
+		'Non-Commercial': (540, 960),
+		'FHD': (1080, 1920),
+		'4K': (2160, 3840),
 	}
-	p = presets.get(res, presets['Non-Commercial'])
-	# Swap: config Landscape → Portrait display (540x960), config Portrait → Landscape display (960x540)
-	w, h = (p['portrait'] if mode == 'landscape' else p['landscape'])
+	w, h = presets.get(res, presets['Non-Commercial'])
 	return (int(w), int(h))
 
 
@@ -219,8 +215,7 @@ def sync(table_dat=None):
 				continue
 		slot = slot_list[i] if i < len(slot_list) else (i + 1)
 		cw, ch = _get_cam_resolution_dims(cfg)
-		mode = (_cfg_str(cfg, 'Screenmode', 'screenmode', default='Portrait') or 'Portrait').strip().lower()
-		url = f'{base_url}/cam_receiver.html?port={port}&slot={slot}&mode={mode}'
+		url = f'{base_url}/cam_receiver.html?port={port}&slot={slot}'
 		if tls:
 			url += '&tls=1'
 		try:
@@ -260,7 +255,7 @@ def sync(table_dat=None):
 		if tuple(slots) != prev:
 			print(f'[Cam Render Sync] {len(slots)} web render TOPs synced (slots {slots})')
 			op('/').store('w2td_cam_render_last_slots', tuple(slots))
-		# layout1 resolution: horizontal layout based on w2td_config Resolution/Screenmode
+		# layout1 resolution: horizontal layout based on w2td_config Resolution
 		try:
 			layout1 = (container.op('layout1') if container else None) or (_w2td_video().op('layout1') if _w2td_video() else None)
 			if not layout1 and _w2td_video() and _w2td_video().parent():
