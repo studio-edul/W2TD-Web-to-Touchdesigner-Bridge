@@ -1,6 +1,6 @@
 """
-WOB webrtc_table -> Audio Stream In CHOP sync
-============================================
+W2TD webrtc_table -> Audio Stream In CHOP sync
+==============================================
 Called from DAT Execute DAT on webrtc_table change.
 Nodes under W2TD/webrtc_audio_container (relative path).
 """
@@ -9,8 +9,8 @@ W2TD_BASE = 'W2TD'
 W2TD_AUDIO = f'{W2TD_BASE}/webrtc_audio_container'
 
 
-def _wob_audio():
-	"""Always return webrtc_audio_container (not WOB)."""
+def _w2td_audio():
+	"""Always return webrtc_audio_container."""
 	try:
 		p = parent(1)
 		if p:
@@ -36,7 +36,7 @@ def _wob_audio():
 
 def _get_container():
 	"""ChopNetwork for creating Audio CHOPs (must have create()). Excludes outCHOP."""
-	c = _wob_audio()
+	c = _w2td_audio()
 	if c is None:
 		return None
 	chopnet = c.op('chopnet')
@@ -49,7 +49,7 @@ def _get_container():
 
 
 def _get_merge():
-	c = _wob_audio()
+	c = _w2td_audio()
 	if c:
 		m = c.op('webrtc_audio_merge')
 		if m:
@@ -58,7 +58,7 @@ def _get_merge():
 
 
 def _get_rename():
-	c = _wob_audio()
+	c = _w2td_audio()
 	if c:
 		for name in ('rename1', 'rename1dldi'):
 			r = c.op(name)
@@ -68,7 +68,7 @@ def _get_rename():
 
 
 def _get_webrtc():
-	c = _wob_audio()
+	c = _w2td_audio()
 	if c:
 		w = c.op('webrtc_dat')
 		if w:
@@ -77,7 +77,7 @@ def _get_webrtc():
 
 
 def _get_table():
-	c = _wob_audio()
+	c = _w2td_audio()
 	if c:
 		t = c.op('webrtc_table')
 		if t:
@@ -85,12 +85,19 @@ def _get_table():
 	return op('webrtc_table')
 
 
+def _sanitize_channel_name(s):
+	"""CHOP 채널명으로 사용 가능하도록 공백·특수문자 정리."""
+	if not s:
+		return ''
+	return ''.join(c if c.isalnum() or c in '_-' else '_' for c in str(s).strip())[:64] or 'ch'
+
+
 def _read_rows():
-	"""webrtc_table에서 (slot, conn_id) 목록. Row 0=헤더 제외, state=connected만, slot당 1개."""
+	"""webrtc_table에서 (slot, conn_id, channel_name) 목록. Row 0=헤더 제외, state=connected만, slot당 1개."""
 	t = _get_table()
 	if t is None or t.numRows < 2:
 		return []
-	print(f'[WOB WebRTC Sync] webrtc_table numRows={t.numRows}')
+	print(f'[W2TD WebRTC Sync] webrtc_table numRows={t.numRows}')
 	seen = {}
 	for r in range(1, t.numRows):
 		try:
@@ -100,12 +107,18 @@ def _read_rows():
 			if '-' not in conn_id or len(conn_id) < 10:
 				continue
 			state = str(t[r, 'state']).strip().lower()
-			if state != 'connected':
+			# connecting도 포함 (state 업데이트가 지연될 수 있어 chop이 삭제되는 것 방지)
+			if state not in ('connected', 'connecting'):
 				continue
 			slot = int(t[r, 'slot'])
 			if slot < 1:
 				continue
-			seen[slot] = (slot, conn_id)
+			try:
+				name = str(t[r, 'name']).strip()
+			except Exception:
+				name = ''
+			channel_name = _sanitize_channel_name(name) or f'slot{slot}'
+			seen[slot] = (slot, conn_id, channel_name)
 		except (ValueError, TypeError):
 			pass
 	rows = sorted(seen.values(), key=lambda x: x[0])
@@ -140,7 +153,7 @@ def _set_audio_chop_params(chop, conn_id):
 				setattr(chop.par, par_name, conn_id)
 				break
 			except Exception as e:
-				print(f'[WOB WebRTC Sync] Set {par_name} failed: {e}')
+				print(f'[W2TD WebRTC Sync] 에러 Set {par_name} failed: {e}')
 	# WebRTC Track (mono: select first/only track)
 	for par_name in ('webrtctrack', 'Webrtctrack', 'track', 'Track'):
 		if hasattr(chop.par, par_name):
@@ -168,10 +181,10 @@ def sync():
 	container = _get_container()
 	merge_chop = _get_merge()
 	if container is None:
-		print('[WOB WebRTC Sync] webrtc_audio_container not found - create under WOB')
+		print('[W2TD WebRTC Sync] 에러 webrtc_audio_container not found - create under W2TD')
 		return
 	if merge_chop is None:
-		print('[WOB WebRTC Sync] webrtc_audio_merge not found - create Merge CHOP under W2TD/webrtc_audio_container')
+		print('[W2TD WebRTC Sync] 에러 webrtc_audio_merge not found - create Merge CHOP under W2TD/webrtc_audio_container')
 		return
 
 	rows = _read_rows()
@@ -187,7 +200,7 @@ def sync():
 		for child in container.children:
 			if child.name.startswith('webrtc_audio_') and child.name[14:].isdigit():
 				existing[child.name] = child
-	wob_audio = _wob_audio()
+	wob_audio = _w2td_audio()
 	if not existing and wob_audio:
 		for chop in wob_audio.ops('chopnet/webrtc_audio_*'):
 			if chop.name.startswith('webrtc_audio_') and chop.name[14:].isdigit():
@@ -204,28 +217,28 @@ def sync():
 	for name in to_delete:
 		try:
 			existing[name].destroy()
-			print(f'[WOB WebRTC Sync] Destroyed {name}')
+			print(f'[W2TD WebRTC Sync] Destroyed {name}')
 		except Exception as e:
-			print(f'[WOB WebRTC Sync] Destroy {name} failed: {e}')
+			print(f'[W2TD WebRTC Sync] 에러 Destroy {name} failed: {e}')
 
-	# 생성: 노드 없을 때만 생성 (container.op으로 존재 확인), x 동일, y는 숫자 커질수록 아래로
-	NODE_OFFSET_Y = 150
+	# 생성: 노드 없을 때만 생성 (container.op으로 존재 확인), x 동일, y는 숫자 커질수록 위로 (-)
+	NODE_OFFSET_Y = 100
 	for i, name in enumerate(target_names):
 		chop = existing.get(name) or container.op(name)
 		if chop is None:
 			try:
 				chop = container.create('audiostreaminCHOP', name)
-				print(f'[WOB WebRTC Sync] Created {name}')
+				print(f'[W2TD WebRTC Sync] Created {name}')
 			except Exception as e:
-				print(f'[WOB WebRTC Sync] Create {name} failed: {e}')
+				print(f'[W2TD WebRTC Sync] 에러 Create {name} failed: {e}')
 				continue
 		try:
 			chop.nodeX = 0
-			chop.nodeY = i * NODE_OFFSET_Y
+			chop.nodeY = -i * NODE_OFFSET_Y
 		except Exception:
 			pass
 		if i < len(rows):
-			_, conn_id = rows[i]
+			_, conn_id, _ = rows[i]
 			_set_audio_chop_params(chop, conn_id)
 
 	# Merge CHOP 입력 연결 (setInputs 사용)
@@ -246,7 +259,7 @@ def sync():
 					except Exception:
 						pass
 
-	# Rename CHOP: renameto 파라미터에 각 순서별 conn_id 설정
+	# Rename CHOP: renameto 파라미터에 각 순서별 name (기기명) 설정
 	rename_chop = _get_rename()
 	if rename_chop:
 		try:
@@ -254,8 +267,8 @@ def sync():
 		except Exception:
 			pass
 		if rows:
-			# renameto: 공백으로 구분된 conn_id 목록 (순서대로 채널 이름)
-			renameto_val = ' '.join(conn_id for _, conn_id in rows)
+			# renameto: 공백으로 구분된 채널명 목록 (기기 name 사용)
+			renameto_val = ' '.join(channel_name for _, _, channel_name in rows)
 			for par_name in ('renameto', 'Renameto', 'commonrenameto'):
 				if hasattr(rename_chop.par, par_name):
 					try:
@@ -273,9 +286,9 @@ def sync():
 						pass
 
 	if rows:
-		print(f'[WOB WebRTC Sync] {len(rows)} audio chops synced')
+		print(f'[W2TD WebRTC Sync] {len(rows)} audio chops synced')
 	else:
-		print('[WOB WebRTC Sync] No connections - all audio chops removed')
+		print('[W2TD WebRTC Sync] No connections - all audio chops removed')
 
 
 def onTableChange(dat, prevDAT, info):

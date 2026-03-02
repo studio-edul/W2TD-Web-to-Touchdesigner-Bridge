@@ -57,7 +57,6 @@ const W2TD_VERSION = '1.0.0';
     els.vizContainer = $('viz-container');
     els.vizCanvas = $('viz-canvas');
     els.broadcastStatus = $('broadcast-status');
-    els.btnTrigger = $('btn-trigger');
     els.touchPad = $('touch-pad');
     els.touchCanvas = $('touch-canvas');
     els.btnExitTouch = $('btn-exit-touch');
@@ -236,10 +235,20 @@ const W2TD_VERSION = '1.0.0';
         if (els.btnToggleTouchPoints) {
           els.btnToggleTouchPoints.classList.add('hidden');
         }
+        _disableTouchLock();
         TouchModule.destroy();
       }
       els.mainUI.classList.remove('hidden');
       _initViz();
+      // Sync Enable Sensors button to current sensor/broadcast state
+      // (sensors may already be active from user mode)
+      if (SensorModule.isEnabled()) {
+        els.btnEnableSensors.textContent = SensorModule.isSimulating()
+          ? 'Deactivate (Simulating)' : 'Deactivate Sensors';
+        els.btnEnableSensors.classList.add('btn-active');
+        startVizLoop();
+      }
+      renderSensorList();
     } else {
       // Minimal mode: hide main UI entirely, go straight to touch pad
       if (els.sensorPanel) els.sensorPanel.style.display = 'none';
@@ -368,18 +377,6 @@ const W2TD_VERSION = '1.0.0';
     if (els.btnToggleTouchPoints) {
       els.btnToggleTouchPoints.addEventListener('click', toggleTouchPoints);
     }
-    els.btnTrigger.addEventListener('pointerdown', () => {
-      els.btnTrigger.classList.add('triggered');
-      sendTrigger(1);
-    });
-    els.btnTrigger.addEventListener('pointerup', () => {
-      els.btnTrigger.classList.remove('triggered');
-      sendTrigger(0);
-    });
-    els.btnTrigger.addEventListener('pointercancel', () => {
-      els.btnTrigger.classList.remove('triggered');
-      sendTrigger(0);
-    });
     // Mic state changes → re-render sensor list
     WebRTCModule.onStateChange((state) => {
       renderSensorList();
@@ -550,6 +547,7 @@ const W2TD_VERSION = '1.0.0';
         else if (msg.type === 'webrtc_ice')        WebRTCModule.handleIce(msg);
         else if (msg.type === 'webrtc_answer_cam') WebRTCModule.handleCameraAnswer(msg.sdp, msg.camType);
         else if (msg.type === 'webrtc_ice_cam')    WebRTCModule.handleCameraIce(msg);
+        else if (msg.type === 'cam_receiver_ready') _maybeStartCamera();
       },
         onHaptic: (data) => {
           handleHapticFeedback(data);
@@ -657,7 +655,7 @@ const W2TD_VERSION = '1.0.0';
       }
     }
 
-    if (navigator.mediaDevices?.getUserMedia && !cameraRearEnabled && !cameraFrontEnabled) {
+    if (navigator.mediaDevices?.getUserMedia) {
       await WebRTCModule.requestCameraPermission();
     }
 
@@ -766,6 +764,7 @@ const W2TD_VERSION = '1.0.0';
   async function _startDataBroadcast() {
     if (!WSClient.isConnected()) return;
     if (!SensorModule.isEnabled()) return;
+    if (broadcasting) return; // already running — avoid duplicate intervals
 
     showBroadcastStatus('', false);
     broadcasting = true;
@@ -795,11 +794,6 @@ const W2TD_VERSION = '1.0.0';
     renderSensorList();
   }
 
-  function sendTrigger(value) {
-    if (!WSClient.isConnected()) return;
-    WSClient.send({ type: 'trigger', value: value });
-    if (value) haptic(50);
-  }
 
   function handleTouchData(snapshot) {
     if (broadcasting && WSClient.isConnected() && SensorModule.getSelected().touch) {

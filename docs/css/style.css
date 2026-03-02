@@ -289,24 +289,6 @@ input[type="checkbox"] {
   pointer-events: none;
 }
 
-.btn-trigger {
-  flex-shrink: 0;
-  padding: 18px 24px;
-  font-size: 18px;
-  background: #555;
-  color: #fff;
-  border-radius: 12px;
-  transition: background 0.1s;
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-touch-callout: none;
-  -webkit-user-drag: none;
-}
-.btn-trigger.triggered {
-  background: #fff;
-  color: #000;
-}
 
 .btn-broadcast {
   flex: 1;
@@ -410,17 +392,7 @@ input[type="checkbox"] {
   flex-wrap: wrap;
 }
 
-.action-row {
-  display: flex;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.action-row .btn {
-  flex: 1;
-}
-
-.action-row #btn-enable-sensors.btn-active {
+#btn-enable-sensors.btn-active {
   background: var(--success);
   color: #000;
   border-color: var(--success);
@@ -435,6 +407,11 @@ input[type="checkbox"] {
 
 #settings-panel {
   background: var(--surface);
+}
+
+/* Sensor Panel heading — bottom gap matches sensor toggle gap */
+#sensor-panel h3 {
+  margin-bottom: 6px;
 }
 
 /* Sensor List */
@@ -524,6 +501,10 @@ input[type="checkbox"] {
   display: flex;
   gap: 8px;
   align-items: stretch;
+}
+
+.broadcast-buttons .btn {
+  flex: 1;
 }
 
 .broadcast-status {
@@ -826,15 +807,15 @@ input[type="checkbox"] {
   #top-bar { padding: 6px 10px; }
 
   .panel { padding: 10px; }
+  #sensor-panel h3 { margin-bottom: 5px; }
   .sensor-list { gap: 5px; margin-bottom: 8px; }
   .sensor-list li { padding: 5px 10px; font-size: 11px; }
-  .action-row { gap: 4px; margin-top: 6px; }
   .control-row { gap: 4px; }
 
   #broadcast-bar { padding: 8px 10px; gap: 6px; }
   .broadcast-buttons { gap: 6px; }
   .btn-broadcast { padding: 14px; font-size: 16px; }
-  .btn-trigger { padding: 14px 18px; font-size: 16px; }
+
 
   .w2td-toast { bottom: 76px; }
 }
@@ -856,15 +837,15 @@ input[type="checkbox"] {
   #top-bar { padding: 10px 16px; }
 
   .panel { padding: 14px 16px; }
+  #sensor-panel h3 { margin-bottom: 8px; }
   .sensor-list { gap: 8px; margin-bottom: 12px; }
   .sensor-list li { padding: 7px 14px; font-size: 13px; }
-  .action-row { gap: 8px; margin-top: 10px; }
   .control-row { gap: 8px; }
 
   #broadcast-bar { padding: 12px 16px; gap: 10px; }
   .broadcast-buttons { gap: 10px; }
   .btn-broadcast { padding: 20px; font-size: 20px; }
-  .btn-trigger { padding: 20px 28px; font-size: 20px; }
+
 
   .w2td-toast { bottom: 95px; }
 }
@@ -894,9 +875,9 @@ input[type="checkbox"] {
   #connection-label { font-size: 15px; }
 
   .panel { padding: 18px 24px; }
+  #sensor-panel h3 { margin-bottom: 10px; }
   .sensor-list { gap: 10px; margin-bottom: 14px; }
   .sensor-list li { padding: 9px 18px; font-size: 14px; }
-  .action-row { gap: 10px; margin-top: 12px; }
   .control-row { gap: 10px; }
 
   .btn { padding: 16px 28px; }
@@ -906,7 +887,7 @@ input[type="checkbox"] {
   #broadcast-bar { padding: 14px 24px; gap: 12px; }
   .broadcast-buttons { gap: 12px; }
   .btn-broadcast { padding: 24px; font-size: 22px; border-radius: 14px; }
-  .btn-trigger { padding: 24px 36px; font-size: 22px; border-radius: 14px; }
+
 
   .w2td-toast { bottom: 110px; font-size: 14px; }
 }

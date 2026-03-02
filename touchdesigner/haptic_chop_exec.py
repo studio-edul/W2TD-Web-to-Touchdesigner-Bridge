@@ -10,7 +10,7 @@
 W2TD_BASE = 'W2TD'
 
 
-def _wob_base():
+def _w2td_base():
 	try:
 		p = parent(1)
 		if p:
@@ -30,7 +30,7 @@ def _wob_base():
 
 
 def _op_web():
-	base = _wob_base()
+	base = _w2td_base()
 	if base:
 		w = base.op('web_server_dat')
 		if w:
@@ -41,51 +41,51 @@ def _op_web():
 def onValueChange(channel, sampleIndex, val, prev):
 	"""Send haptic state to slot when wob_haptic channel value changes."""
 	web = _op_web()
-    if web is None:
-        return
+	if web is None:
+		return
 
-    slot = _parse_slot(channel.name)
-    if slot is None:
-        return
+	slot = _parse_slot(channel.name)
+	if slot is None:
+		return
 
-    state = 1 if val != 0 else 0
-    try:
-        web.module.send_haptic_state(web, slot=slot, state=state)
-    except Exception as e:
-        print(f'[WOB Haptic] onValueChange error: {e}')
+	state = 1 if val != 0 else 0
+	try:
+		web.module.send_haptic_state(web, slot=slot, state=state)
+	except Exception as e:
+		print(f'[W2TD Haptic] 에러 onValueChange error: {e}')
 
 
 def _parse_slot(name):
-    """채널 이름에서 슬롯 번호를 파싱.
-    지원 형식: 'slot1', 'ch1', '1'
-    """
-    if name.startswith('slot'):
-        try:
-            return int(name[4:])
-        except ValueError:
-            return None
+	"""채널 이름에서 슬롯 번호를 파싱.
+	지원 형식: 'slot1', 'ch1', '1'
+	"""
+	if name.startswith('slot'):
+		try:
+			return int(name[4:])
+		except ValueError:
+			return None
 
-    if name.startswith('ch'):
-        try:
-            return int(name[2:])
-        except ValueError:
-            return None
+	if name.startswith('ch'):
+		try:
+			return int(name[2:])
+		except ValueError:
+			return None
 
-    try:
-        return int(name)
-    except ValueError:
-        return None
+	try:
+		return int(name)
+	except ValueError:
+		return None
 
 
 # Required stubs
 def onOffToOn(channel, sampleIndex, val, prev):
-    pass
+	pass
 
 def onOnToOff(channel, sampleIndex, val, prev):
-    pass
+	pass
 
 def whileOn(channel, sampleIndex, val, prev):
-    pass
+	pass
 
 def whileOff(channel, sampleIndex, val, prev):
-    pass
+	pass

@@ -11,7 +11,8 @@
     inset: 0;
     width: 100%;
     height: 100%;
-    object-fit: contain;
+    object-fit: cover;
+    object-position: center;
     display: block;
   }
   #video-wrap video.hidden { display: none; }
@@ -36,6 +37,8 @@
 
   const params = new URLSearchParams(location.search);
   const port = params.get('port') || '9980';
+  const slotParam = params.get('slot');
+  const mySlot = slotParam ? parseInt(slotParam, 10) : null;
   const useTls = params.get('tls') === '1' || params.get('tls') === 'true';
   const debugRes = params.get('debug') === '1';
 
@@ -73,7 +76,9 @@
     ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
-      send({ type: 'hello', role: 'cam_receiver' });
+      const msg = { type: 'hello', role: 'cam_receiver' };
+      if (mySlot != null && mySlot >= 1) msg.slot = mySlot;
+      send(msg);
     };
 
     ws.onclose = () => {
@@ -91,10 +96,13 @@
       try { msg = JSON.parse(e.data); } catch { return; }
 
       if (msg.type === 'cam_offer') {
+        if (mySlot != null && msg.slot !== mySlot) return;
         await handleOffer(msg.slot, msg.sdp, msg.camType);
       } else if (msg.type === 'cam_ice') {
+        if (mySlot != null && msg.slot !== mySlot) return;
         await handleRemoteIce(msg.slot, msg.candidate, msg.sdpMLineIndex, msg.sdpMid, msg.camType);
       } else if (msg.type === 'cam_peer_closed') {
+        if (mySlot != null && msg.slot !== mySlot) return;
         closePeer(peerKey(msg.slot, msg.camType));
       }
     };
@@ -114,9 +122,23 @@
       if (e.streams && e.streams[0] && videoEl) {
         // Attach metadata handler BEFORE setting srcObject to avoid missing the event
         videoEl.onloadedmetadata = () => {
+          ['inset','width','height','left','top','transform','objectFit','transformOrigin'].forEach(p => videoEl.style.removeProperty(p));
+
           const vw = videoEl.videoWidth, vh = videoEl.videoHeight;
           console.log('[CAM-RCV] Received video:', vw, 'x', vh, '| viewport:', viewportW, 'x', viewportH);
-          send({ type: 'cam_resolution', width: vw, height: vh });
+          send({ type: 'cam_resolution', width: vw, height: vh, slot: mySlot });
+
+          if (vw > vh) {
+            videoEl.style.inset = 'unset';
+            videoEl.style.width = vw + 'px';
+            videoEl.style.height = vh + 'px';
+            videoEl.style.left = (viewportW - vw) / 2 + 'px';
+            videoEl.style.top = (viewportH - vh) / 2 + 'px';
+            videoEl.style.transformOrigin = 'center center';
+            const scale = Math.max(viewportW / vh, viewportH / vw);
+            videoEl.style.transform = `rotate(90deg) scale(${scale.toFixed(4)})`;
+          }
+
           if (debugRes) {
             const dbg = document.getElementById('res-debug');
             if (dbg) {

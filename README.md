@@ -232,6 +232,8 @@ touchdesigner/
   w2td_init.py           ← Execute DAT (Cloudflare tunnel, QR, table init)
   webrtc_callbacks.py    ← WebRTC DAT callbacks
   config_watch.py        ← DAT Execute (auto-broadcast on w2td_config change)
+  webrtc_table_sync.py   ← DAT Execute (Audio CHOP sync from webrtc_table)
+  cam_render_sync.py     ← DAT Execute (Web Render TOP sync from sensor_table)
   haptic_chop_exec.py    ← Execute DAT helper for CHOP-driven haptic
   cam_receiver.html      ← Served locally; loaded in Web Render TOP for camera
 ```

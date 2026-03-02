@@ -1,7 +1,7 @@
-# DAT Execute DAT — watches wob_config Table DAT
+# DAT Execute DAT — watches w2td_config Table DAT
 # Setup in TD:
 #   1. Create a DAT Execute DAT
-#   2. Set "DATs" parameter to: wob_config
+#   2. Set "DATs" parameter to: w2td_config
 #   3. Enable "Table Change" checkbox
 #   4. Paste this script as its content (or point it to this file)
 #
@@ -14,7 +14,7 @@ import json
 W2TD_BASE = 'W2TD'
 
 
-def _wob_base():
+def _w2td_base():
 	try:
 		p = parent(1)
 		if p:
@@ -34,7 +34,7 @@ def _wob_base():
 
 
 def _op(path_suffix, fallback_name=None):
-	base = _wob_base()
+	base = _w2td_base()
 	if base:
 		o = base.op(path_suffix)
 		if o is not None:
@@ -47,7 +47,7 @@ DEBOUNCE_DELAY = 0.3  # seconds
 
 
 def _read_config():
-	"""Read settings from wob_config Table DAT (key | value)."""
+	"""Read settings from w2td_config Table DAT (name | value)."""
 	cfg = _op('w2td_config')
 	if cfg is None:
 		return {}
@@ -60,47 +60,65 @@ def _read_config():
 	return out
 
 
+def _cfg_val(cfg, *keys, default=0):
+	"""Try keys in order; normalize to int."""
+	for k in keys:
+		if k in cfg:
+			try:
+				return int(float(cfg[k]))
+			except (ValueError, TypeError):
+				return default
+	return default
+
+
 def _build_config_msg(cfg):
-	"""Build config JSON dict — matches callbacks._config_msg format."""
+	"""Build config JSON dict — w2td_config 키 이름에 맞춤 (Samplerate, Wakelock, Motion, Geolocation, ...)."""
 	out = {
 		'type': 'config',
-		'sample_rate': int(cfg.get('sample_rate', 30)),
-		'wake_lock': int(cfg.get('wake_lock', 1)),
-		'haptic': int(cfg.get('haptic', 1)),
-		'sensor_motion': int(cfg.get('sensor_motion', 1)),
-		'sensor_orientation': int(cfg.get('sensor_orientation', 1)),
-		'sensor_geolocation': int(cfg.get('sensor_geolocation', 0)),
-		'sensor_touch': int(cfg.get('sensor_touch', 1)),
-		'dev_mode': int(cfg.get('dev_mode', 1)),
-		'sensor_rear_camera':  int(cfg.get('sensor_rear_camera', 0)),
-		'sensor_front_camera': int(cfg.get('sensor_front_camera', 0)),
-		'sensor_microphone':   int(cfg.get('sensor_microphone', 1)),
-		'audio_echo_cancellation': int(cfg.get('audio_echo_cancellation', 0)),
-		'audio_noise_suppression': int(cfg.get('audio_noise_suppression', 0)),
-		'audio_auto_gain': int(cfg.get('audio_auto_gain', 0)),
+		'sample_rate': _cfg_val(cfg, 'Samplerate', 'samplerate', 'sample_rate', default=30),
+		'wake_lock': _cfg_val(cfg, 'Wakelock', 'wakelock', 'wake_lock', default=1),
+		'haptic': _cfg_val(cfg, 'Haptic', 'haptic', default=1),
+		'sensor_motion': _cfg_val(cfg, 'Motion', 'motion', 'sensor_motion', default=1),
+		'sensor_orientation': _cfg_val(cfg, 'Orientation', 'orientation', 'sensor_orientation', default=1),
+		'sensor_geolocation': _cfg_val(cfg, 'Geolocation', 'geolocation', 'sensor_geolocation', default=1),
+		'sensor_touch': _cfg_val(cfg, 'Touch', 'touch', 'sensor_touch', default=1),
+		'dev_mode': _cfg_val(cfg, 'Devmode', 'devmode', 'dev_mode', default=1),
+		'sensor_rear_camera': _cfg_val(cfg, 'Rearcamera', 'rearcamera', 'sensor_rear_camera', default=0),
+		'sensor_front_camera': _cfg_val(cfg, 'Frontcamera', 'frontcamera', 'sensor_front_camera', default=0),
+		'sensor_microphone': _cfg_val(cfg, 'Microphone', 'microphone', 'sensor_microphone', default=1),
+		'audio_echo_cancellation': _cfg_val(cfg, 'Echocancellation', 'echocancellation', 'audio_echo_cancellation', default=0),
+		'audio_noise_suppression': _cfg_val(cfg, 'Noisesuppression', 'noisesuppression', 'audio_noise_suppression', default=0),
+		'audio_auto_gain': _cfg_val(cfg, 'Audiogain', 'audiogain', 'audio_auto_gain', default=0),
 	}
-	ice_srv = cfg.get('ice_servers', '').strip()
+	ice_srv = (cfg.get('ice_servers') or cfg.get('Ice_servers') or '').strip()
 	if ice_srv:
 		out['ice_servers'] = ice_srv
-	if cfg.get('ice_transport_policy', '').strip() == 'relay':
+	if (cfg.get('ice_transport_policy') or cfg.get('Ice_transport_policy') or '').strip() == 'relay':
 		out['ice_transport_policy'] = 'relay'
 	return out
 
 
 def _do_broadcast():
-	"""Send config to all connected clients. Uses web operator methods only (no web.module)."""
+	"""Send config to actually connected clients only (w2td_client_slots만 보면 끊긴 주소 포함됨)."""
 	web = _op('web_server_dat')
 	if web is None:
 		return
 	cfg = _read_config()
 	msg = json.dumps(_build_config_msg(cfg))
 	slots = op('/').fetch('w2td_client_slots', {})
-	for addr in list(slots.keys()):
+	active = set()
+	try:
+		active = set(getattr(web, 'webSocketConnections', []) or [])
+	except Exception:
+		pass
+	valid = [a for a in slots.keys() if str(a) in active]
+	for addr in valid:
 		try:
 			web.webSocketSendText(addr, msg)
 		except Exception:
 			pass
-	print(f'[W2TD] Config broadcast -> {len(slots)} clients')
+	if valid or slots:
+		print(f'[W2TD] Config broadcast -> {len(valid)} clients' + (f' ({len(slots) - len(valid)} stale)' if len(slots) > len(valid) else ''))
 
 
 def _debounced_broadcast():
@@ -124,11 +142,11 @@ def _debounced_broadcast():
 
 
 def onTableChange(dat):
-	"""Called when wob_config table changes — debounced broadcast."""
+	"""Called when w2td_config table changes — debounced broadcast."""
 	try:
 		_debounced_broadcast()
 	except Exception as e:
-		print(f'[W2TD Config Watch] Table change error: {e}')
+		print(f'[W2TD Config Watch] 에러 Table change error: {e}')
 
 
 # Required stubs

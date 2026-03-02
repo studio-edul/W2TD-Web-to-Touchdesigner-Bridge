@@ -44,7 +44,7 @@ def get_local_ip():
 		s.close()
 		return ip
 	except Exception as e:
-		print(f'[W2TD] Failed to detect IP: {e}')
+		print(f'[W2TD] 에러 Failed to detect IP: {e}')
 		return '127.0.0.1'
 
 SENSOR_COLS = [
@@ -54,7 +54,6 @@ SENSOR_COLS = [
 	'oa', 'ob', 'og',
 	'lat', 'lon',
 	'touch_count',
-	'trig',
 	'css_width', 'css_height',
 	'physical_width', 'physical_height',
 	'screen_width', 'screen_height',
@@ -70,7 +69,7 @@ def _init_tables():
 		# No pre-populated rows — rows are added on connect, removed on disconnect
 		print(f'[W2TD] sensor_table initialized (dynamic rows, max {MAX_CLIENTS} slots)')
 	else:
-		print('[W2TD] sensor_table DAT not found - create a Table DAT named "sensor_table"')
+		print('[W2TD] 에러 sensor_table DAT not found - create a Table DAT named "sensor_table"')
 
 	tt = _op('touch_table')
 	if tt is not None:
@@ -78,7 +77,7 @@ def _init_tables():
 		tt.appendRow(['slot', 'touch_id', 'x', 'y', 'state'])
 		print('[W2TD] touch_table initialized')
 	else:
-		print('[W2TD] touch_table DAT not found - create a Table DAT named "touch_table"')
+		print('[W2TD] 에러 touch_table DAT not found - create a Table DAT named "touch_table"')
 
 	wt = _op('webrtc_audio_container/webrtc_table', 'webrtc_table')
 	if wt is not None:
@@ -86,7 +85,7 @@ def _init_tables():
 		wt.appendRow(['slot', 'name', 'conn_id', 'state'])
 		print('[W2TD] webrtc_table initialized')
 	else:
-		print('[W2TD] webrtc_table DAT not found - create a Table DAT named "webrtc_table"')
+		print('[W2TD] 에러 webrtc_table DAT not found - create a Table DAT named "webrtc_table"')
 
 def _init_webrtc_ice():
 	"""Configure WebRTC DAT TURN servers for cross-network (tunnel/cloudflared)."""
@@ -116,7 +115,7 @@ def _set_par(op_node, primary, value, fallbacks=()):
 				setattr(op_node.par, name, value)
 				return True
 			except Exception as e:
-				print(f'[W2TD] _set_par {name}={value} failed: {e}')
+				print(f'[W2TD] 에러 _set_par {name}={value} failed: {e}')
 	return False
 
 
@@ -146,7 +145,7 @@ def install_packages():
 		)
 		print(f'[W2TD Setup] {CERTIFI_PACKAGE} OK')
 	except Exception as e:
-		print(f'[W2TD Setup] {CERTIFI_PACKAGE} FAILED: {e}')
+		print(f'[W2TD Setup] 에러 {CERTIFI_PACKAGE} FAILED: {e}')
 		all_ok = False
 	
 	# Install other packages
@@ -159,14 +158,14 @@ def install_packages():
 			)
 			print(f'[W2TD Setup] {pkg} OK')
 		except Exception as e:
-			print(f'[W2TD Setup] {pkg} FAILED: {e}')
+			print(f'[W2TD Setup] 에러 {pkg} FAILED: {e}')
 			all_ok = False
 	
 	if all_ok:
 		print('[W2TD Setup] All packages installed. You can now use W2TD from any directory.')
 		print('[W2TD Setup] Note: Restart TouchDesigner if SSL certificate errors persist.')
 	else:
-		print('[W2TD Setup] Some packages failed. Check the log above.')
+		print('[W2TD Setup] 에러 Some packages failed. Check the log above.')
 
 
 def onCreate():
@@ -186,9 +185,9 @@ def _configure_ssl():
 		ssl._create_default_https_context = lambda: ssl.create_default_context(cafile=cert_path)
 		print(f'[W2TD] SSL certificates configured: {cert_path}')
 	except ImportError:
-		print('[W2TD] certifi not installed. Run op("w2td_setup").module.install() first.')
+		print('[W2TD] 에러 certifi not installed. Run op("w2td_setup").module.install() first.')
 	except Exception as e:
-		print(f'[W2TD] SSL config warning: {e}')
+		print(f'[W2TD] 에러 SSL config warning: {e}')
 
 
 def onStart():
@@ -199,7 +198,7 @@ def onStart():
 	generate()
 
 def _read_config():
-	"""Read settings from wob_config Table DAT (key | value)."""
+	"""Read settings from w2td_config Table DAT (key | value)."""
 	cfg = _op('w2td_config')
 	if cfg is None:
 		return {}
@@ -214,10 +213,11 @@ def _read_config():
 def generate():
 	print('[W2TD] generate() start')
 
-	# Read port from wob_config (default: 9980)
+	# Read port from w2td_config (default: 9980)
 	cfg = _read_config()
+	port_val = cfg.get('Port') or cfg.get('port')
 	try:
-		port = int(cfg.get('port', 9980))
+		port = int(port_val) if port_val else 9980
 	except (ValueError, TypeError):
 		port = 9980
 	print(f'[W2TD] Using port: {port}')
@@ -227,7 +227,7 @@ def generate():
 		import qrcode
 		print('[W2TD] qrcode import OK')
 	except ImportError:
-		print('[W2TD] qrcode not installed. Run op("w2td_setup").module.install() first.')
+		print('[W2TD] 에러 qrcode not installed. Run op("w2td_setup").module.install() first.')
 		return
 
 	# 2. Cloudflare tunnel (for cross-network access) - required for mobile
@@ -250,7 +250,7 @@ def generate():
 			except Exception as e:
 				last_error = e
 				if attempt < 2:
-					print(f'[W2TD] Tunnel attempt {attempt + 1} failed: {e}')
+					print(f'[W2TD] 에러 Tunnel attempt {attempt + 1} failed: {e}')
 					time.sleep(2)
 				else:
 					raise
@@ -258,13 +258,13 @@ def generate():
 			print(f'[W2TD] Cloudflare URL: {url}')
 	except ImportError:
 		last_error = 'pycloudflared not installed'
-		print('[W2TD] pycloudflared not installed.')
+		print('[W2TD] 에러 pycloudflared not installed.')
 	except Exception as e:
 		last_error = e
 
 	if url is None:
 		err_msg = str(last_error) if last_error else 'Unknown error'
-		print(f'[W2TD] Cloudflare tunnel failed: {err_msg}')
+		print(f'[W2TD] 에러 Cloudflare tunnel failed: {err_msg}')
 		return
 
 	op('/').store('w2td_url', url)
@@ -272,9 +272,12 @@ def generate():
 	host = url.replace('https://', '').replace('http://', '').strip()
 	GITHUB_PAGES_URL = 'https://studio-edul.github.io/Integrated-Web-to-TouchDesigner-Bridge/'
 	qr_url = GITHUB_PAGES_URL + '?td=' + host
-	u = _op('w2td_url_text')
-	if u:
-		u.par.text = qr_url
+	w2td = op('../W2TD') or _w2td_base()
+	if w2td and hasattr(w2td.par, 'url'):
+		try:
+			w2td.par.url = qr_url
+		except Exception as e:
+			print(f'[W2TD] 에러 W2TD.par.url set failed: {e}')
 	print(f'[W2TD] QR URL: {qr_url}')
 
 	# 3. Generate QR code
@@ -285,7 +288,7 @@ def generate():
 		img = qr.make_image(fill_color='black', back_color='white')
 		print('[W2TD] QR image generated')
 	except Exception as e:
-		print(f'[W2TD] QR generation failed: {e}')
+		print(f'[W2TD] 에러 QR generation failed: {e}')
 		return
 
 	# 4. Save to file
@@ -295,21 +298,21 @@ def generate():
 		img.save(save_path)
 		print(f'[W2TD] File saved: {os.path.exists(save_path)}')
 	except Exception as e:
-		print(f'[W2TD] File save failed: {e}')
+		print(f'[W2TD] 에러 File save failed: {e}')
 		return
 
 	# 5. Reload Movie File In TOP
 	try:
 		movie_top = _op('qr_movie_top')
 		if movie_top is None:
-			print('[W2TD] qr_movie_top not found - check node name')
+			print('[W2TD] 에러 qr_movie_top not found - check node name')
 			return
 		print(f'[W2TD] qr_movie_top found: {movie_top}')
 		movie_top.par.file = save_path
 		movie_top.par.reloadpulse.pulse()
 		print('[W2TD] TOP reloaded')
 	except Exception as e:
-		print(f'[W2TD] TOP reload failed: {e}')
+		print(f'[W2TD] 에러 TOP reload failed: {e}')
 		return
 
 	# 6. Set Web Render TOP URL to cam_receiver (served locally via TD Web Server)
@@ -331,10 +334,14 @@ def generate():
 			if tls_on:
 				receiver_url += '&tls=1'
 			web_render.par.url = receiver_url
+			# Store for cam_render_sync to build slot URLs
+			op('/').store('w2td_cam_base_url', f'{scheme}://{local_ip}:{port}')
+			op('/').store('w2td_web_port', port)
+			op('/').store('w2td_cam_tls', tls_on)
 			print(f'[W2TD] web_render_top URL set (local): {receiver_url}')
 		else:
-			print('[W2TD] web_render_top not found - create a Web Render TOP named "web_render_top"')
+			print('[W2TD] 에러 web_render_top not found - create a Web Render TOP named "web_render_top"')
 	except Exception as e:
-		print(f'[W2TD] web_render_top URL set failed: {e}')
+		print(f'[W2TD] 에러 web_render_top URL set failed: {e}')
 
 	print('[W2TD] generate() done')
