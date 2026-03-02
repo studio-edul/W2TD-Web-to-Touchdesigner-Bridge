@@ -626,21 +626,19 @@ def onHTTPRequest(webServerDAT, request, response):
 	"""Serve cam_receiver.html locally; redirect all other requests to GitHub Pages."""
 	uri = request.get('uri', '/')
 
-	# Serve cam_receiver.html for Web Render TOP (loaded locally, avoids mixed-content issues)
+	# Serve cam_receiver.html for Web Render TOP (loaded from Text DAT, avoids external file dependency)
 	if uri.startswith('/cam_receiver.html'):
-		cam_path = os.path.join(project.folder, 'cam_receiver.html')
-		try:
-			with open(cam_path, 'r', encoding='utf-8') as f:
-				html = f.read()
+		dat = _op('cam_receiver_html')
+		if dat is not None:
 			response['statusCode'] = 200
 			response['statusReason'] = 'OK'
 			response['headers'] = {'Content-Type': 'text/html; charset=utf-8'}
-			response['data'] = html
-		except Exception as e:
+			response['data'] = dat.text
+		else:
 			response['statusCode'] = 404
 			response['statusReason'] = 'Not Found'
-			response['data'] = f'<html><body>cam_receiver.html not found: {e}</body></html>'
-			print(f'[W2TD] 에러 cam_receiver.html not found at {cam_path}: {e}')
+			response['data'] = '<html><body>cam_receiver_html DAT not found in W2TD</body></html>'
+			print('[W2TD] 에러 cam_receiver_html Text DAT not found — create a Text DAT named "cam_receiver_html" inside W2TD')
 		return response
 
 	stored_url = op('/').fetch('w2td_url', '')
