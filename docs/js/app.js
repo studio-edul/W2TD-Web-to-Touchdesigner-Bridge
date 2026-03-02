@@ -271,6 +271,7 @@ const W2TD_VERSION = '1.0.0';
 
     const startSensorsAndBroadcast = () => {
       if (!SensorModule.isEnabled()) SensorModule.startListening();
+      if (WSClient.isConnected()) _startDataBroadcast();
     };
 
     if (SensorModule.needsPermissionRequest()) {
