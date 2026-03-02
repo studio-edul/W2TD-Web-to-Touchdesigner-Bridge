@@ -656,15 +656,11 @@ const W2TD_VERSION = '1.0.0';
     }
 
     if (SensorModule.needsPermissionRequest()) {
-      updateDebug('Requesting permissions...');
+      updateDebug('Requesting motion/orientation permission...');
       const perms = await SensorModule.requestPermissions();
       updateDebug('Permissions: ' + JSON.stringify(perms));
     } else {
       updateDebug('No permission request needed (non-iOS)');
-    }
-
-    if (navigator.mediaDevices?.getUserMedia) {
-      await WebRTCModule.requestCameraPermission();
     }
 
     SensorModule.startListening();
