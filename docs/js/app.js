@@ -200,6 +200,10 @@ const W2TD_VERSION = '1.0.0';
     if (cfg.ice_transport_policy != null) {
       iceTransportPolicyFromConfig = cfg.ice_transport_policy === 'relay' ? 'relay' : null;
     }
+    if (cfg.show_dots != null) {
+      showTouchPoints = !!parseInt(cfg.show_dots);
+      updateTouchPointsToggleUI();
+    }
   }
 
   function _webrtcStartOpts(opts) {
@@ -264,9 +268,7 @@ const W2TD_VERSION = '1.0.0';
     touchPadActive = true;
     els.touchPad.classList.remove('hidden');
     els.btnExitTouch.classList.add('hidden'); // no exit in minimal mode
-    if (els.btnToggleTouchPoints) {
-      els.btnToggleTouchPoints.classList.remove('hidden'); // show toggle button
-    }
+    // btnToggleTouchPoints stays hidden in user mode; visibility controlled by show_dots config
     resizeTouchCanvas();
 
     const startSensorsAndBroadcast = () => {
