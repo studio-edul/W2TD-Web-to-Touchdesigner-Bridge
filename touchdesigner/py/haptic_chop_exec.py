@@ -1,7 +1,7 @@
-# Execute CHOP — wob_haptic 채널 값 변경 시 모바일 진동 제어
+# Execute CHOP — w2td_haptic 채널 값 변경 시 모바일 진동 제어
 # Setup in TD:
 #   1. Execute CHOP 생성
-#   2. CHOPs 파라미터: wob_haptic
+#   2. CHOPs 파라미터: w2td_haptic
 #   3. Value Change: 체크 ✅
 #   4. 이 파일을 Script DAT에 연결
 #
@@ -39,7 +39,7 @@ def _op_web():
 
 
 def onValueChange(channel, sampleIndex, val, prev):
-	"""Send haptic state to slot when wob_haptic channel value changes."""
+	"""Send haptic state to slot when w2td_haptic channel value changes."""
 	web = _op_web()
 	if web is None:
 		return

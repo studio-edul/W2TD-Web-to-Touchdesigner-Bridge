@@ -516,7 +516,7 @@ def send_haptic_state(webServerDAT, slot, state):
 		return False
 
 
-def broadcast_haptic_from_chop(webServerDAT, chop_name='wob_haptic'):
+def broadcast_haptic_from_chop(webServerDAT, chop_name='w2td_haptic'):
 	"""Read haptic CHOP and send state to all connected clients.
 	
 	CHOP structure:
@@ -526,14 +526,14 @@ def broadcast_haptic_from_chop(webServerDAT, chop_name='wob_haptic'):
 	
 	Args:
 		webServerDAT: Web Server DAT operator
-		chop_name: Name of the CHOP operator (default: 'wob_haptic')
+		chop_name: Name of the CHOP operator (default: 'w2td_haptic')
 	
 	Usage in TD (Timer CHOP or Execute DAT):
 		op('web_server_dat').module.broadcast_haptic_from_chop(op('web_server_dat'))
 		op('web_server_dat').module.broadcast_haptic_from_chop(op('web_server_dat'), 'my_haptic_chop')
 	
 	Setup:
-		1. Create a Constant CHOP or any CHOP named 'wob_haptic' (or custom name)
+		1. Create a Constant CHOP or any CHOP named 'w2td_haptic' (or custom name)
 		2. Add channels: 'slot1', 'slot2', ... (or 'ch1', 'ch2', ... or '1', '2', ...)
 		3. Connect Timer CHOP or Execute DAT to call this function periodically
 	"""

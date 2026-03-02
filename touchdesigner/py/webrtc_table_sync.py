@@ -191,7 +191,7 @@ def sync():
 	target_names = [f'webrtc_audio_{i}' for i in range(1, len(rows) + 1)]
 	slot_conn = {r[0]: r[1] for r in rows}
 
-	# 기존 Audio Stream In CHOP 조회 (container, chopnet, wob_audio 순으로 검색)
+	# 기존 Audio Stream In CHOP 조회 (container, chopnet, w2td_audio 순으로 검색)
 	existing = {}
 	for chop in (container.ops('webrtc_audio_*') if hasattr(container, 'ops') else []):
 		if chop.name.startswith('webrtc_audio_') and chop.name[14:].isdigit():
@@ -200,15 +200,15 @@ def sync():
 		for child in container.children:
 			if child.name.startswith('webrtc_audio_') and child.name[14:].isdigit():
 				existing[child.name] = child
-	wob_audio = _w2td_audio()
-	if not existing and wob_audio:
-		for chop in wob_audio.ops('chopnet/webrtc_audio_*'):
+	w2td_audio = _w2td_audio()
+	if not existing and w2td_audio:
+		for chop in w2td_audio.ops('chopnet/webrtc_audio_*'):
 			if chop.name.startswith('webrtc_audio_') and chop.name[14:].isdigit():
 				existing[chop.name] = chop
-	if not existing and wob_audio:
+	if not existing and w2td_audio:
 		for i in range(1, 32):
 			name = f'webrtc_audio_{i}'
-			chop = wob_audio.op(f'chopnet/{name}') or wob_audio.op(name)
+			chop = w2td_audio.op(f'chopnet/{name}') or w2td_audio.op(name)
 			if chop:
 				existing[name] = chop
 
