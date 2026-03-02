@@ -269,6 +269,7 @@ const W2TD_VERSION = '1.0.0';
     els.touchPad.classList.remove('hidden');
     els.btnExitTouch.classList.add('hidden'); // no exit in minimal mode
     // btnToggleTouchPoints stays hidden in user mode; visibility controlled by show_dots config
+    _enableTouchLock();
     resizeTouchCanvas();
 
     const startSensorsAndBroadcast = () => {
@@ -817,6 +818,20 @@ const W2TD_VERSION = '1.0.0';
     TouchModule.destroy();
   }
 
+  // Prevent browser swipe navigation and system gestures while touch pad is active.
+  // Multi-touch touchstart blocks pinch/2-finger-swipe; touchmove blocks all scroll.
+  function _onDocTouchStart(e) { if (e.touches.length >= 2) e.preventDefault(); }
+  function _onDocTouchMove(e)  { e.preventDefault(); }
+
+  function _enableTouchLock() {
+    document.addEventListener('touchstart', _onDocTouchStart, { passive: false });
+    document.addEventListener('touchmove',  _onDocTouchMove,  { passive: false });
+  }
+  function _disableTouchLock() {
+    document.removeEventListener('touchstart', _onDocTouchStart);
+    document.removeEventListener('touchmove',  _onDocTouchMove);
+  }
+
   function enterTouchPad() {
     touchPadActive = true;
     stopVizTouch();
@@ -838,6 +853,7 @@ const W2TD_VERSION = '1.0.0';
       handleTouchData(snapshot);
     });
     updateTouchPointsToggleUI();
+    _enableTouchLock();
     haptic();
   }
 
@@ -848,6 +864,7 @@ const W2TD_VERSION = '1.0.0';
       els.btnToggleTouchPoints.classList.add('hidden'); // hide toggle button
     }
     TouchModule.destroy();
+    _disableTouchLock();
     startVizTouch();
     haptic();
   }
