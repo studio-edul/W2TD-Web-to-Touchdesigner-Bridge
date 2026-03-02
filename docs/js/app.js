@@ -85,7 +85,7 @@ const W2TD_VERSION = '1.0.0';
   }
 
   function loadSettings() {
-    const saved = localStorage.getItem('wob-settings');
+    const saved = localStorage.getItem('w2td-settings');
     if (saved) {
       try {
         const s = JSON.parse(saved);
@@ -108,7 +108,7 @@ const W2TD_VERSION = '1.0.0';
   }
 
   function saveSettings() {
-    localStorage.setItem('wob-settings', JSON.stringify({
+    localStorage.setItem('w2td-settings', JSON.stringify({
       tdAddress: els.tdAddress.value,
       clientName: els.clientName ? els.clientName.value : '',
       sensorSelection: SensorModule.getSelected(),
@@ -143,7 +143,7 @@ const W2TD_VERSION = '1.0.0';
     });
     if (sensorChanged) renderSensorList();
     if (cfg.dev_mode != null) {
-      localStorage.setItem('wob-dev-mode', String(cfg.dev_mode));
+      localStorage.setItem('w2td-dev-mode', String(cfg.dev_mode));
       applyDevMode(!!parseInt(cfg.dev_mode));
     }
     if (cfg.sensor_rear_camera != null) {
@@ -308,7 +308,7 @@ const W2TD_VERSION = '1.0.0';
     addLog('W2TD 시작 v' + W2TD_VERSION + ' (protocol: ' + window.location.protocol + ')', 'info');
     console.log('[W2TD] App version:', W2TD_VERSION);
     // Apply cached dev mode instantly to prevent flash of wrong UI
-    const _cached = localStorage.getItem('wob-dev-mode');
+    const _cached = localStorage.getItem('w2td-dev-mode');
     if (_cached !== null) {
       devMode = !!parseInt(_cached);
       if (!devMode && els.sensorPanel) els.sensorPanel.style.display = 'none';
@@ -561,7 +561,7 @@ const W2TD_VERSION = '1.0.0';
 
     // On first QR-scan (no cached devMode), we don't know user vs dev mode yet.
     // Show a loading screen so config can arrive before any UI is shown — prevents flash.
-    const hasCachedMode = localStorage.getItem('wob-dev-mode') !== null;
+    const hasCachedMode = localStorage.getItem('w2td-dev-mode') !== null;
     if (autoConnect && !hasCachedMode) {
       els.wobLoading.classList.remove('hidden'); // applyDevMode() will hide it
     } else if (devMode) {

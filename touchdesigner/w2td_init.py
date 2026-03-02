@@ -8,7 +8,7 @@ W2TD_BASE = 'W2TD'
 W2TD_AUDIO = f'{W2TD_BASE}/webrtc_audio_container'
 
 
-def _wob_base():
+def _w2td_base():
 	try:
 		p = parent(1)
 		if p:
@@ -28,7 +28,7 @@ def _wob_base():
 
 
 def _op(path_suffix, fallback_name=None):
-	base = _wob_base()
+	base = _w2td_base()
 	if base:
 		o = base.op(path_suffix)
 		if o is not None:
@@ -228,7 +228,7 @@ def generate():
 		import qrcode
 		print('[W2TD] qrcode import OK')
 	except ImportError:
-		print('[W2TD] qrcode not installed. Run op("wob_setup").module.install() first.')
+		print('[W2TD] qrcode not installed. Run op("w2td_setup").module.install() first.')
 		return
 
 	# 2. Cloudflare tunnel (for cross-network access) - fallback to local IP on failure
@@ -247,7 +247,7 @@ def generate():
 				url = result.tunnel
 		print(f'[W2TD] Cloudflare URL: {url}')
 	except ImportError:
-		print('[W2TD] pycloudflared not installed. Run op("wob_setup").module.install() first.')
+		print('[W2TD] pycloudflared not installed. Run op("w2td_setup").module.install() first.')
 	except Exception as e:
 		print(f'[W2TD] Cloudflare tunnel failed: {e} - falling back to local')
 

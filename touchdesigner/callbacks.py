@@ -1,15 +1,17 @@
 import json
 import os
+import time
 
 W2TD_VERSION = '1.0.0'
 GITHUB_PAGES_URL = 'https://studio-edul.github.io/Web-Osc-Bridge/'
 MAX_CLIENTS = 20
+ACK_INTERVAL = 1.0  # seconds between data_ack signals per slot
 
 W2TD_BASE = 'W2TD'
 W2TD_AUDIO = f'{W2TD_BASE}/webrtc_audio_container'
 
 
-def _wob_base():
+def _w2td_base():
 	"""Get W2TD container: parent(1) when in Web Server DAT, or project/W2TD."""
 	try:
 		p = parent(1)
@@ -30,7 +32,7 @@ def _wob_base():
 
 
 def _op(path_suffix, fallback_name=None):
-	base = _wob_base()
+	base = _w2td_base()
 	if base:
 		o = base.op(path_suffix)
 		if o is not None:
@@ -196,6 +198,18 @@ def _addr_for_slot(slot):
 			return addr
 	return None
 
+def _send_data_ack(webServerDAT, addr, slot):
+	"""Send data_ack at most once per ACK_INTERVAL seconds per slot."""
+	now = time.time()
+	if now - op('/').fetch(f'w2td_last_ack_{slot}', 0) < ACK_INTERVAL:
+		return
+	op('/').store(f'w2td_last_ack_{slot}', now)
+	try:
+		webServerDAT.webSocketSendText(addr, json.dumps({'type': 'data_ack'}))
+	except Exception:
+		pass
+
+
 def _release_slot(addr, slot):
 	"""Return a slot to the free pool and remove sensor_table row."""
 	slots = _slots()
@@ -211,6 +225,8 @@ def _release_slot(addr, slot):
 		row = _find_row(t, slot)
 		if row is not None:
 			t.deleteRow(row)
+	op('/').store(f'w2td_last_seen_{slot}', 0)
+	op('/').store(f'w2td_last_ack_{slot}', 0)
 
 def _handle_cam_receiver_msg(webServerDAT, addr, msg):
 	"""Process messages from cam_receiver.html (Web Render TOP)."""
@@ -351,9 +367,9 @@ def _config_msg(cfg):
 
 def broadcast_config(webServerDAT):
 	"""Push updated config to all connected clients.
-	Call from TD script after editing wob_config:
+	Call from TD script after editing w2td_config:
 	    op('web_server_dat').module.broadcast_config(op('web_server_dat'))
-	wob_config keys: sample_rate, wake_lock, haptic, sensors, dev_mode, camera, microphone
+	w2td_config keys: sample_rate, wake_lock, haptic, sensors, dev_mode, camera, microphone
 	"""
 	cfg = _read_config()
 	msg = json.dumps(_config_msg(cfg))
@@ -642,6 +658,7 @@ def onWebSocketOpen(webServerDAT, client):
 			t.appendRow([slot, 1, default_name] + [0.0] * (len(SENSOR_COLS) - 3))
 
 		print(f'[W2TD] Connected -> slot {slot} | {addr} | {len(slots)}/{MAX_CLIENTS} active')
+		op('/').store(f'w2td_last_seen_{slot}', time.time())
 		webServerDAT.webSocketSendText(client, json.dumps({'type': 'ack', 'slot': slot, 'td_version': W2TD_VERSION}))
 
 		# Push current config to the newly connected client
@@ -741,6 +758,8 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			t2.appendRow([slot, 1, client_name] + [0.0] * (len(SENSOR_COLS) - 3))
 		print(f'[W2TD] Recovered slot {slot} for {addr}')
 
+	op('/').store(f'w2td_last_seen_{slot}', time.time())
+
 	try:
 		msg = json.loads(data)
 	except Exception:
@@ -786,11 +805,8 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			screen_width, screen_height,
 			device_pixel_ratio,
 		])
-		# Send ack signal to indicate data received
-		try:
-			webServerDAT.webSocketSendText(addr, json.dumps({'type': 'data_ack'}))
-		except Exception:
-			pass
+		# Send ack signal to indicate data received (rate-limited to 1/sec)
+		_send_data_ack(webServerDAT, addr, slot)
 
 	elif msg_type == 'touch':
 		count = msg.get('count', 0)
@@ -815,11 +831,8 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			g = msg.get
 			for i in range(count):
 				tt.appendRow([slot, i, g(f't{i}x', 0), g(f't{i}y', 0), g(f't{i}s', 0)])
-		# Send ack signal for touch data
-		try:
-			webServerDAT.webSocketSendText(addr, json.dumps({'type': 'data_ack'}))
-		except Exception:
-			pass
+		# Send ack signal for touch data (rate-limited to 1/sec)
+		_send_data_ack(webServerDAT, addr, slot)
 
 	elif msg_type == 'trigger':
 		val = 1 if msg.get('value', 1) else 0
