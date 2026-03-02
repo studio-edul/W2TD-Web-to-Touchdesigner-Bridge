@@ -18,8 +18,8 @@ const WebRTCModule = (() => {
     const res = (resolution || DEFAULT_RESOLUTION).trim();
     const preset = RESOLUTION_PRESETS[res] || RESOLUTION_PRESETS[DEFAULT_RESOLUTION];
     const mode = (screenmode || DEFAULT_SCREENMODE).trim().toLowerCase();
-    // Portrait = tall(vertical), Landscape = wide(horizontal) — natural mapping
-    const dims = (mode === 'portrait' ? preset.portrait : preset.landscape);
+    // Swap: config Landscape → capture portrait (540x960), config Portrait → capture landscape (960x540) — matches TD display
+    const dims = (mode === 'landscape' ? preset.portrait : preset.landscape);
     return { width: dims.w, height: dims.h, maxBitrate: preset.maxBitrate };
   }
 

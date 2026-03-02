@@ -120,13 +120,42 @@ def _get_cam_resolution_dims(cfg=None):
 		'4K': {'portrait': (2160, 3840), 'landscape': (3840, 2160)},
 	}
 	p = presets.get(res, presets['Non-Commercial'])
-	w, h = (p['portrait'] if mode == 'portrait' else p['landscape'])
+	# Swap: config Landscape → Portrait display (540x960), config Portrait → Landscape display (960x540)
+	w, h = (p['portrait'] if mode == 'landscape' else p['landscape'])
 	return (int(w), int(h))
 
 
+def _get_cam_base_url():
+	base = op('/').fetch('w2td_cam_base_url', None)
+	if base:
+		return base
+	port = op('/').fetch('w2td_web_port', 9980)
+	import socket
+	try:
+		s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+		s.connect(('8.8.8.8', 80))
+		ip = s.getsockname()[0]
+		s.close()
+	except Exception:
+		ip = '127.0.0.1'
+	return f'http://{ip}:{port}'
+
+
+def _get_cam_port():
+	return op('/').fetch('w2td_web_port', 9980)
+
+
+def _get_tls_flag():
+	return bool(op('/').fetch('w2td_cam_tls', False))
+
+
 def _update_cam_top_resolutions(cfg):
-	"""Update existing web_render_top resolutions based on config."""
+	"""Update existing web_render_top resolutions and URLs when config (e.g. Screenmode) changes."""
 	tw, th = _get_cam_resolution_dims(cfg)
+	mode = (_cfg_str(cfg, 'Screenmode', 'screenmode', default='Portrait') or 'Portrait').strip().lower()
+	base_url = _get_cam_base_url()
+	port = _get_cam_port()
+	tls = _get_tls_flag()
 	for slot in range(1, 21):
 		path = op('/').fetch(f'w2td_web_render_slot_{slot}', None)
 		if path:
@@ -136,6 +165,11 @@ def _update_cam_top_resolutions(cfg):
 					top.par.outputresolution = 'custom'
 					top.par.resolutionw = tw
 					top.par.resolutionh = th
+					url = f'{base_url}/cam_receiver.html?port={port}&slot={slot}&mode={mode}'
+					if tls:
+						url += '&tls=1'
+					if getattr(top.par, 'url', None) != url:
+						top.par.url = url
 				except Exception:
 					pass
 

@@ -410,7 +410,8 @@ def _get_cam_resolution_dims(cfg=None):
 		'4K': {'portrait': (2160, 3840), 'landscape': (3840, 2160)},
 	}
 	p = presets.get(res, presets['Non-Commercial'])
-	w, h = (p['portrait'] if mode == 'portrait' else p['landscape'])
+	# Swap: config Landscape → Portrait display (540x960), config Portrait → Landscape display (960x540)
+	w, h = (p['portrait'] if mode == 'landscape' else p['landscape'])
 	return (int(w), int(h))
 
 

@@ -157,7 +157,8 @@ def _get_cam_resolution_dims(cfg=None):
 		'4K': {'portrait': (2160, 3840), 'landscape': (3840, 2160)},
 	}
 	p = presets.get(res, presets['Non-Commercial'])
-	w, h = (p['portrait'] if mode == 'portrait' else p['landscape'])
+	# Swap: config Landscape → Portrait display (540x960), config Portrait → Landscape display (960x540)
+	w, h = (p['portrait'] if mode == 'landscape' else p['landscape'])
 	return (int(w), int(h))
 
 
@@ -206,6 +207,7 @@ def sync(table_dat=None):
 				print(f'[Cam Render Sync] Error Destroy {name} failed: {e}')
 
 	# Create and set URL
+	cfg = _read_config()
 	for i, name in enumerate(target_names):
 		top = existing.get(name) or container.op(name)
 		if top is None:
@@ -216,10 +218,16 @@ def sync(table_dat=None):
 				print(f'[Cam Render Sync] Error Create {name} failed: {e}')
 				continue
 		slot = slot_list[i] if i < len(slot_list) else (i + 1)
-		url = f'{base_url}/cam_receiver.html?port={port}&slot={slot}'
+		cw, ch = _get_cam_resolution_dims(cfg)
+		mode = (_cfg_str(cfg, 'Screenmode', 'screenmode', default='Portrait') or 'Portrait').strip().lower()
+		url = f'{base_url}/cam_receiver.html?port={port}&slot={slot}&mode={mode}'
 		if tls:
 			url += '&tls=1'
 		try:
+			# Set TOP resolution from config BEFORE page loads — viewport must match expected mode
+			top.par.outputresolution = 'custom'
+			top.par.resolutionw = cw
+			top.par.resolutionh = ch
 			# Set only when URL changes — repeated same URL can cause ERR_ABORTED
 			if getattr(top.par, 'url', None) != url:
 				top.par.url = url

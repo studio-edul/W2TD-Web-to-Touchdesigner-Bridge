@@ -11,7 +11,7 @@
     inset: 0;
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
     object-position: center;
     display: block;
   }
@@ -41,6 +41,7 @@
   const mySlot = slotParam ? parseInt(slotParam, 10) : null;
   const useTls = params.get('tls') === '1' || params.get('tls') === 'true';
   const debugRes = params.get('debug') === '1';
+  const modeParam = (params.get('mode') || 'portrait').toLowerCase();
 
   const viewportW = window.innerWidth;
   const viewportH = window.innerHeight;
@@ -125,18 +126,37 @@
           ['inset','width','height','left','top','transform','objectFit','transformOrigin'].forEach(p => videoEl.style.removeProperty(p));
 
           const vw = videoEl.videoWidth, vh = videoEl.videoHeight;
-          console.log('[CAM-RCV] Received video:', vw, 'x', vh, '| viewport:', viewportW, 'x', viewportH);
+          console.log('[CAM-RCV] Received video:', vw, 'x', vh, '| viewport:', viewportW, 'x', viewportH, '| mode:', modeParam);
           send({ type: 'cam_resolution', width: vw, height: vh, slot: mySlot });
 
-          if (vw > vh) {
+          const isPortraitViewport = viewportH > viewportW;
+          const isLandscapeVideo = vw > vh;
+          if (isPortraitViewport && isLandscapeVideo) {
             videoEl.style.inset = 'unset';
             videoEl.style.width = vw + 'px';
             videoEl.style.height = vh + 'px';
             videoEl.style.left = (viewportW - vw) / 2 + 'px';
             videoEl.style.top = (viewportH - vh) / 2 + 'px';
             videoEl.style.transformOrigin = 'center center';
-            const scale = Math.max(viewportW / vh, viewportH / vw);
+            const scale = Math.min(viewportW / vh, viewportH / vw);
+            videoEl.style.transform = `rotate(-90deg) scale(${scale.toFixed(4)})`;
+          } else if (!isPortraitViewport && !isLandscapeVideo) {
+            videoEl.style.inset = 'unset';
+            videoEl.style.width = vw + 'px';
+            videoEl.style.height = vh + 'px';
+            videoEl.style.left = (viewportW - vw) / 2 + 'px';
+            videoEl.style.top = (viewportH - vh) / 2 + 'px';
+            videoEl.style.transformOrigin = 'center center';
+            const scale = Math.min(viewportW / vh, viewportH / vw);
             videoEl.style.transform = `rotate(90deg) scale(${scale.toFixed(4)})`;
+          } else if (!isPortraitViewport && isLandscapeVideo) {
+            videoEl.style.inset = 'unset';
+            videoEl.style.width = vw + 'px';
+            videoEl.style.height = vh + 'px';
+            videoEl.style.left = (viewportW - vw) / 2 + 'px';
+            videoEl.style.top = (viewportH - vh) / 2 + 'px';
+            videoEl.style.transformOrigin = 'center center';
+            videoEl.style.transform = 'rotate(180deg)';
           }
 
           if (debugRes) {
