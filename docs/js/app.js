@@ -655,16 +655,16 @@ const W2TD_VERSION = '1.0.0';
       }
     }
 
-    if (navigator.mediaDevices?.getUserMedia) {
-      await WebRTCModule.requestCameraPermission();
-    }
-
     if (SensorModule.needsPermissionRequest()) {
       updateDebug('Requesting permissions...');
       const perms = await SensorModule.requestPermissions();
       updateDebug('Permissions: ' + JSON.stringify(perms));
     } else {
       updateDebug('No permission request needed (non-iOS)');
+    }
+
+    if (navigator.mediaDevices?.getUserMedia) {
+      await WebRTCModule.requestCameraPermission();
     }
 
     SensorModule.startListening();
