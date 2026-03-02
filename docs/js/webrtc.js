@@ -5,19 +5,9 @@
  * Signaling for both uses the existing WebSocket (TD Web Server DAT).
  */
 const WebRTCModule = (() => {
-  // Resolution only — orientation/rotation handled in TD
-  const RESOLUTION_PRESETS = {
-    'Non-Commercial': { w: 540, h: 960, maxBitrate: 1500000 },
-    'FHD':             { w: 1080, h: 1920, maxBitrate: 4000000 },
-    '4K':              { w: 2160, h: 3840, maxBitrate: 8000000 },
-  };
-  const DEFAULT_RESOLUTION = 'Non-Commercial';
-
-  function _getCameraResolution(resolution) {
-    const res = (resolution || DEFAULT_RESOLUTION).trim();
-    const preset = RESOLUTION_PRESETS[res] || RESOLUTION_PRESETS[DEFAULT_RESOLUTION];
-    return { width: preset.w, height: preset.h, maxBitrate: preset.maxBitrate };
-  }
+  // ── Camera resolution preset (change to '4k' for 3840x2160) ─────────────────
+  const CAM_RESOLUTION = { width: 1920, height: 1080, maxBitrate: 4000000 };
+  // const CAM_RESOLUTION = { width: 3840, height: 2160, maxBitrate: 8000000 }; // 4K
 
   const DEFAULT_ICE_SERVERS = [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -233,25 +223,20 @@ const WebRTCModule = (() => {
     }
   }
 
-  // ── Camera public API (Front / Rear) ───────────────────────────────────────
-
-  /** Acquire camera stream — facingMode: 'user' (front) or 'environment' (rear).
-   * opts: { cameraResolution } from config */
-  async function acquireCamera(facingMode = 'environment', opts = {}) {
+  /** Acquire camera stream — facingMode: 'user' (front) or 'environment' (rear). */
+  async function acquireCamera(facingMode = 'environment') {
     _lastError = null;
     const isFront = facingMode === 'user';
     const stream = isFront ? camFrontStream : camRearStream;
     if (stream && stream.getVideoTracks().length > 0) return true;
     if (stream) { stream.getTracks().forEach(t => t.stop()); }
     if (isFront) camFrontStream = null; else camRearStream = null;
-    const res = _getCameraResolution(opts.cameraResolution);
-    const maxDim = Math.max(res.width, res.height);
     try {
       const s = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: facingMode },
-          width:  { ideal: res.width,  max: maxDim },
-          height: { ideal: res.height, max: maxDim },
+          width:  { ideal: CAM_RESOLUTION.width,  max: Math.max(CAM_RESOLUTION.width, CAM_RESOLUTION.height) },
+          height: { ideal: CAM_RESOLUTION.height, max: Math.max(CAM_RESOLUTION.width, CAM_RESOLUTION.height) },
         },
         audio: false,
       });
@@ -267,8 +252,7 @@ const WebRTCModule = (() => {
     }
   }
 
-  /** Start camera stream (front or rear) and send offer to TD.
-   * opts: { cameraResolution, iceServers, iceTransportPolicy } */
+  /** Start camera stream (front or rear) and send offer to TD. */
   async function startCamera(facingMode = 'environment', opts = {}) {
     _lastError = null;
     const isFront = facingMode === 'user';
@@ -286,14 +270,12 @@ const WebRTCModule = (() => {
     if (!stream || stream.getVideoTracks().length === 0) {
       if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
       if (isFront) camFrontStream = null; else camRearStream = null;
-      const res = _getCameraResolution(opts.cameraResolution);
-      const maxDim = Math.max(res.width, res.height);
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: facingMode },
-            width:  { ideal: res.width,  max: maxDim },
-            height: { ideal: res.height, max: maxDim },
+            width:  { ideal: CAM_RESOLUTION.width,  max: Math.max(CAM_RESOLUTION.width, CAM_RESOLUTION.height) },
+            height: { ideal: CAM_RESOLUTION.height, max: Math.max(CAM_RESOLUTION.width, CAM_RESOLUTION.height) },
           },
           audio: false,
         });
@@ -337,12 +319,40 @@ const WebRTCModule = (() => {
     try {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
+      await _setCameraSenderParams(pc);
       const sent = WSClient.send({ type: 'webrtc_offer_cam', sdp: offer.sdp, camType });
       _log(sent ? 'Cam ' + camType + ' offer sent' : 'Cam offer FAILED');
       return sent ? true : false;
     } catch (e) {
       _setCamState('failed');
       return false;
+    }
+  }
+
+  async function _setCameraSenderParams(pc) {
+    const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+    if (!sender) return;
+    try {
+      const params = sender.getParameters();
+      params.encodings = params.encodings || [{}];
+      const track = sender.track;
+      const s = track && track.getSettings ? track.getSettings() : {};
+      const w = s.width || CAM_RESOLUTION.width;
+      const h = s.height || CAM_RESOLUTION.height;
+      const maxPx = Math.max(CAM_RESOLUTION.width, CAM_RESOLUTION.height);
+      const minPx = Math.min(CAM_RESOLUTION.width, CAM_RESOLUTION.height);
+      const scale = Math.max(
+        Math.ceil(Math.max(w, h) / maxPx),
+        Math.ceil(Math.min(w, h) / minPx),
+        1
+      );
+      params.encodings[0].scaleResolutionDownBy = scale;
+      params.encodings[0].maxBitrate = CAM_RESOLUTION.maxBitrate;
+      params.degradationPreference = 'maintain-resolution';
+      await sender.setParameters(params);
+      _log(`Cam sender: ${w}x${h} → scale ${scale} → FHD, maxBitrate=${CAM_RESOLUTION.maxBitrate / 1e6}Mbps`);
+    } catch (e) {
+      console.warn('[W2TD WebRTC] setParameters failed:', e.message);
     }
   }
 

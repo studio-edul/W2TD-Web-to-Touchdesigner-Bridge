@@ -129,7 +129,7 @@ def _wt_add(slot, conn_id):
 	"""Add row to webrtc_table when a WebRTC offer arrives."""
 	t = _wt_table()
 	if t is None:
-		print('[W2TD] Error webrtc_table not found - create under W2TD/webrtc_audio_container')
+		print('[W2TD] 에러 webrtc_table not found - create under W2TD/webrtc_audio_container')
 		return
 	_wt_remove_by_slot(slot)
 	name = _client_names().get(slot, f'Slot {slot}')
@@ -258,7 +258,7 @@ def _handle_cam_receiver_msg(webServerDAT, addr, msg):
 			return
 		mobile_addr = _addr_for_slot(slot)
 		if mobile_addr is None:
-			print(f'[W2TD Cam] Error cam_answer: no mobile addr for slot {slot}')
+			print(f'[W2TD Cam] 에러 cam_answer: no mobile addr for slot {slot}')
 			return
 		cam_type = msg.get('camType', msg.get('cam_type', 'rear'))
 		try:
@@ -269,7 +269,7 @@ def _handle_cam_receiver_msg(webServerDAT, addr, msg):
 			}))
 			print(f'[W2TD Cam] cam_answer relayed -> slot {slot} ({cam_type})')
 		except Exception as e:
-			print(f'[W2TD Cam] Error cam_answer relay error: {e}')
+			print(f'[W2TD Cam] 에러 cam_answer relay error: {e}')
 
 	elif msg_type == 'cam_ice':
 		candidate = msg.get('candidate')
@@ -289,34 +289,32 @@ def _handle_cam_receiver_msg(webServerDAT, addr, msg):
 				'camType': cam_type,
 			}))
 		except Exception as e:
-			print(f'[W2TD Cam] Error cam_ice relay error: {e}')
+			print(f'[W2TD Cam] 에러 cam_ice relay error: {e}')
 
 	elif msg_type == 'cam_resolution':
 		w = msg.get('width')
 		h = msg.get('height')
 		slot = msg.get('slot')
-		if slot is not None:
-			cfg = _read_config()
-			tw, th = _get_cam_resolution_dims(cfg)
+		if w is not None and h is not None and w > 0 and h > 0 and slot is not None:
 			path = op('/').fetch(f'w2td_web_render_slot_{slot}', None)
 			if path:
 				top = op(path)
 				if top:
 					try:
+						# 무료 라이센스용 제한 해상도 (원본 {w}x{h} → 540x960)
 						top.par.outputresolution = 'custom'
-						top.par.resolutionw = tw
-						top.par.resolutionh = th
+						top.par.resolutionw = 540
+						top.par.resolutionh = 960
 						logged = op('/').fetch(f'w2td_cam_res_logged_{slot}', False)
 						if not logged:
-							print(f'[W2TD Cam] web_render_top (slot {slot}) resolution set: {tw}x{th} (source {int(w) if w else 0}x{int(h) if h else 0})')
+							print(f'[W2TD Cam] web_render_top (slot {slot}) resolution set: 540x960 (source {int(w)}x{int(h)})')
 							op('/').store(f'w2td_cam_res_logged_{slot}', True)
 					except Exception as e:
-						print(f'[W2TD Cam] Error Resolution set failed for slot {slot}: {e}')
+						print(f'[W2TD Cam] 에러 Resolution set failed for slot {slot}: {e}')
 				else:
-					print(f'[W2TD Cam] Error web_render_top for slot {slot} not found')
+					print(f'[W2TD Cam] 에러 web_render_top for slot {slot} not found')
 			else:
-				if w is not None and h is not None and w > 0 and h > 0:
-					print(f'[W2TD Cam] Received video resolution: {int(w)}x{int(h)} (slot {slot}, web_render not yet synced)')
+				print(f'[W2TD Cam] Received video resolution: {int(w)}x{int(h)} (slot {slot}, web_render not yet synced)')
 
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -359,7 +357,7 @@ def init_tables():
 		t.appendRow(SENSOR_COLS)
 		print(f'[W2TD] sensor_table initialized (dynamic rows, max {MAX_CLIENTS} slots)')
 	else:
-		print('[W2TD] Error sensor_table DAT not found - create a Table DAT named "sensor_table"')
+		print('[W2TD] 에러 sensor_table DAT not found - create a Table DAT named "sensor_table"')
 
 	tt = _op('touch_table')
 	if tt is not None:
@@ -367,7 +365,7 @@ def init_tables():
 		tt.appendRow(['slot', 'touch_id', 'x', 'y', 'state'])
 		print('[W2TD] touch_table initialized')
 	else:
-		print('[W2TD] Error touch_table DAT not found - create a Table DAT named "touch_table"')
+		print('[W2TD] 에러 touch_table DAT not found - create a Table DAT named "touch_table"')
 
 	wt = _wt_table()
 	if wt is not None:
@@ -375,11 +373,11 @@ def init_tables():
 		wt.appendRow(WEBRTC_COLS)
 		print('[W2TD] webrtc_table initialized')
 	else:
-		print('[W2TD] Error webrtc_table DAT not found - create a Table DAT named "webrtc_table"')
+		print('[W2TD] 에러 webrtc_table DAT not found - create a Table DAT named "webrtc_table"')
 
 
 def _config_val(cfg, *keys, default=0):
-	"""Try keys from w2td_config; return int."""
+	"""w2td_config에서 키 시도 후 int 반환."""
 	for k in keys:
 		if k in cfg:
 			try:
@@ -387,38 +385,6 @@ def _config_val(cfg, *keys, default=0):
 			except (ValueError, TypeError):
 				return default
 	return default
-
-
-def _config_str(cfg, *keys, default=''):
-	"""Try keys from w2td_config; return string."""
-	for k in keys:
-		if k in cfg and cfg[k] is not None:
-			return str(cfg[k]).strip()
-	return default
-
-
-def _get_cam_resolution_dims(cfg=None):
-	"""Read Resolution from w2td_config and return (w, h). Synced with webrtc.js. Orientation in TD."""
-	if cfg is None:
-		cfg = _read_config()
-	res = _config_str(cfg, 'Resolution', 'resolution', default='Non-Commercial')
-	presets = {
-		'Non-Commercial': (540, 960),
-		'FHD': (1080, 1920),
-		'4K': (2160, 3840),
-	}
-	w, h = presets.get(res, presets['Non-Commercial'])
-	return (int(w), int(h))
-
-
-def _refresh_cam_top_resolutions(cfg):
-	"""Refresh web_render_top resolutions from config — call when config is sent (fallback if config_watch not set up)."""
-	try:
-		cw = _op('config_watch') or op('config_watch')
-		if cw and hasattr(cw, 'module') and hasattr(cw.module, '_update_cam_top_resolutions'):
-			cw.module._update_cam_top_resolutions(cfg)
-	except Exception:
-		pass
 
 
 def _config_msg(cfg):
@@ -439,7 +405,6 @@ def _config_msg(cfg):
 		'audio_echo_cancellation': _config_val(cfg, 'Echocancellation', 'echocancellation', 'audio_echo_cancellation', default=0),
 		'audio_noise_suppression': _config_val(cfg, 'Noisesuppression', 'noisesuppression', 'audio_noise_suppression', default=0),
 		'audio_auto_gain':    _config_val(cfg, 'Audiogain', 'audiogain', 'audio_auto_gain', default=0),
-		'camera_resolution':  _config_str(cfg, 'Resolution', 'resolution', 'camera_resolution', default='Non-Commercial'),
 	}
 	ice_srv = (cfg.get('ice_servers') or cfg.get('Ice_servers') or '').strip()
 	if ice_srv:
@@ -481,11 +446,11 @@ def send_haptic_to_client(webServerDAT, slot, pattern):
 	"""
 	addr = _addr_for_slot(slot)
 	if addr is None:
-		print(f'[W2TD Haptic] Error No client found for slot {slot}')
+		print(f'[W2TD Haptic] 에러 No client found for slot {slot}')
 		return False
 	
 	if not isinstance(pattern, list) or len(pattern) == 0:
-		print(f'[W2TD Haptic] Error Invalid pattern: {pattern}')
+		print(f'[W2TD Haptic] 에러 Invalid pattern: {pattern}')
 		return False
 	
 	try:
@@ -497,7 +462,7 @@ def send_haptic_to_client(webServerDAT, slot, pattern):
 		print(f'[W2TD Haptic] Sent pattern {pattern} to slot {slot}')
 		return True
 	except Exception as e:
-		print(f'[W2TD Haptic] Error Send failed for slot {slot}: {e}')
+		print(f'[W2TD Haptic] 에러 Send failed for slot {slot}: {e}')
 		return False
 
 
@@ -536,7 +501,7 @@ def send_haptic_state(webServerDAT, slot, state):
 		return False
 	
 	if state not in (0, 1):
-		print(f'[W2TD Haptic] Error Invalid state: {state} (must be 0 or 1)')
+		print(f'[W2TD Haptic] 에러 Invalid state: {state} (must be 0 or 1)')
 		return False
 	
 	try:
@@ -547,7 +512,7 @@ def send_haptic_state(webServerDAT, slot, state):
 		webServerDAT.webSocketSendText(addr, msg)
 		return True
 	except Exception as e:
-		print(f'[W2TD Haptic] Error Send state failed for slot {slot}: {e}')
+		print(f'[W2TD Haptic] 에러 Send state failed for slot {slot}: {e}')
 		return False
 
 
@@ -673,7 +638,7 @@ def onHTTPRequest(webServerDAT, request, response):
 			response['statusCode'] = 404
 			response['statusReason'] = 'Not Found'
 			response['data'] = '<html><body>cam_receiver_html DAT not found in W2TD</body></html>'
-			print('[W2TD] Error cam_receiver_html Text DAT not found — create a Text DAT named "cam_receiver_html" inside W2TD')
+			print('[W2TD] 에러 cam_receiver_html Text DAT not found — create a Text DAT named "cam_receiver_html" inside W2TD')
 		return response
 
 	stored_url = op('/').fetch('w2td_url', '')
@@ -712,13 +677,13 @@ def onHTTPRequest(webServerDAT, request, response):
 
 
 def onWebSocketOpen(webServerDAT, client):
-	"""Accept connection only. Slot assignment is done on first message (after identifying cam_receiver)."""
+	"""연결만 수락. slot 할당은 첫 메시지 수신 시 (cam_receiver인지 구분 후) 수행."""
 	try:
 		addr = str(client)
-		# cam_receiver identified by hello → no slot. Regular mobile gets slot on first message
+		# cam_receiver는 hello로 식별 → slot 미할당. 일반 모바일만 첫 메시지 시 할당
 		pass
 	except Exception as e:
-		print(f'[W2TD] Error onWebSocketOpen: {e}')
+		print(f'[W2TD] 에러 onWebSocketOpen: {e}')
 
 
 def onWebSocketClose(webServerDAT, client):
@@ -772,17 +737,17 @@ def onWebSocketClose(webServerDAT, client):
 				pass
 		op('/').store(f'w2td_webrtc_addr_{conn_id}', None)
 		op('/').store(f'w2td_webrtc_slot_to_uuid_{slot}', None)
-	# Clean up webrtc_table by slot (works even without conn_id)
+	# slot 기준으로 webrtc_table 정리 (conn_id 없어도 동작)
 	_wt_remove_by_slot(slot)
-	# Clear pending cam offer/ICE for this slot
+	# 이 슬롯의 pending cam 오퍼/ICE 정리
 	_clear_pending_cam_for_slot(slot)
 
-	# On disconnect, clean up web_render_top nodes (calls cam_render_sync)
+	# 연결 해제 시 web_render_top 노드 정리 (cam_render_sync 호출)
 	try:
 		sync_op = _op('webrtc_video_container/cam_render_sync') or op('cam_render_sync')
 		if sync_op and hasattr(sync_op, 'module') and hasattr(sync_op.module, 'sync'):
 			sync_op.module.sync(table_dat=t)
-		# Broadcast cam_receiver_ready to remaining mobiles → trigger video retransmit to reconnected TOP
+		# 남은 모바일에게 cam_receiver_ready 브로드캐스트 → 재접속된 TOP에 영상 재전송 유도
 		for mobile_addr in list(slots.keys()):
 			try:
 				webServerDAT.webSocketSendText(mobile_addr, json.dumps({'type': 'cam_receiver_ready'}))
@@ -812,7 +777,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 		msg = json.loads(data)
 	except Exception:
 		return
-	# hello+cam_receiver: do not add to slot/table → avoid ERR_ABORTED from unnecessary web_render_top create/remove
+	# hello+cam_receiver는 slot/table에 추가하지 않음 → web_render_top 불필요 생성·삭제로 ERR_ABORTED 방지
 	if msg.get('type') == 'hello' and msg.get('role') == 'cam_receiver':
 		cr_slot = msg.get('slot')
 		if cr_slot is not None and isinstance(cr_slot, (int, float)):
@@ -837,7 +802,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 					print(f'[W2TD Cam] Replayed pending offer -> slot {offer["slot"]} ({offer["camType"]})')
 					sent_keys.append(key)
 				except Exception as e:
-					print(f'[W2TD Cam] Error Pending offer replay error: {e}')
+					print(f'[W2TD Cam] 에러 Pending offer replay error: {e}')
 				for ice in pending_ice.get(key, []):
 					try:
 						webServerDAT.webSocketSendText(addr, json.dumps({
@@ -894,7 +859,6 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			webServerDAT.webSocketSendText(client, json.dumps(_config_msg(cfg)))
 		except Exception:
 			pass
-		_refresh_cam_top_resolutions(cfg)
 
 	op('/').store(f'w2td_last_seen_{slot}', time.time())
 
@@ -972,7 +936,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			return
 		wrtc = _wt_dat()
 		if wrtc is None:
-			print('[W2TD] Error webrtc_dat not found - create WebRTC DAT under W2TD/webrtc_audio_container')
+			print('[W2TD] 에러 webrtc_dat not found - create WebRTC DAT under W2TD/webrtc_audio_container')
 			return
 		old_conn = op('/').fetch(f'w2td_webrtc_slot_to_uuid_{slot}', None)
 		if old_conn:
@@ -991,7 +955,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			_wt_add(slot, conn_id)
 			print(f'[W2TD WebRTC] Offer received from slot {slot}, conn_id={conn_id}, creating answer...')
 		except Exception as e:
-			print(f'[W2TD WebRTC] Error Offer handling error: {e}')
+			print(f'[W2TD WebRTC] 에러 Offer handling error: {e}')
 
 	elif msg_type == 'webrtc_ice':
 		candidate = msg.get('candidate')
@@ -1008,7 +972,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 		try:
 			wrtc.addIceCandidate(conn_id, candidate, line_index, sdp_mid)
 		except Exception as e:
-			print(f'[W2TD WebRTC] Error addIceCandidate error: {e}')
+			print(f'[W2TD WebRTC] 에러 addIceCandidate error: {e}')
 
 	elif msg_type == 'webrtc_offer_cam':
 		# Camera offer from mobile → relay to slot's cam_receiver as cam_offer
@@ -1033,7 +997,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			}))
 			print(f'[W2TD Cam] cam_offer relayed to receiver (slot {slot}, {cam_type})')
 		except Exception as e:
-			print(f'[W2TD Cam] Error cam_offer relay error: {e}')
+			print(f'[W2TD Cam] 에러 cam_offer relay error: {e}')
 
 	elif msg_type == 'webrtc_ice_cam':
 		# ICE from mobile → relay to slot's cam_receiver
@@ -1062,15 +1026,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 				'camType': cam_type,
 			}))
 		except Exception as e:
-			print(f'[W2TD Cam] Error webrtc_ice_cam relay error: {e}')
-
-	elif msg_type == 'config_request':
-		cfg = _read_config()
-		try:
-			webServerDAT.webSocketSendText(client, json.dumps(_config_msg(cfg)))
-		except Exception:
-			pass
-		_refresh_cam_top_resolutions(cfg)
+			print(f'[W2TD Cam] 에러 webrtc_ice_cam relay error: {e}')
 
 	elif msg_type == 'ping':
 		# Heartbeat ping from mobile → respond with pong

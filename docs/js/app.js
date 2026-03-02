@@ -22,7 +22,6 @@ const W2TD_VERSION = '1.0.0';
   let audioAutoGain = false;
   let iceServersFromConfig = null;   // from w2td_config ice_servers (JSON)
   let iceTransportPolicyFromConfig = null;  // 'relay' | 'all' | null
-  let cameraResolutionFromConfig = 'Non-Commercial';  // Non-Commercial | FHD | 4K
   let showTouchPoints = true;
 
   function _isTunnelConnection() {
@@ -204,22 +203,6 @@ const W2TD_VERSION = '1.0.0';
       showTouchPoints = !!parseInt(cfg.show_dots);
       updateTouchPointsToggleUI();
     }
-    let cameraConfigChanged = false;
-    if (cfg.camera_resolution != null) {
-      const v = String(cfg.camera_resolution).trim();
-      if (['Non-Commercial', 'FHD', '4K'].includes(v) && v !== cameraResolutionFromConfig) {
-        cameraResolutionFromConfig = v;
-        cameraConfigChanged = true;
-      }
-    }
-    if (cameraConfigChanged && (cameraRearEnabled || cameraFrontEnabled) && WebRTCModule.isCamPCActive()) {
-      WebRTCModule.stopCamera();
-      (async () => {
-        if (cameraRearEnabled) await WebRTCModule.acquireCamera('environment', _cameraOpts());
-        if (cameraFrontEnabled) await WebRTCModule.acquireCamera('user', _cameraOpts());
-        if (broadcasting && WSClient.isConnected()) await _maybeStartCamera();
-      })();
-    }
   }
 
   function _webrtcStartOpts(opts) {
@@ -230,12 +213,7 @@ const W2TD_VERSION = '1.0.0';
     if (iceTransportPolicyFromConfig) {
       o.iceTransportPolicy = iceTransportPolicyFromConfig;
     }
-    o.cameraResolution = cameraResolutionFromConfig;
     return o;
-  }
-
-  function _cameraOpts() {
-    return { cameraResolution: cameraResolutionFromConfig };
   }
 
   // ── Dev Mode ─────────────────────────────────────────────────────────────
@@ -340,7 +318,7 @@ const W2TD_VERSION = '1.0.0';
 
   function init() {
     cacheDom();
-    addLog('W2TD started v' + W2TD_VERSION + ' (protocol: ' + window.location.protocol + ')', 'info');
+    addLog('W2TD 시작 v' + W2TD_VERSION + ' (protocol: ' + window.location.protocol + ')', 'info');
     console.log('[W2TD] App version:', W2TD_VERSION);
     // Apply cached dev mode instantly to prevent flash of wrong UI
     const _cached = localStorage.getItem('w2td-dev-mode');
@@ -491,7 +469,7 @@ const W2TD_VERSION = '1.0.0';
   function handleConnect(autoConnect = false) {
     const addr = els.tdAddress.value.trim();
     if (!addr) {
-      alert('Enter TouchDesigner address.');
+      alert('TouchDesigner 주소를 입력하세요.');
       return;
     }
 
@@ -549,7 +527,7 @@ const W2TD_VERSION = '1.0.0';
           addLog(`Screen info sent: ${cssWidth}x${cssHeight} CSS (${physicalWidth}x${physicalHeight} physical, DPR: ${devicePixelRatio})`, 'info');
           
           if (!SensorModule.isEnabled() && devMode) {
-            addLog('Press Enable Sensors to start sending', 'warn');
+            addLog('Enable Sensors를 누르면 전송 시작', 'warn');
           }
         }
         // If connection fails while loading screen is up, fall back to modal
@@ -643,13 +621,13 @@ const W2TD_VERSION = '1.0.0';
       const err = WebRTCModule.getLastError();
       if (err === 'NotAllowedError' || err === 'PermissionDeniedError') {
         showToast('Mic permission denied — allow microphone in browser settings');
-        addLog('Microphone permission denied — allow in browser settings', 'error');
+        addLog('마이크 권한 거부됨 — 브라우저 설정에서 허용해주세요', 'error');
       } else if (err === 'NotFoundError') {
         showToast('Microphone not found');
-        addLog('Microphone not found (no device)', 'error');
+        addLog('마이크를 찾을 수 없습니다 (장치 없음)', 'error');
       } else {
         showToast('Mic activation failed');
-        addLog('Microphone start failed: ' + (err || 'unknown'), 'error');
+        addLog('마이크 시작 실패: ' + (err || 'unknown'), 'error');
       }
     }
     renderSensorList();
@@ -672,13 +650,17 @@ const W2TD_VERSION = '1.0.0';
 
     if (SensorModule.needsPermissionRequest()) {
       if (!window.isSecureContext) {
-        updateDebug('iOS sensor permission requires HTTPS.');
+        updateDebug('iOS 센서 권한은 HTTPS 필요.');
         return;
       }
     }
 
+    if (navigator.mediaDevices?.getUserMedia) {
+      await WebRTCModule.requestCameraPermission();
+    }
+
     if (SensorModule.needsPermissionRequest()) {
-      updateDebug('Requesting motion/orientation permission...');
+      updateDebug('Requesting permissions...');
       const perms = await SensorModule.requestPermissions();
       updateDebug('Permissions: ' + JSON.stringify(perms));
     } else {
@@ -707,7 +689,7 @@ const W2TD_VERSION = '1.0.0';
     }
 
     if (cameraRearEnabled && !WebRTCModule.isCameraRearActive()) {
-      const ok = await WebRTCModule.acquireCamera('environment', _cameraOpts());
+      const ok = await WebRTCModule.acquireCamera('environment');
       if (!ok) {
         cameraRearEnabled = false;
         const err = WebRTCModule.getLastError();
@@ -717,7 +699,7 @@ const W2TD_VERSION = '1.0.0';
       }
     }
     if (cameraFrontEnabled && !WebRTCModule.isCameraFrontActive()) {
-      const ok = await WebRTCModule.acquireCamera('user', _cameraOpts());
+      const ok = await WebRTCModule.acquireCamera('user');
       if (!ok) {
         cameraFrontEnabled = false;
         const err = WebRTCModule.getLastError();
@@ -808,7 +790,7 @@ const W2TD_VERSION = '1.0.0';
     WebRTCModule.disconnectCamera();
     if (els.packetRate) els.packetRate.classList.remove('broadcasting');
     showBroadcastStatus('', false);
-    updateDebug('Broadcast stopped');
+    updateDebug('Broadcast 중지됨');
     renderSensorList();
   }
 
@@ -937,9 +919,9 @@ const W2TD_VERSION = '1.0.0';
       overlay.innerHTML = `
         <div class="rejected-box">
           <div class="rejected-icon">&#x1F6AB;</div>
-          <h2>Connection limit reached</h2>
-          <p>Maximum number of connections in use.<br>Please try again later.</p>
-          <button id="btn-retry" class="btn btn-primary" style="margin-top:20px">Retry</button>
+          <h2>연결이 가득 찼어요</h2>
+          <p>현재 최대 접속 인원이 모두 사용 중입니다.<br>잠시 후 다시 시도해 주세요.</p>
+          <button id="btn-retry" class="btn btn-primary" style="margin-top:20px">다시 시도</button>
         </div>`;
       document.body.appendChild(overlay);
       overlay.querySelector('#btn-retry').addEventListener('click', () => {
@@ -1134,9 +1116,9 @@ const W2TD_VERSION = '1.0.0';
     const ok = await WebRTCModule.start(_webrtcStartOpts({ mic: micEnabled }));
     if (ok === false && micEnabled) {
       const err = WebRTCModule.getLastError();
-      let msg = 'Microphone activation failed';
-      if (err === 'NotAllowedError' || err === 'PermissionDeniedError') msg = 'Microphone permission denied';
-      else if (err === 'NotFoundError') msg = 'Microphone not found';
+      let msg = '마이크 활성화 실패';
+      if (err === 'NotAllowedError' || err === 'PermissionDeniedError') msg = '마이크 권한 거부';
+      else if (err === 'NotFoundError') msg = '마이크를 찾을 수 없습니다';
       showToast(msg);
     }
   }
@@ -1161,7 +1143,7 @@ const W2TD_VERSION = '1.0.0';
       renderSensorList();
       return;
     }
-    const ok = await WebRTCModule.acquireCamera('environment', _cameraOpts());
+    const ok = await WebRTCModule.acquireCamera('environment');
     if (ok === false) {
       cameraRearEnabled = false;
       const err = WebRTCModule.getLastError();
@@ -1195,7 +1177,7 @@ const W2TD_VERSION = '1.0.0';
       renderSensorList();
       return;
     }
-    const ok = await WebRTCModule.acquireCamera('user', _cameraOpts());
+    const ok = await WebRTCModule.acquireCamera('user');
     if (ok === false) {
       cameraFrontEnabled = false;
       const err = WebRTCModule.getLastError();
@@ -1294,7 +1276,7 @@ const W2TD_VERSION = '1.0.0';
       if (cameraRearEnabled || cameraFrontEnabled) {
         try {
           const mode = cameraRearEnabled ? 'environment' : 'user';
-          const camOk = await WebRTCModule.acquireCamera(mode, _cameraOpts());
+          const camOk = await WebRTCModule.acquireCamera(mode);
           if (camOk) {
             results.camera = true;
             addLog('Camera permission granted', 'info');

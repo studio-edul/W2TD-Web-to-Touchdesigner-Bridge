@@ -71,16 +71,8 @@ def _cfg_val(cfg, *keys, default=0):
 	return default
 
 
-def _cfg_str(cfg, *keys, default=''):
-	"""Try keys in order; return string."""
-	for k in keys:
-		if k in cfg and cfg[k] is not None:
-			return str(cfg[k]).strip()
-	return default
-
-
 def _build_config_msg(cfg):
-	"""Build config JSON dict — keys from w2td_config (Samplerate, Wakelock, Motion, Geolocation, ...)."""
+	"""Build config JSON dict — w2td_config 키 이름에 맞춤 (Samplerate, Wakelock, Motion, Geolocation, ...)."""
 	out = {
 		'type': 'config',
 		'sample_rate': _cfg_val(cfg, 'Samplerate', 'samplerate', 'sample_rate', default=30),
@@ -97,7 +89,6 @@ def _build_config_msg(cfg):
 		'audio_echo_cancellation': _cfg_val(cfg, 'Echocancellation', 'echocancellation', 'audio_echo_cancellation', default=0),
 		'audio_noise_suppression': _cfg_val(cfg, 'Noisesuppression', 'noisesuppression', 'audio_noise_suppression', default=0),
 		'audio_auto_gain': _cfg_val(cfg, 'Audiogain', 'audiogain', 'audio_auto_gain', default=0),
-		'camera_resolution': _cfg_str(cfg, 'Resolution', 'resolution', 'camera_resolution', default='Non-Commercial'),
 	}
 	ice_srv = (cfg.get('ice_servers') or cfg.get('Ice_servers') or '').strip()
 	if ice_srv:
@@ -107,97 +98,12 @@ def _build_config_msg(cfg):
 	return out
 
 
-def _get_cam_resolution_dims(cfg=None):
-	"""w2td_config Resolution → (w, h). Synced with webrtc.js. Orientation handled in TD."""
-	if cfg is None:
-		cfg = _read_config()
-	res = _cfg_str(cfg, 'Resolution', 'resolution', default='Non-Commercial')
-	presets = {
-		'Non-Commercial': (540, 960),
-		'FHD': (1080, 1920),
-		'4K': (2160, 3840),
-	}
-	w, h = presets.get(res, presets['Non-Commercial'])
-	return (int(w), int(h))
-
-
-def _get_cam_base_url():
-	base = op('/').fetch('w2td_cam_base_url', None)
-	if base:
-		return base
-	port = op('/').fetch('w2td_web_port', 9980)
-	import socket
-	try:
-		s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-		s.connect(('8.8.8.8', 80))
-		ip = s.getsockname()[0]
-		s.close()
-	except Exception:
-		ip = '127.0.0.1'
-	return f'http://{ip}:{port}'
-
-
-def _get_cam_port():
-	return op('/').fetch('w2td_web_port', 9980)
-
-
-def _get_tls_flag():
-	return bool(op('/').fetch('w2td_cam_tls', False))
-
-
-def _find_web_render_tops():
-	"""Find all web_render_top_N operators — from storage or by scanning webrtc_video_container."""
-	tops = []
-	for slot in range(1, 21):
-		path = op('/').fetch(f'w2td_web_render_slot_{slot}', None)
-		if path:
-			t = op(path)
-			if t:
-				tops.append((slot, t))
-	if tops:
-		return tops
-	# Fallback: find TOPs by scanning webrtc_video_container
-	container = _w2td_base().op('webrtc_video_container') if _w2td_base() else None
-	if not container:
-		container = op('webrtc_video_container')
-	if container:
-		topnet = container.op('topnet') if container else None
-		parent_op = topnet or container
-		for i in range(1, 21):
-			name = f'web_render_top_{i}'
-			t = parent_op.op(name) if parent_op else None
-			if t:
-				tops.append((i, t))
-	return tops
-
-
-def _update_cam_top_resolutions(cfg):
-	"""Update existing web_render_top resolutions and URLs when config (e.g. Resolution) changes."""
-	tw, th = _get_cam_resolution_dims(cfg)
-	base_url = _get_cam_base_url()
-	port = _get_cam_port()
-	tls = _get_tls_flag()
-	for slot, top in _find_web_render_tops():
-		try:
-			top.par.outputresolution = 'custom'
-			top.par.resolutionw = tw
-			top.par.resolutionh = th
-			url = f'{base_url}/cam_receiver.html?port={port}&slot={slot}'
-			if tls:
-				url += '&tls=1'
-			if getattr(top.par, 'url', None) != url:
-				top.par.url = url
-		except Exception:
-			pass
-
-
 def _do_broadcast():
-	"""Send config to actually connected clients only (w2td_client_slots may include disconnected addresses)."""
+	"""Send config to actually connected clients only (w2td_client_slots만 보면 끊긴 주소 포함됨)."""
 	web = _op('web_server_dat')
 	if web is None:
 		return
 	cfg = _read_config()
-	_update_cam_top_resolutions(cfg)
 	msg = json.dumps(_build_config_msg(cfg))
 	slots = op('/').fetch('w2td_client_slots', {})
 	active = set()
@@ -227,15 +133,11 @@ def _debounced_broadcast():
 		_debounce_timer = None
 
 	delay_frames = max(1, int(DEBOUNCE_DELAY * 60))
-	try:
-		from_op = me
-	except NameError:
-		from_op = _op('config_watch') or op('config_watch')
+	watch = _op('config_watch')
 	_debounce_timer = run(
-		"args[0].module._do_broadcast()",
-		from_op,
+		"op('config_watch').module._do_broadcast()",
 		delayFrames=delay_frames,
-		fromOP=from_op
+		fromOP=watch or op('config_watch')
 	)
 
 
@@ -244,17 +146,18 @@ def onTableChange(dat):
 	try:
 		_debounced_broadcast()
 	except Exception as e:
-		print(f'[W2TD Config Watch] Error Table change: {e}')
+		print(f'[W2TD Config Watch] 에러 Table change error: {e}')
 
 
+# Required stubs
 def onRowChange(dat, rows):
-	_debounced_broadcast()
+	pass
 
 def onColChange(dat, cols):
-	_debounced_broadcast()
+	pass
 
 def onCellChange(dat, cells, prev):
-	_debounced_broadcast()
+	pass
 
 def onSizeChange(dat):
-	_debounced_broadcast()
+	pass
