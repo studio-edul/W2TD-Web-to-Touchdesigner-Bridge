@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000; width: 100vw; height: 100vh; overflow: hidden; }
+  #video-wrap { position: relative; width: 100%; height: 100%; }
+  #video-wrap video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    display: block;
+  }
+  #video-wrap video.hidden { display: none; }
+  #res-debug {
+    position: fixed; top: 8px; left: 8px; z-index: 9999;
+    font: 12px monospace; color: #0f0; background: rgba(0,0,0,0.8);
+    padding: 8px; border-radius: 4px; pointer-events: none;
+    white-space: pre-wrap;
+  }
+  #res-debug.hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div id="video-wrap">
+  <video id="remote-video-rear" class="hidden" autoplay playsinline muted></video>
+  <video id="remote-video-front" class="hidden" autoplay playsinline muted></video>
+</div>
+<div id="res-debug" class="hidden"></div>
+<script>
+  const videoRear  = document.getElementById('remote-video-rear');
+  const videoFront = document.getElementById('remote-video-front');
+
+  const params = new URLSearchParams(location.search);
+  const port = params.get('port') || '9980';
+  const slotParam = params.get('slot');
+  const mySlot = slotParam ? parseInt(slotParam, 10) : null;
+  const useTls = params.get('tls') === '1' || params.get('tls') === 'true';
+  const debugRes = params.get('debug') === '1';
+
+  const viewportW = window.innerWidth;
+  const viewportH = window.innerHeight;
+  console.log('[CAM-RCV] Web Render TOP viewport:', viewportW, 'x', viewportH);
+  const protocol = useTls ? 'wss' : 'ws';
+  // Use page's own hostname (local IP) so TLS cert matches; falls back to localhost
+  const wsHost = location.hostname || 'localhost';
+  const wsUrl = protocol + '://' + wsHost + ':' + port;
+
+  const ICE_SERVERS = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'turn:freeturn.net:3478', username: 'free', credential: 'free' },
+    { urls: 'turns:freeturn.net:5349', username: 'free', credential: 'free' },
+    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turns:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+  ];
+
+  const peers = {};
+  let ws = null;
+
+  function peerKey(slot, camType) {
+    return slot + '_' + (camType || 'rear');
+  }
+
+  function send(obj) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(obj));
+    }
+  }
+
+  function connect() {
+    ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      const msg = { type: 'hello', role: 'cam_receiver' };
+      if (mySlot != null && mySlot >= 1) msg.slot = mySlot;
+      send(msg);
+    };
+
+    ws.onclose = () => {
+      for (const k in peers) { try { peers[k].close(); } catch(e){} }
+      Object.keys(peers).forEach(k => delete peers[k]);
+      if (videoRear) videoRear.srcObject = null;
+      if (videoFront) videoFront.srcObject = null;
+      setTimeout(connect, 2000);
+    };
+
+    ws.onerror = () => {};
+
+    ws.onmessage = async (e) => {
+      let msg;
+      try { msg = JSON.parse(e.data); } catch { return; }
+
+      if (msg.type === 'cam_offer') {
+        if (mySlot != null && msg.slot !== mySlot) return;
+        await handleOffer(msg.slot, msg.sdp, msg.camType);
+      } else if (msg.type === 'cam_ice') {
+        if (mySlot != null && msg.slot !== mySlot) return;
+        await handleRemoteIce(msg.slot, msg.candidate, msg.sdpMLineIndex, msg.sdpMid, msg.camType);
+      } else if (msg.type === 'cam_peer_closed') {
+        if (mySlot != null && msg.slot !== mySlot) return;
+        closePeer(peerKey(msg.slot, msg.camType));
+      }
+    };
+  }
+
+  async function handleOffer(slot, sdp, camType) {
+    camType = camType || 'rear';
+    const key = peerKey(slot, camType);
+    if (peers[key]) { try { peers[key].close(); } catch(e){} }
+
+    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    peers[key] = pc;
+
+    const videoEl = camType === 'front' ? videoFront : videoRear;
+
+    pc.ontrack = (e) => {
+      if (e.streams && e.streams[0] && videoEl) {
+        // Attach metadata handler BEFORE setting srcObject to avoid missing the event
+        videoEl.onloadedmetadata = () => {
+          ['inset','width','height','left','top','transform','objectFit','transformOrigin'].forEach(p => videoEl.style.removeProperty(p));
+
+          const vw = videoEl.videoWidth, vh = videoEl.videoHeight;
+          console.log('[CAM-RCV] Received video:', vw, 'x', vh, '| viewport:', viewportW, 'x', viewportH);
+          send({ type: 'cam_resolution', width: vw, height: vh, slot: mySlot });
+
+          if (vw > vh) {
+            videoEl.style.inset = 'unset';
+            videoEl.style.width = vw + 'px';
+            videoEl.style.height = vh + 'px';
+            videoEl.style.left = (viewportW - vw) / 2 + 'px';
+            videoEl.style.top = (viewportH - vh) / 2 + 'px';
+            videoEl.style.transformOrigin = 'center center';
+            const scale = Math.max(viewportW / vh, viewportH / vw);
+            videoEl.style.transform = `rotate(90deg) scale(${scale.toFixed(4)})`;
+          }
+
+          if (debugRes) {
+            const dbg = document.getElementById('res-debug');
+            if (dbg) {
+              dbg.classList.remove('hidden');
+              dbg.textContent = `Received: ${vw}x${vh}\nViewport (TOP): ${viewportW}x${viewportH}`;
+            }
+          }
+        };
+        videoEl.srcObject = e.streams[0];
+        videoEl.classList.remove('hidden');
+        // Explicit play() — Web Render TOP Chromium may not honour autoplay attribute alone
+        videoEl.play().catch(err => console.warn('[CAM-RCV] play() failed:', err.message));
+      }
+    };
+
+    pc.onicecandidate = ({ candidate }) => {
+      if (candidate) {
+        send({
+          type: 'cam_ice',
+          slot,
+          camType,
+          candidate: candidate.candidate,
+          sdpMLineIndex: candidate.sdpMLineIndex,
+          sdpMid: candidate.sdpMid,
+        });
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      const s = pc.connectionState;
+      if (s === 'failed' || s === 'closed' || s === 'disconnected') {
+        if (videoEl) {
+          videoEl.srcObject = null;
+          videoEl.classList.add('hidden');
+        }
+        if (s === 'failed' || s === 'closed') closePeer(key);
+      }
+    };
+
+    try {
+      await pc.setRemoteDescription({ type: 'offer', sdp });
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      send({ type: 'cam_answer', slot, camType, sdp: answer.sdp });
+    } catch (err) {
+      closePeer(key);
+    }
+  }
+
+  async function handleRemoteIce(slot, candidate, sdpMLineIndex, sdpMid, camType) {
+    const key = peerKey(slot, camType);
+    const pc = peers[key];
+    if (!pc || !candidate) return;
+    try {
+      await pc.addIceCandidate(new RTCIceCandidate({ candidate, sdpMLineIndex, sdpMid }));
+    } catch (e) {
+      console.warn('[CAM-RCV] addIceCandidate failed:', e.message);
+    }
+  }
+
+  function closePeer(key) {
+    if (peers[key]) {
+      try { peers[key].close(); } catch(e) {}
+      delete peers[key];
+    }
+    const camType = (key || '').includes('front') ? 'front' : 'rear';
+    const videoEl = camType === 'front' ? videoFront : videoRear;
+    if (videoEl) {
+      videoEl.srcObject = null;
+      videoEl.classList.add('hidden');
+    }
+  }
+
+  if (debugRes) {
+    const dbg = document.getElementById('res-debug');
+    if (dbg) {
+      dbg.classList.remove('hidden');
+      dbg.textContent = 'Viewport (TOP): ' + viewportW + 'x' + viewportH + '\nWaiting for video...';
+    }
+  }
+
+  connect();
+</script>
+</body>
+</html>

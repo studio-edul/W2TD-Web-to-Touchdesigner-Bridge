@@ -22,9 +22,9 @@ touchdesigner/Backup/
 touchdesigner/.venv/
 touchdesigner/__pycache__/
 touchdesigner/TDPyEnvManagerContext.yaml
-touchdesigner/example.50.toe
 touchdesigner/webrender_webrtc_test.html
 touchdesigner/webrender_ws_test.html
+*.toe
 
 # Python virtual environments
 .venv/
