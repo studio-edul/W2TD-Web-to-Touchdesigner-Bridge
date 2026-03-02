@@ -209,6 +209,20 @@ const WebRTCModule = (() => {
   const CAM_FRONT = 'front';
   const CAM_REAR  = 'rear';
 
+  /** Request camera permission only (for Enable Sensors). Gets stream and releases immediately. */
+  async function requestCameraPermission() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return false;
+    _lastError = null;
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ video: true });
+      s.getTracks().forEach(t => t.stop());
+      return true;
+    } catch (e) {
+      _lastError = e.name || 'unknown';
+      return false;
+    }
+  }
+
   /** Acquire camera stream — facingMode: 'user' (front) or 'environment' (rear). */
   async function acquireCamera(facingMode = 'environment') {
     _lastError = null;
@@ -446,7 +460,7 @@ const WebRTCModule = (() => {
     isMicActive:  () => micActive,
     isPCActive:   () => micPc !== null,
     // Camera
-    acquireCamera, startCamera, stopCamera, disconnectCamera,
+    requestCameraPermission, acquireCamera, startCamera, stopCamera, disconnectCamera,
     stopCameraFront, stopCameraRear,
     handleCameraAnswer, handleCameraIce,
     onCamStateChange,

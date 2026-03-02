@@ -629,7 +629,7 @@ input[type="checkbox"] {
 }
 
 /* Loading screen: blocks flash of wrong UI while waiting for server config */
-#wob-loading {
+#w2td-loading {
   position: fixed;
   inset: 0;
   z-index: 900;

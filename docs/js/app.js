@@ -65,7 +65,7 @@ const W2TD_VERSION = '1.0.0';
     els.debugInfo = $('debug-info');
     els.userStartOverlay = $('user-start-overlay');
     els.btnUserStart = $('btn-user-start');
-    els.wobLoading = $('wob-loading');
+    els.w2tdLoading = $('w2td-loading');
     els.logViewerOverlay = $('log-viewer-overlay');
     els.logViewerContent = $('log-viewer-content');
     els.btnCameraMonitor = $('btn-camera-monitor');
@@ -218,7 +218,7 @@ const W2TD_VERSION = '1.0.0';
   function applyDevMode(on) {
     devMode = on;
     // Config arrived — hide any loading screen that was blocking the UI
-    els.wobLoading.classList.add('hidden');
+    els.w2tdLoading.classList.add('hidden');
 
     if (on) {
       // Full UI: show sensor panel, transition out of non-dev touch pad
@@ -531,8 +531,8 @@ const W2TD_VERSION = '1.0.0';
         }
         // If connection fails while loading screen is up, fall back to modal
         if ((status === 'error' || status === 'rejected' || status === 'disconnected') &&
-            !els.wobLoading.classList.contains('hidden')) {
-          els.wobLoading.classList.add('hidden');
+            !els.w2tdLoading.classList.contains('hidden')) {
+          els.w2tdLoading.classList.add('hidden');
           els.modal.classList.add('active');
         }
       },
@@ -563,7 +563,7 @@ const W2TD_VERSION = '1.0.0';
     // Show a loading screen so config can arrive before any UI is shown — prevents flash.
     const hasCachedMode = localStorage.getItem('w2td-dev-mode') !== null;
     if (autoConnect && !hasCachedMode) {
-      els.wobLoading.classList.remove('hidden'); // applyDevMode() will hide it
+      els.w2tdLoading.classList.remove('hidden'); // applyDevMode() will hide it
     } else if (devMode) {
       // Full UI: show main interface + initialize visualization
       els.mainUI.classList.remove('hidden');
@@ -587,7 +587,7 @@ const W2TD_VERSION = '1.0.0';
     els.touchPad.classList.add('hidden');
     els.btnExitTouch.classList.remove('hidden');
     els.userStartOverlay.classList.add('hidden');
-    els.wobLoading.classList.add('hidden');
+    els.w2tdLoading.classList.add('hidden');
     els.mainUI.classList.add('hidden');
     
     // Stop haptic vibration on disconnect
@@ -656,6 +656,11 @@ const W2TD_VERSION = '1.0.0';
       updateDebug('Permissions: ' + JSON.stringify(perms));
     } else {
       updateDebug('No permission request needed (non-iOS)');
+    }
+
+    if (navigator.mediaDevices?.getUserMedia) {
+      const camOk = await WebRTCModule.requestCameraPermission();
+      if (!camOk) updateDebug('Camera permission denied or unavailable');
     }
 
     SensorModule.startListening();
@@ -1130,7 +1135,10 @@ const W2TD_VERSION = '1.0.0';
       else if (err === 'NotFoundError') showToast('Camera not found');
       else showToast('Rear camera activation failed');
       renderSensorList();
+      return;
     }
+    await _maybeStartCamera();
+    renderSensorList();
   }
 
   async function handleFrontCameraToggle() {
@@ -1161,7 +1169,10 @@ const W2TD_VERSION = '1.0.0';
       else if (err === 'NotFoundError') showToast('Camera not found');
       else showToast('Front camera activation failed');
       renderSensorList();
+      return;
     }
+    await _maybeStartCamera();
+    renderSensorList();
   }
 
   async function handleMicToggle() {

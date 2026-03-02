@@ -175,8 +175,25 @@ def onCreate():
 	install_packages()
 
 
+def _configure_ssl():
+	"""Configure SSL certificates (must run before any HTTPS/cloudflared operations)."""
+	try:
+		import certifi
+		import ssl
+		cert_path = certifi.where()
+		os.environ['SSL_CERT_FILE'] = cert_path
+		os.environ['REQUESTS_CA_BUNDLE'] = cert_path
+		ssl._create_default_https_context = lambda: ssl.create_default_context(cafile=cert_path)
+		print(f'[W2TD] SSL certificates configured: {cert_path}')
+	except ImportError:
+		print('[W2TD] certifi not installed. Run op("w2td_setup").module.install() first.')
+	except Exception as e:
+		print(f'[W2TD] SSL config warning: {e}')
+
+
 def onStart():
 	print('[W2TD] onStart triggered')
+	_configure_ssl()
 	_init_tables()
 	_init_webrtc_ice()
 	generate()
@@ -205,24 +222,6 @@ def generate():
 		port = 9980
 	print(f'[W2TD] Using port: {port}')
 
-	# SSL certificate configuration (using certifi) - fixes macOS SSL issues
-	try:
-		import certifi
-		import ssl
-		# Set certifi certificate bundle path as environment variables
-		cert_path = certifi.where()
-		os.environ['SSL_CERT_FILE'] = cert_path
-		os.environ['REQUESTS_CA_BUNDLE'] = cert_path
-		# Configure default SSL context to use certifi (wrapped as function)
-		def _create_default_context():
-			return ssl.create_default_context(cafile=cert_path)
-		ssl._create_default_https_context = _create_default_context
-		print(f'[W2TD] SSL certificates configured: {cert_path}')
-	except ImportError:
-		print('[W2TD] certifi not installed - SSL may fail')
-	except Exception as e:
-		print(f'[W2TD] SSL config warning: {e}')
-
 	# 1. Import qrcode
 	try:
 		import qrcode
@@ -231,30 +230,42 @@ def generate():
 		print('[W2TD] qrcode not installed. Run op("w2td_setup").module.install() first.')
 		return
 
-	# 2. Cloudflare tunnel (for cross-network access) - fallback to local IP on failure
+	# 2. Cloudflare tunnel (for cross-network access) - required for mobile
 	url = None
+	last_error = None
+	os.environ['TQDM_DISABLE'] = '1'
+	os.environ['PYCLOUDFLARED_LINES_TO_CHECK'] = '100'
 	try:
-		# Suppress tqdm progress bar output
-		os.environ['TQDM_DISABLE'] = '1'
-		import sys
+		import time
 		from contextlib import redirect_stdout, redirect_stderr
 		from pycloudflared import try_cloudflare
 		print('[W2TD] Starting Cloudflare tunnel... (no signup required)')
-		# Redirect stdout/stderr to suppress tqdm progress bars during cloudflared download
-		with open(os.devnull, 'w') as devnull:
-			with redirect_stdout(devnull), redirect_stderr(devnull):
-				result = try_cloudflare(port=port)
+		for attempt in range(3):
+			try:
+				with open(os.devnull, 'w') as devnull:
+					with redirect_stdout(devnull), redirect_stderr(devnull):
+						result = try_cloudflare(port=port, verbose=False)
 				url = result.tunnel
-		print(f'[W2TD] Cloudflare URL: {url}')
+				break
+			except Exception as e:
+				last_error = e
+				if attempt < 2:
+					print(f'[W2TD] Tunnel attempt {attempt + 1} failed: {e}')
+					time.sleep(2)
+				else:
+					raise
+		if url:
+			print(f'[W2TD] Cloudflare URL: {url}')
 	except ImportError:
-		print('[W2TD] pycloudflared not installed. Run op("w2td_setup").module.install() first.')
+		last_error = 'pycloudflared not installed'
+		print('[W2TD] pycloudflared not installed.')
 	except Exception as e:
-		print(f'[W2TD] Cloudflare tunnel failed: {e} - falling back to local')
+		last_error = e
 
 	if url is None:
-		ip = get_local_ip()
-		url = f'https://{ip}:{port}'
-		print(f'[W2TD] Local fallback URL (same network only): {ip}:{port}')
+		err_msg = str(last_error) if last_error else 'Unknown error'
+		print(f'[W2TD] Cloudflare tunnel failed: {err_msg}')
+		return
 
 	op('/').store('w2td_url', url)
 
