@@ -337,34 +337,12 @@ const WebRTCModule = (() => {
     try {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      await _setCameraSenderParams(pc, opts);
       const sent = WSClient.send({ type: 'webrtc_offer_cam', sdp: offer.sdp, camType });
       _log(sent ? 'Cam ' + camType + ' offer sent' : 'Cam offer FAILED');
       return sent ? true : false;
     } catch (e) {
       _setCamState('failed');
       return false;
-    }
-  }
-
-  async function _setCameraSenderParams(pc, opts = {}) {
-    const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-    if (!sender) return;
-    try {
-      const res = _getCameraResolution(opts.cameraResolution);
-      const params = sender.getParameters();
-      params.encodings = params.encodings || [{}];
-      const track = sender.track;
-      const s = track && track.getSettings ? track.getSettings() : {};
-      const w = s.width || res.width;
-      const h = s.height || res.height;
-      params.encodings[0].scaleResolutionDownBy = 1;
-      params.encodings[0].maxBitrate = res.maxBitrate;
-      params.degradationPreference = 'maintain-resolution';
-      await sender.setParameters(params);
-      _log(`Cam sender: ${w}x${h} → scale 1 (native), maxBitrate=${res.maxBitrate / 1e6}Mbps`);
-    } catch (e) {
-      console.warn('[W2TD WebRTC] setParameters failed:', e.message);
     }
   }
 
