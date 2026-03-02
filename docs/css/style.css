@@ -777,7 +777,7 @@ input[type="checkbox"] {
 }
 
 /* ===== Toast (quick disappearing message) ===== */
-.wob-toast {
+.w2td-toast {
   position: fixed;
   bottom: 90px;
   left: 50%;
@@ -788,11 +788,11 @@ input[type="checkbox"] {
   font-size: 13px;
   border-radius: 8px;
   z-index: 9998;
-  animation: wob-toast-fade 2.8s ease-out forwards;
+  animation: w2td-toast-fade 2.8s ease-out forwards;
   max-width: 85%;
   text-align: center;
 }
-@keyframes wob-toast-fade {
+@keyframes w2td-toast-fade {
   0%, 70% { opacity: 1; }
   100% { opacity: 0; visibility: hidden; }
 }
@@ -809,4 +809,101 @@ input[type="checkbox"] {
     top: calc(12px + env(safe-area-inset-top));
     right: calc(12px + env(safe-area-inset-right));
   }
+}
+
+/* ===== Responsive Breakpoints ===== */
+
+/* Very small phones: iPhone SE (375px), sub-375 Androids */
+@media (max-width: 374px) {
+  html, body { font-size: 13px; }
+
+  .logo { font-size: 40px; letter-spacing: 5px; }
+  .subtitle { font-size: 12px; margin-bottom: 24px; }
+
+  #top-bar { padding: 6px 10px; }
+
+  .panel { padding: 10px; }
+  .sensor-list { gap: 5px; margin-bottom: 8px; }
+  .sensor-list li { padding: 5px 10px; font-size: 11px; }
+  .action-row { gap: 4px; margin-top: 6px; }
+  .control-row { gap: 4px; }
+
+  #broadcast-bar { padding: 8px 10px; gap: 6px; }
+  .broadcast-buttons { gap: 6px; }
+  .btn-broadcast { padding: 14px; font-size: 16px; }
+  .btn-trigger { padding: 14px 18px; font-size: 16px; }
+
+  .w2td-toast { bottom: 76px; }
+}
+
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  @media (max-width: 374px) {
+    #top-bar { padding-top: calc(6px + env(safe-area-inset-top)); }
+    #broadcast-bar { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+  }
+}
+
+/* Large phones: iPhone Pro Max (430px+), Android XL */
+@media (min-width: 430px) {
+  html, body { font-size: 15px; }
+
+  .logo { font-size: 54px; letter-spacing: 10px; }
+  .subtitle { font-size: 14px; margin-bottom: 36px; }
+
+  #top-bar { padding: 10px 16px; }
+
+  .panel { padding: 14px 16px; }
+  .sensor-list { gap: 8px; margin-bottom: 12px; }
+  .sensor-list li { padding: 7px 14px; font-size: 13px; }
+  .action-row { gap: 8px; margin-top: 10px; }
+  .control-row { gap: 8px; }
+
+  #broadcast-bar { padding: 12px 16px; gap: 10px; }
+  .broadcast-buttons { gap: 10px; }
+  .btn-broadcast { padding: 20px; font-size: 20px; }
+  .btn-trigger { padding: 20px 28px; font-size: 20px; }
+
+  .w2td-toast { bottom: 95px; }
+}
+
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  @media (min-width: 430px) {
+    #top-bar { padding-top: calc(10px + env(safe-area-inset-top)); }
+    #broadcast-bar { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+  }
+}
+
+/* Tablets: iPad, Android tablets (768px+) */
+@media (min-width: 768px) {
+  html, body { font-size: 16px; }
+
+  .logo { font-size: 64px; letter-spacing: 14px; }
+  .subtitle { font-size: 15px; margin-bottom: 40px; }
+  .modal { padding: 24px; }
+  .modal-content { max-width: 480px; }
+
+  .form-group label { font-size: 13px; }
+  .form-group small { font-size: 12px; }
+  input[type="text"],
+  input[type="number"] { padding: 14px 16px; }
+
+  #top-bar { padding: 14px 24px; }
+  #connection-label { font-size: 15px; }
+
+  .panel { padding: 18px 24px; }
+  .sensor-list { gap: 10px; margin-bottom: 14px; }
+  .sensor-list li { padding: 9px 18px; font-size: 14px; }
+  .action-row { gap: 10px; margin-top: 12px; }
+  .control-row { gap: 10px; }
+
+  .btn { padding: 16px 28px; }
+  .btn-primary { font-size: 18px; }
+  .btn-small { padding: 10px 16px; font-size: 13px; }
+
+  #broadcast-bar { padding: 14px 24px; gap: 12px; }
+  .broadcast-buttons { gap: 12px; }
+  .btn-broadcast { padding: 24px; font-size: 22px; border-radius: 14px; }
+  .btn-trigger { padding: 24px 36px; font-size: 22px; border-radius: 14px; }
+
+  .w2td-toast { bottom: 110px; font-size: 14px; }
 }

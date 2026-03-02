@@ -651,16 +651,18 @@ const W2TD_VERSION = '1.0.0';
         updateDebug('iOS 센서 권한은 HTTPS 필요.');
         return;
       }
+    }
+
+    if (navigator.mediaDevices?.getUserMedia) {
+      await WebRTCModule.requestCameraPermission();
+    }
+
+    if (SensorModule.needsPermissionRequest()) {
       updateDebug('Requesting permissions...');
       const perms = await SensorModule.requestPermissions();
       updateDebug('Permissions: ' + JSON.stringify(perms));
     } else {
       updateDebug('No permission request needed (non-iOS)');
-    }
-
-    if (navigator.mediaDevices?.getUserMedia) {
-      const camOk = await WebRTCModule.requestCameraPermission();
-      if (!camOk) updateDebug('Camera permission denied or unavailable');
     }
 
     SensorModule.startListening();
@@ -960,11 +962,11 @@ const W2TD_VERSION = '1.0.0';
   }
 
   function showToast(msg, duration = 2800) {
-    let el = document.getElementById('wob-toast');
+    let el = document.getElementById('w2td-toast');
     if (el) el.remove();
     el = document.createElement('div');
-    el.id = 'wob-toast';
-    el.className = 'wob-toast';
+    el.id = 'w2td-toast';
+    el.className = 'w2td-toast';
     el.textContent = msg;
     document.body.appendChild(el);
     setTimeout(() => {
