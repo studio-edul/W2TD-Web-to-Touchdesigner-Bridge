@@ -41,6 +41,8 @@ const WebRTCModule = (() => {
   let camRearPc   = null, camRearStream   = null;
   let _onCamStateChange = null;
   let _camFrontIceRecv = 0, _camRearIceRecv = 0;
+  let _camFrontRot = null;  // canvas portrait-rotation state
+  let _camRearRot  = null;
 
   // ── Shared ────────────────────────────────────────────────────────────────
   let _lastError = null;
@@ -233,6 +235,43 @@ const WebRTCModule = (() => {
     }
   }
 
+  // ── Canvas portrait-rotation helpers ──────────────────────────────────────
+
+  /** Start canvas rotation: landscape srcStream → portrait canvas stream (w×h). */
+  function _startPortraitCanvas(srcStream, w, h) {
+    const video = document.createElement('video');
+    video.srcObject = srcStream;
+    video.muted = true;
+    video.playsInline = true;
+    video.play().catch(() => {});
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    const state = { video, canvas, rafId: null, canvasStream: canvas.captureStream(30) };
+    function draw() {
+      if (video.readyState >= 2) {
+        ctx.save();
+        ctx.translate(w / 2, h / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.drawImage(video, -h / 2, -w / 2, h, w);
+        ctx.restore();
+      }
+      state.rafId = requestAnimationFrame(draw);
+    }
+    state.rafId = requestAnimationFrame(draw);
+    return state;
+  }
+
+  function _stopPortraitCanvas(state) {
+    if (!state) return;
+    if (state.rafId) { cancelAnimationFrame(state.rafId); state.rafId = null; }
+    if (state.canvasStream) { state.canvasStream.getTracks().forEach(t => t.stop()); }
+    if (state.video) { state.video.srcObject = null; }
+  }
+
+  // ── Camera public API (Front / Rear) ───────────────────────────────────────
+
   /** Acquire camera stream — facingMode: 'user' (front) or 'environment' (rear).
    * opts: { cameraResolution } from config */
   async function acquireCamera(facingMode = 'environment', opts = {}) {
@@ -243,13 +282,14 @@ const WebRTCModule = (() => {
     if (stream) { stream.getTracks().forEach(t => t.stop()); }
     if (isFront) camFrontStream = null; else camRearStream = null;
     const res = _getCameraResolution(opts.cameraResolution);
-    const maxDim = Math.max(res.width, res.height);
     try {
+      // Request landscape (native camera orientation) to avoid FOV crop.
+      // Canvas rotation in startCamera converts to portrait before WebRTC send.
       const s = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: facingMode },
-          width:  { ideal: res.width,  max: maxDim },
-          height: { ideal: res.height, max: maxDim },
+          width:  { ideal: res.height, max: res.height },
+          height: { ideal: res.width,  max: res.width  },
         },
         audio: false,
       });
@@ -285,13 +325,13 @@ const WebRTCModule = (() => {
       if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
       if (isFront) camFrontStream = null; else camRearStream = null;
       const res = _getCameraResolution(opts.cameraResolution);
-      const maxDim = Math.max(res.width, res.height);
       try {
+        // Request landscape (native) to avoid FOV crop; canvas rotates to portrait.
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: facingMode },
-            width:  { ideal: res.width,  max: maxDim },
-            height: { ideal: res.height, max: maxDim },
+            width:  { ideal: res.height, max: res.height },
+            height: { ideal: res.width,  max: res.width  },
           },
           audio: false,
         });
@@ -305,10 +345,18 @@ const WebRTCModule = (() => {
       _updatePreview();
     }
 
+    // Stop any previous canvas rotation for this camera
+    if (isFront) { _stopPortraitCanvas(_camFrontRot); _camFrontRot = null; }
+    else         { _stopPortraitCanvas(_camRearRot);  _camRearRot  = null; }
+
+    const res = _getCameraResolution(opts.cameraResolution);
+    const rotState = _startPortraitCanvas(stream, res.width, res.height);
+    if (isFront) _camFrontRot = rotState; else _camRearRot = rotState;
+
     const pc = new RTCPeerConnection(_buildRtcConfig(opts.iceServers, opts.iceTransportPolicy));
     if (isFront) camFrontPc = pc; else camRearPc = pc;
 
-    stream.getTracks().forEach(track => pc.addTrack(track, stream));
+    rotState.canvasStream.getTracks().forEach(track => pc.addTrack(track, rotState.canvasStream));
 
     pc.onicecandidate = ({ candidate }) => {
       if (!candidate) return;
@@ -367,12 +415,14 @@ const WebRTCModule = (() => {
   }
 
   function stopCameraFront() {
+    _stopPortraitCanvas(_camFrontRot); _camFrontRot = null;
     if (camFrontStream) { camFrontStream.getTracks().forEach(t => t.stop()); camFrontStream = null; }
     if (camFrontPc) { camFrontPc.close(); camFrontPc = null; }
     _updatePreview();
   }
 
   function stopCameraRear() {
+    _stopPortraitCanvas(_camRearRot); _camRearRot = null;
     if (camRearStream) { camRearStream.getTracks().forEach(t => t.stop()); camRearStream = null; }
     if (camRearPc) { camRearPc.close(); camRearPc = null; }
     _updatePreview();
