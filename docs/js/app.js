@@ -653,7 +653,7 @@ const W2TD_VERSION = '1.0.0';
       }
     }
 
-    if (navigator.mediaDevices?.getUserMedia) {
+    if (navigator.mediaDevices?.getUserMedia && !cameraRearEnabled && !cameraFrontEnabled) {
       await WebRTCModule.requestCameraPermission();
     }
 
