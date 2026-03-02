@@ -81,7 +81,7 @@ const WSClient = (() => {
         const msg = JSON.parse(event.data);
         if (msg.type === 'ack') {
           if (onStatusChange) onStatusChange('connected');
-          console.log('[WS] TD ack, slot:', msg.slot);
+          console.log('[WS] TD ack, slot:', msg.slot, '| TD version:', msg.td_version || 'unknown');
         } else if (msg.type === 'config') {
           if (onConfig) onConfig(msg);
         } else if (msg.type === 'webrtc_answer' || msg.type === 'webrtc_ice' || msg.type === 'webrtc_state' ||

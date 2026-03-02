@@ -1,6 +1,7 @@
 import json
 import os
 
+W2TD_VERSION = '1.0.0'
 GITHUB_PAGES_URL = 'https://studio-edul.github.io/Web-Osc-Bridge/'
 MAX_CLIENTS = 20
 
@@ -641,7 +642,7 @@ def onWebSocketOpen(webServerDAT, client):
 			t.appendRow([slot, 1, default_name] + [0.0] * (len(SENSOR_COLS) - 3))
 
 		print(f'[W2TD] Connected -> slot {slot} | {addr} | {len(slots)}/{MAX_CLIENTS} active')
-		webServerDAT.webSocketSendText(client, json.dumps({'type': 'ack', 'slot': slot}))
+		webServerDAT.webSocketSendText(client, json.dumps({'type': 'ack', 'slot': slot, 'td_version': W2TD_VERSION}))
 
 		# Push current config to the newly connected client
 		cfg = _read_config()

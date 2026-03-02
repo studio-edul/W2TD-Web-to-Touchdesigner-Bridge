@@ -3,6 +3,8 @@
  * Direct WebSocket connection to TouchDesigner.
  * Settings (sample rate, wake lock, haptic) are pushed from TD via config message.
  */
+const W2TD_VERSION = '1.0.0';
+
 (() => {
   let broadcasting = false;
   let sampleRate = 30;
@@ -303,7 +305,8 @@
 
   function init() {
     cacheDom();
-    addLog('W2TD 시작 (protocol: ' + window.location.protocol + ')', 'info');
+    addLog('W2TD 시작 v' + W2TD_VERSION + ' (protocol: ' + window.location.protocol + ')', 'info');
+    console.log('[W2TD] App version:', W2TD_VERSION);
     // Apply cached dev mode instantly to prevent flash of wrong UI
     const _cached = localStorage.getItem('wob-dev-mode');
     if (_cached !== null) {
