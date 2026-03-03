@@ -203,6 +203,9 @@ const W2TD_VERSION = '1.0.0';
       showTouchPoints = !!parseInt(cfg.show_dots);
       updateTouchPointsToggleUI();
     }
+    if (cfg.cam_resolution != null) {
+      WebRTCModule.setResolution(cfg.cam_resolution);
+    }
   }
 
   function _webrtcStartOpts(opts) {

@@ -5,9 +5,13 @@
  * Signaling for both uses the existing WebSocket (TD Web Server DAT).
  */
 const WebRTCModule = (() => {
-  // ── Camera resolution preset (change to '4k' for 3840x2160) ─────────────────
-  const CAM_RESOLUTION = { width: 1920, height: 1080, maxBitrate: 4000000 };
-  // const CAM_RESOLUTION = { width: 3840, height: 2160, maxBitrate: 8000000 }; // 4K
+  // ── Camera resolution presets — updated at runtime via setResolution() ───────
+  const __camResolution_MAP = {
+    'non-commercial': { width: 960,  height: 540,  maxBitrate: 2000000 },
+    'fhd':            { width: 1920, height: 1080, maxBitrate: 4000000 },
+    '4k':             { width: 3840, height: 2160, maxBitrate: 8000000 },
+  };
+  let _camResolution = __camResolution_MAP['fhd']; // default until config arrives from TD
 
   const DEFAULT_ICE_SERVERS = [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -37,6 +41,23 @@ const WebRTCModule = (() => {
   let _audioCtx  = null;
   let _analyser  = null;
   let _onLog     = null;
+
+  // ── Orientation lock ───────────────────────────────────────────────────────
+  let _orientationLocked = false;
+
+  function _lockCameraOrientation() {
+    if (!screen.orientation?.lock) return;
+    screen.orientation.lock('portrait-primary')
+      .then(() => { _orientationLocked = true; })
+      .catch(() => { _orientationLocked = false; });
+  }
+
+  function _clearOrientationLock() {
+    if (_orientationLocked) {
+      try { screen.orientation.unlock(); } catch(e) {}
+      _orientationLocked = false;
+    }
+  }
 
   function _log(msg) {
     if (_onLog) _onLog(msg);
@@ -235,8 +256,8 @@ const WebRTCModule = (() => {
       const s = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: facingMode },
-          width:  { ideal: CAM_RESOLUTION.width,  max: Math.max(CAM_RESOLUTION.width, CAM_RESOLUTION.height) },
-          height: { ideal: CAM_RESOLUTION.height, max: Math.max(CAM_RESOLUTION.width, CAM_RESOLUTION.height) },
+          width:  { ideal: _camResolution.width,  max: Math.max(_camResolution.width, _camResolution.height) },
+          height: { ideal: _camResolution.height, max: Math.max(_camResolution.width, _camResolution.height) },
         },
         audio: false,
       });
@@ -255,6 +276,7 @@ const WebRTCModule = (() => {
   /** Start camera stream (front or rear) and send offer to TD. */
   async function startCamera(facingMode = 'environment', opts = {}) {
     _lastError = null;
+    _lockCameraOrientation();
     const isFront = facingMode === 'user';
     const camType = isFront ? CAM_FRONT : CAM_REAR;
 
@@ -274,8 +296,8 @@ const WebRTCModule = (() => {
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: facingMode },
-            width:  { ideal: CAM_RESOLUTION.width,  max: Math.max(CAM_RESOLUTION.width, CAM_RESOLUTION.height) },
-            height: { ideal: CAM_RESOLUTION.height, max: Math.max(CAM_RESOLUTION.width, CAM_RESOLUTION.height) },
+            width:  { ideal: _camResolution.width,  max: Math.max(_camResolution.width, _camResolution.height) },
+            height: { ideal: _camResolution.height, max: Math.max(_camResolution.width, _camResolution.height) },
           },
           audio: false,
         });
@@ -337,20 +359,20 @@ const WebRTCModule = (() => {
       params.encodings = params.encodings || [{}];
       const track = sender.track;
       const s = track && track.getSettings ? track.getSettings() : {};
-      const w = s.width || CAM_RESOLUTION.width;
-      const h = s.height || CAM_RESOLUTION.height;
-      const maxPx = Math.max(CAM_RESOLUTION.width, CAM_RESOLUTION.height);
-      const minPx = Math.min(CAM_RESOLUTION.width, CAM_RESOLUTION.height);
+      const w = s.width || _camResolution.width;
+      const h = s.height || _camResolution.height;
+      const maxPx = Math.max(_camResolution.width, _camResolution.height);
+      const minPx = Math.min(_camResolution.width, _camResolution.height);
       const scale = Math.max(
         Math.ceil(Math.max(w, h) / maxPx),
         Math.ceil(Math.min(w, h) / minPx),
         1
       );
       params.encodings[0].scaleResolutionDownBy = scale;
-      params.encodings[0].maxBitrate = CAM_RESOLUTION.maxBitrate;
+      params.encodings[0].maxBitrate = _camResolution.maxBitrate;
       params.degradationPreference = 'maintain-resolution';
       await sender.setParameters(params);
-      _log(`Cam sender: ${w}x${h} → scale ${scale} → FHD, maxBitrate=${CAM_RESOLUTION.maxBitrate / 1e6}Mbps`);
+      _log(`Cam sender: ${w}x${h} → scale ${scale} → FHD, maxBitrate=${_camResolution.maxBitrate / 1e6}Mbps`);
     } catch (e) {
       console.warn('[W2TD WebRTC] setParameters failed:', e.message);
     }
@@ -378,6 +400,7 @@ const WebRTCModule = (() => {
   function stopCamera() {
     stopCameraFront();
     stopCameraRear();
+    _clearOrientationLock();
     _updatePreview();
     _setCamState('closed');
   }
@@ -439,6 +462,29 @@ const WebRTCModule = (() => {
     }
   }
 
+  /** Update camera resolution from TD config and apply to active tracks. */
+  async function setResolution(resString) {
+    const key = (resString || '').toLowerCase().trim();
+    const preset = _CAM_RESOLUTION_MAP[key];
+    if (!preset) return;
+    if (preset.width === _camResolution.width && preset.height === _camResolution.height) return;
+    _camResolution = preset;
+    _log(`Camera resolution: ${key} (${preset.width}x${preset.height})`);
+    for (const stream of [camRearStream, camFrontStream]) {
+      if (!stream) continue;
+      const track = stream.getVideoTracks()[0];
+      if (!track) continue;
+      try {
+        await track.applyConstraints({
+          width:  { ideal: preset.width,  max: Math.max(preset.width, preset.height) },
+          height: { ideal: preset.height, max: Math.max(preset.width, preset.height) },
+        });
+      } catch(e) {
+        console.warn('[W2TD WebRTC] setResolution applyConstraints failed:', e.message);
+      }
+    }
+  }
+
   function getMicLevel() {
     if (!_analyser || !_audioCtx) return 0;
     if (_audioCtx.state === 'suspended') _audioCtx.resume();
@@ -464,6 +510,7 @@ const WebRTCModule = (() => {
     stopCameraFront, stopCameraRear,
     handleCameraAnswer, handleCameraIce,
     onCamStateChange,
+    setResolution,
     CAM_FRONT, CAM_REAR,
     isCameraFrontActive: () => !!(camFrontStream && camFrontStream.getVideoTracks().length),
     isCameraRearActive:  () => !!(camRearStream && camRearStream.getVideoTracks().length),

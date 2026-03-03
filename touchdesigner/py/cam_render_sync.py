@@ -6,28 +6,71 @@ Each TOP loads cam_receiver.html?slot=N for that slot.
 Setup in TD:
   1. Create webrtc_video_container (Container COMP)
   2. Create DAT Execute DAT inside webrtc_video_container
-  3. Set "DATs" to: ../sensor_table (상대경로 — sensor_table이 한 단계 위에 있을 때)
+  3. Set "DATs" to: ../sensor_table (relative path when sensor_table is one level up)
   4. Enable "Table Change"
   5. Paste this script
-상대 경로: DAT Execute가 webrtc_video_container 안에 있으면 ../sensor_table
 """
 NODE_OFFSET_Y = 100
+# Square side per Resolution config: Non-Commercial(960), FHD(1920), 4K(3840)
+_CAM_TOP_DIM_MAP = {'non-commercial': 960, 'fhd': 1920, '4k': 3840}
+
+
+def _get_cam_top_dim():
+	"""Read Resolution from w2td_config and return square TOP dimension."""
+	try:
+		cfg = None
+		try:
+			p = me.parent()
+			if p and p.parent():
+				cfg = p.parent().op('w2td_config')
+		except (NameError, AttributeError):
+			pass
+		if cfg is None:
+			cfg = op('w2td_config')
+		if cfg and cfg.numRows >= 2:
+			for r in range(1, cfg.numRows):
+				if str(cfg[r, 0]).lower() == 'resolution':
+					return _CAM_TOP_DIM_MAP.get(str(cfg[r, 1]).strip().lower(), 960)
+	except Exception:
+		pass
+	return 960
+
+
+def _get_screenmode():
+	"""Read Screenmode from w2td_config. Returns 'portrait' or 'landscape'."""
+	try:
+		cfg = None
+		try:
+			p = me.parent()
+			if p and p.parent():
+				cfg = p.parent().op('w2td_config')
+		except (NameError, AttributeError):
+			pass
+		if cfg is None:
+			cfg = op('w2td_config')
+		if cfg and cfg.numRows >= 2:
+			for r in range(1, cfg.numRows):
+				if str(cfg[r, 0]).lower() == 'screenmode':
+					return str(cfg[r, 1]).strip().lower()
+	except Exception:
+		pass
+	return 'portrait'
 
 
 def _w2td_video():
-	"""webrtc_video_container. DAT Execute가 그 안에 있으면 me.parent() 사용."""
+	"""Find webrtc_video_container. Uses me.parent() if DAT Execute is inside it."""
 	try:
 		p = me.parent()
 		if p and p.op('topnet'):
 			return p
-		# DAT Execute가 W2TD 등에 있으면, 형제 webrtc_video_container 찾기
+		# If DAT Execute is inside W2TD, look for sibling webrtc_video_container
 		if p and p.parent():
 			c = p.parent().op('webrtc_video_container')
 			if c:
 				return c
 	except (NameError, AttributeError):
 		pass
-	# fallback: webrtc_audio_container와 동일 구조 (W2TD 아래)
+	# Fallback: same structure as webrtc_audio_container (under W2TD)
 	for proj in ('project1', 'project'):
 		for path in (f'{proj}/W2TD/webrtc_video_container', f'{proj}/webrtc_video_container'):
 			c = op(path)
@@ -43,7 +86,7 @@ def _w2td_video():
 
 
 def _get_container():
-	"""TopNet or similar for creating Web Render TOPs (must have create())."""
+	"""Return the container used for creating TOPs (must support create())."""
 	c = _w2td_video()
 	if c is None:
 		return None
@@ -59,10 +102,10 @@ def _get_container():
 
 
 def _read_connected_slots(table_dat=None):
-	"""sensor_table에서 연결된 slot 목록. table_dat 있으면 사용 (onTableChange에서 전달, 경로 불필요)."""
+	"""Return sorted list of connected slot numbers from sensor_table."""
 	t = table_dat
 	if t is None:
-		# fallback: DAT Execute 부모의 형제에서 sensor_table
+		# Fallback: look for sensor_table as sibling of DAT Execute's parent
 		try:
 			p = me.parent()
 			if p and p.parent():
@@ -87,11 +130,11 @@ def _read_connected_slots(table_dat=None):
 
 
 def _get_cam_base_url():
-	"""cam_receiver base URL (http://ip:port or https://ip:port)."""
+	"""Return cam_receiver base URL (http://ip:port or https://ip:port)."""
 	base = op('/').fetch('w2td_cam_base_url', None)
 	if base:
 		return base
-	# fallback: w2td_config or build from web server
+	# Fallback: check w2td_config or build from web server info
 	cfg = op('w2td_config')
 	if cfg and hasattr(cfg, 'numRows') and cfg.numRows >= 2:
 		for col in ('base_url', 'cam_base_url', 'url'):
@@ -100,7 +143,7 @@ def _get_cam_base_url():
 				val = str(cfg[1, idx]).strip()
 				if val:
 					return val
-	# build from common storage
+	# Build from stored port + local IP
 	port = op('/').fetch('w2td_web_port', 9980)
 	import socket
 	try:
@@ -114,35 +157,50 @@ def _get_cam_base_url():
 
 
 def _get_cam_port():
-	"""Web server port for cam_receiver."""
+	"""Return web server port for cam_receiver."""
 	return op('/').fetch('w2td_web_port', 9980)
 
 
 def _get_tls_flag():
-	"""Whether to add &tls=1 to URL."""
+	"""Return True if &tls=1 should be appended to the cam_receiver URL."""
 	return bool(op('/').fetch('w2td_cam_tls', False))
 
 
+def _find_layout1(container):
+	"""Find layout1 TOP in container or its parent."""
+	layout1 = container.op('layout1') if container else None
+	if not layout1:
+		vid = _w2td_video()
+		if vid:
+			layout1 = vid.op('layout1')
+		if not layout1 and vid and vid.parent():
+			layout1 = vid.parent().op('layout1')
+	return layout1
+
+
 def sync(table_dat=None):
-	"""sensor_table과 동기화: Web Render TOP 생성/삭제, URL 설정. table_dat 있으면 사용 (경로 불필요)."""
+	"""Sync Web Render TOPs with sensor_table. Creates/destroys nodes and sets URLs."""
 	container = _get_container()
 	if container is None:
 		shown = op('/').fetch('w2td_cam_render_container_err', False)
 		if not shown:
-			print('[Cam Render Sync] 에러 webrtc_video_container not found - create W2TD/webrtc_video_container (Container COMP) and place DAT Execute inside it')
+			print('[Cam Render Sync] Error: webrtc_video_container not found - create W2TD/webrtc_video_container (Container COMP) and place DAT Execute inside it')
 			op('/').store('w2td_cam_render_container_err', True)
 		return
 
-	op('/').store('w2td_cam_render_container_err', False)  # 성공 시 리셋
+	op('/').store('w2td_cam_render_container_err', False)
+	sq = _get_cam_top_dim()
+	screenmode = _get_screenmode()
+	rotate_deg = -90 if screenmode == 'landscape' else 0
 	slots = _read_connected_slots(table_dat)
 	base_url = _get_cam_base_url()
 	port = _get_cam_port()
 	tls = _get_tls_flag()
 
 	target_names = [f'web_render_top_{i}' for i in range(1, len(slots) + 1)]
-	slot_list = slots  # [1, 2, 3] for 3 connected
+	slot_list = slots
 
-	# 기존 Web Render TOP 조회
+	# Collect existing web_render_top nodes
 	existing = {}
 	if container:
 		for i in range(1, 32):
@@ -151,59 +209,176 @@ def sync(table_dat=None):
 			if top:
 				existing[name] = top
 
-	# 삭제 (web_render_top만). 제거될 TOP의 slot cam_receiver 클리어 → offer pending 유도
+	# Destroy removed nodes (web_render_top + transform_top + crop_top)
 	prev_slots = tuple(op('/').fetch('w2td_cam_render_last_slots', ()))
 	for name in list(existing.keys()):
 		if name not in target_names:
+			idx_str = name.split('_')[-1]
 			try:
-				idx = int(name.split('_')[-1]) - 1
+				idx = int(idx_str) - 1
 				if 0 <= idx < len(prev_slots):
 					op('/').store(f'w2td_cam_receiver_addr_{prev_slots[idx]}', None)
 			except (ValueError, TypeError):
 				pass
+			for companion in (f'transform_top_{idx_str}', f'crop_top_{idx_str}', f'touch_out_top_{idx_str}'):
+				c = container.op(companion)
+				if c:
+					try:
+						c.destroy()
+					except Exception:
+						pass
 			try:
 				existing[name].destroy()
 				print(f'[Cam Render Sync] Destroyed {name}')
 			except Exception as e:
-				print(f'[Cam Render Sync] 에러 Destroy {name} failed: {e}')
+				print(f'[Cam Render Sync] Error destroying {name}: {e}')
 
-	# 생성 및 URL 설정
+	# Create/update nodes: web_render_top -> transform_top -> crop_top -> layout1
 	for i, name in enumerate(target_names):
+		idx = i + 1
+
+		# --- web_render_top ---
 		top = existing.get(name) or container.op(name)
 		if top is None:
 			try:
 				top = container.create('webrenderTOP', name)
 				print(f'[Cam Render Sync] Created {name}')
 			except Exception as e:
-				print(f'[Cam Render Sync] 에러 Create {name} failed: {e}')
+				print(f'[Cam Render Sync] Error creating {name}: {e}')
 				continue
-		slot = slot_list[i] if i < len(slot_list) else (i + 1)
+		slot = slot_list[i] if i < len(slot_list) else idx
 		url = f'{base_url}/cam_receiver.html?port={port}&slot={slot}'
 		if tls:
 			url += '&tls=1'
 		try:
-			# URL 변경 시에만 설정 — 동일 URL 반복 설정 시 ERR_ABORTED 유발
+			# Only set URL when changed to avoid ERR_ABORTED
 			if getattr(top.par, 'url', None) != url:
 				top.par.url = url
 			top.par.active = 1
+			if hasattr(top.par, 'outputresolution'):
+				try:
+					top.par.outputresolution = 'custom'
+				except Exception:
+					pass
+			if hasattr(top.par, 'resolutionw') and hasattr(top.par, 'resolutionh'):
+				try:
+					top.par.resolutionw = sq
+					top.par.resolutionh = sq
+				except Exception:
+					pass
 			top.nodeX = 0
 			top.nodeY = -i * NODE_OFFSET_Y
 		except Exception as e:
-			print(f'[Cam Render Sync] 에러 Set {name} url failed: {e}')
-		# cam_resolution 수신 시 해당 slot의 web_render_top 찾기용
+			print(f'[Cam Render Sync] Error setting {name} params: {e}')
 		op('/').store(f'w2td_web_render_slot_{slot}', top.path)
 
-		# web_render_top → layout1 직접 연결
+		# --- transform_top ---
+		t_name = f'transform_top_{idx}'
+		t_top = container.op(t_name)
+		if t_top is None:
+			try:
+				t_top = container.create('transformTOP', t_name)
+				print(f'[Cam Render Sync] Created {t_name}')
+			except Exception as e:
+				print(f'[Cam Render Sync] Error creating {t_name}: {e}')
+				t_top = None
+		if t_top:
+			try:
+				t_top.par.rotate = rotate_deg
+			except Exception as e:
+				print(f'[Cam Render Sync] Error setting {t_name} rotate: {e}')
+			try:
+				t_top.nodeX = top.nodeX + 150
+				t_top.nodeY = -i * NODE_OFFSET_Y
+			except Exception:
+				pass
+			try:
+				top.outputConnectors[0].connect(t_top.inputConnectors[0])
+			except Exception as e:
+				print(f'[Cam Render Sync] Error connecting {name} -> {t_name}: {e}')
+
+		# --- crop_top ---
+		c_name = f'crop_top_{idx}'
+		c_top = container.op(c_name)
+		if c_top is None:
+			try:
+				c_top = container.create('cropTOP', c_name)
+				print(f'[Cam Render Sync] Created {c_name}')
+			except Exception as e:
+				print(f'[Cam Render Sync] Error creating {c_name}: {e}')
+				c_top = None
+		if c_top:
+			try:
+				c_top.nodeX = top.nodeX + 300
+				c_top.nodeY = -i * NODE_OFFSET_Y
+			except Exception:
+				pass
+			# Crop black bars in pixels (unit=0 → pixel mode)
+			crop_px = sq * 7 // 32
+			try:
+				c_top.par.cropleftunit   = 0
+				c_top.par.croprightunit  = 0
+				c_top.par.croptopunit    = 0
+				c_top.par.cropbottomunit = 0
+			except Exception as e:
+				print(f'[Cam Render Sync] Error setting {c_name} crop units: {e}')
+			try:
+				if screenmode == 'landscape':
+					# After -90 transform: black bars appear on top/bottom
+					c_top.par.cropleft   = 0
+					c_top.par.cropright  = sq
+					c_top.par.croptop    = crop_px
+					c_top.par.cropbottom = sq - crop_px
+				else:
+					# Portrait: black bars on left/right from 9:16 content in square
+					c_top.par.cropleft   = crop_px
+					c_top.par.cropright  = sq - crop_px
+					c_top.par.croptop    = 0
+					c_top.par.cropbottom = sq
+			except Exception as e:
+				print(f'[Cam Render Sync] Error setting {c_name} crop values: {e}')
+			try:
+				if t_top:
+					t_top.outputConnectors[0].connect(c_top.inputConnectors[0])
+			except Exception as e:
+				print(f'[Cam Render Sync] Error connecting {t_name} -> {c_name}: {e}')
+
+		# --- touch_out_top ---
+		o_name = f'touch_out_top_{idx}'
+		o_top = container.op(o_name)
+		if o_top is None:
+			try:
+				o_top = container.create('touchOutTOP', o_name)
+				print(f'[Cam Render Sync] Created {o_name}')
+			except Exception as e:
+				print(f'[Cam Render Sync] Error creating {o_name}: {e}')
+				o_top = None
+		if o_top:
+			try:
+				o_top.nodeX = top.nodeX + 450
+				o_top.nodeY = -i * NODE_OFFSET_Y
+			except Exception:
+				pass
+			try:
+				o_top.par.port = 9000 + idx
+			except Exception as e:
+				print(f'[Cam Render Sync] Error setting {o_name} port: {e}')
+			try:
+				if c_top:
+					c_top.outputConnectors[0].connect(o_top.inputConnectors[0])
+			except Exception as e:
+				print(f'[Cam Render Sync] Error connecting {c_name} -> {o_name}: {e}')
+
+		# Connect to layout1: touch_out -> layout (fallback: crop -> layout, etc.)
+		connect_src = o_top or c_top or t_top or top
 		try:
-			layout1 = (container.op('layout1') if container else None) or (_w2td_video().op('layout1') if _w2td_video() else None)
-			if not layout1 and _w2td_video() and _w2td_video().parent():
-				layout1 = _w2td_video().parent().op('layout1')
+			layout1 = _find_layout1(container)
 			if layout1 and i < len(layout1.inputConnectors):
-				top.outputConnectors[0].connect(layout1.inputConnectors[i])
+				connect_src.outputConnectors[0].connect(layout1.inputConnectors[i])
 		except Exception:
 			pass
 
-	# 삭제된 slot 매핑 정리
+	# Clean up slot mappings for disconnected slots
 	for s in range(1, 21):
 		if s not in slot_list:
 			op('/').store(f'w2td_web_render_slot_{s}', None)
@@ -214,14 +389,17 @@ def sync(table_dat=None):
 		if tuple(slots) != prev:
 			print(f'[Cam Render Sync] {len(slots)} web render TOPs synced (slots {slots})')
 			op('/').store('w2td_cam_render_last_slots', tuple(slots))
-		# layout1 해상도: 연결된 영상 수에 맞춰 수평 배치 (540x960 each → 540*n x 960)
+		# Set layout1 resolution based on cropped output size
 		try:
-			layout1 = (container.op('layout1') if container else None) or (_w2td_video().op('layout1') if _w2td_video() else None)
-			if not layout1 and _w2td_video() and _w2td_video().parent():
-				layout1 = _w2td_video().parent().op('layout1')
+			layout1 = _find_layout1(container)
 			if layout1:
 				n = len(slots)
-				w, h = 540 * n, 960
+				crop_side = sq * 7 // 32
+				short = sq - 2 * crop_side  # = sq * 9 // 16
+				if screenmode == 'landscape':
+					w, h = sq * n, short   # 16:9 each slot
+				else:
+					w, h = short * n, sq   # 9:16 each slot
 				if hasattr(layout1.par, 'outputresolution'):
 					try:
 						layout1.par.outputresolution = 'custom'
@@ -245,7 +423,7 @@ def sync(table_dat=None):
 
 
 def onTableChange(dat, prevDAT, info):
-	"""DAT Execute DAT의 onTableChange에서 호출. dat=sensor_table (경로 무관)."""
+	"""Called by DAT Execute when sensor_table changes."""
 	sync(table_dat=dat)
 
 

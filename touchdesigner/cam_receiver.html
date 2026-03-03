@@ -11,7 +11,7 @@
     inset: 0;
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
     object-position: center;
     display: block;
   }
@@ -45,6 +45,31 @@
   const viewportW = window.innerWidth;
   const viewportH = window.innerHeight;
   console.log('[CAM-RCV] Web Render TOP viewport:', viewportW, 'x', viewportH);
+
+  function applyVideoRotation(videoEl) {
+    const vw = videoEl.videoWidth, vh = videoEl.videoHeight;
+    if (!vw || !vh) return;
+    ['inset','width','height','left','top','transform','objectFit','transformOrigin']
+      .forEach(p => videoEl.style.removeProperty(p));
+    if (vw > vh) {
+      videoEl.style.inset = 'unset';
+      videoEl.style.width = vw + 'px';
+      videoEl.style.height = vh + 'px';
+      videoEl.style.left = (viewportW - vw) / 2 + 'px';
+      videoEl.style.top = (viewportH - vh) / 2 + 'px';
+      videoEl.style.transformOrigin = 'center center';
+      const scale = Math.min(viewportW / vh, viewportH / vw);
+      videoEl.style.transform = `rotate(-90deg) scale(${scale.toFixed(4)})`;
+    }
+    if (debugRes) {
+      const dbg = document.getElementById('res-debug');
+      if (dbg) {
+        dbg.classList.remove('hidden');
+        dbg.textContent = `Received: ${vw}x${vh}\nViewport (TOP): ${viewportW}x${viewportH}`;
+      }
+    }
+  }
+
   const protocol = useTls ? 'wss' : 'ws';
   // Use page's own hostname (local IP) so TLS cert matches; falls back to localhost
   const wsHost = location.hostname || 'localhost';
@@ -122,31 +147,13 @@
       if (e.streams && e.streams[0] && videoEl) {
         // Attach metadata handler BEFORE setting srcObject to avoid missing the event
         videoEl.onloadedmetadata = () => {
-          ['inset','width','height','left','top','transform','objectFit','transformOrigin'].forEach(p => videoEl.style.removeProperty(p));
-
           const vw = videoEl.videoWidth, vh = videoEl.videoHeight;
           console.log('[CAM-RCV] Received video:', vw, 'x', vh, '| viewport:', viewportW, 'x', viewportH);
           send({ type: 'cam_resolution', width: vw, height: vh, slot: mySlot });
-
-          if (vw > vh) {
-            videoEl.style.inset = 'unset';
-            videoEl.style.width = vw + 'px';
-            videoEl.style.height = vh + 'px';
-            videoEl.style.left = (viewportW - vw) / 2 + 'px';
-            videoEl.style.top = (viewportH - vh) / 2 + 'px';
-            videoEl.style.transformOrigin = 'center center';
-            const scale = Math.max(viewportW / vh, viewportH / vw);
-            videoEl.style.transform = `rotate(90deg) scale(${scale.toFixed(4)})`;
-          }
-
-          if (debugRes) {
-            const dbg = document.getElementById('res-debug');
-            if (dbg) {
-              dbg.classList.remove('hidden');
-              dbg.textContent = `Received: ${vw}x${vh}\nViewport (TOP): ${viewportW}x${viewportH}`;
-            }
-          }
+          applyVideoRotation(videoEl);
         };
+        // Re-apply rotation if video dimensions change mid-stream (e.g. device rotates on sender side)
+        videoEl.addEventListener('resize', () => applyVideoRotation(videoEl));
         videoEl.srcObject = e.streams[0];
         videoEl.classList.remove('hidden');
         // Explicit play() — Web Render TOP Chromium may not honour autoplay attribute alone
