@@ -277,6 +277,9 @@ def sync(table_dat=None):
 			if getattr(top.par, 'url', None) != url:
 				top.par.url = url
 			top.par.active = 1
+			# --- Web Render TOP resolution (temporarily fixed at 960x960 for testing) ---
+			# To restore dynamic resolution from config, remove _test_dim and uncomment sq lines.
+			_test_dim = 960  # TEMP: fixed for testing
 			if hasattr(top.par, 'outputresolution'):
 				try:
 					top.par.outputresolution = 'custom'
@@ -284,10 +287,13 @@ def sync(table_dat=None):
 					pass
 			if hasattr(top.par, 'resolutionw') and hasattr(top.par, 'resolutionh'):
 				try:
-					top.par.resolutionw = sq
-					top.par.resolutionh = sq
+					top.par.resolutionw = _test_dim   # TEMP: was sq
+					top.par.resolutionh = _test_dim   # TEMP: was sq
+					# top.par.resolutionw = sq         # restore for dynamic resolution
+					# top.par.resolutionh = sq         # restore for dynamic resolution
 				except Exception:
 					pass
+			# --- end resolution block ---
 			top.nodeX = 0
 			top.nodeY = -i * NODE_OFFSET_Y
 		except Exception as e:
