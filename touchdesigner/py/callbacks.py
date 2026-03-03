@@ -301,13 +301,20 @@ def _handle_cam_receiver_msg(webServerDAT, addr, msg):
 				top = op(path)
 				if top:
 					try:
-						# Free license resolution cap: source {w}x{h} -> 540x960
+						_dim_map = {'non-commercial': 960, 'fhd': 1920, '4k': 3840}
+						cfg = _read_config()
+						res_key = 'non-commercial'
+						for _k, _v in cfg.items():
+							if _k.lower() == 'resolution':
+								res_key = _v.strip().lower()
+								break
+						sq = _dim_map.get(res_key, 960)
 						top.par.outputresolution = 'custom'
-						top.par.resolutionw = 540
-						top.par.resolutionh = 960
+						top.par.resolutionw = sq
+						top.par.resolutionh = sq
 						logged = op('/').fetch(f'w2td_cam_res_logged_{slot}', False)
 						if not logged:
-							print(f'[W2TD Cam] web_render_top (slot {slot}) resolution set: 540x960 (source {int(w)}x{int(h)})')
+							print(f'[W2TD Cam] web_render_top (slot {slot}) -> {sq}x{sq} ({res_key}), source: {int(w)}x{int(h)}')
 							op('/').store(f'w2td_cam_res_logged_{slot}', True)
 					except Exception as e:
 						print(f'[W2TD Cam Error] Resolution set failed for slot {slot}: {e}')

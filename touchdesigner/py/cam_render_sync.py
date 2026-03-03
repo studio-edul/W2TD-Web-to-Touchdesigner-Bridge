@@ -15,67 +15,59 @@ NODE_OFFSET_Y = 100
 _CAM_TOP_DIM_MAP = {'non-commercial': 960, 'fhd': 1920, '4k': 3840}
 
 
-def _get_cam_top_dim():
-	"""Read Resolution from w2td_config and return square TOP dimension."""
+def _find_config():
+	"""Find w2td_config Table DAT using video container's W2TD parent + fallbacks."""
+	# Primary: navigate via webrtc_video_container -> W2TD parent (most reliable)
 	try:
-		cfg = None
-		try:
-			p = me.parent()
-			if p and p.parent():
-				cfg = p.parent().op('w2td_config')
-		except (NameError, AttributeError):
-			pass
-		if cfg is None:
-			cfg = op('w2td_config')
-		if cfg and cfg.numRows >= 2:
-			for r in range(1, cfg.numRows):
-				if str(cfg[r, 0]).lower() == 'resolution':
-					return _CAM_TOP_DIM_MAP.get(str(cfg[r, 1]).strip().lower(), 960)
+		vid = _w2td_video()
+		if vid and vid.parent():
+			cfg = vid.parent().op('w2td_config')
+			if cfg:
+				return cfg
 	except Exception:
 		pass
-	return 960
-
-
-def _get_screenmode():
-	"""Read Screenmode from w2td_config. Returns 'portrait' or 'landscape'."""
+	# Secondary: walk up from me (up to 4 levels)
 	try:
-		cfg = None
-		try:
-			p = me.parent()
-			if p and p.parent():
-				cfg = p.parent().op('w2td_config')
-		except (NameError, AttributeError):
-			pass
-		if cfg is None:
-			cfg = op('w2td_config')
+		p = me.parent()
+		for _ in range(4):
+			if p is None:
+				break
+			cfg = p.op('w2td_config')
+			if cfg:
+				return cfg
+			p = p.parent()
+	except (NameError, AttributeError):
+		pass
+	# Absolute path fallbacks
+	for path in ('project1/W2TD/w2td_config', 'project/W2TD/w2td_config',
+	             'project1/w2td_config', 'project/w2td_config'):
+		cfg = op(path)
+		if cfg:
+			return cfg
+	return op('w2td_config')
+
+
+def _read_config_values():
+	"""Return (res_key, dim, screenmode) from w2td_config using robust lookup."""
+	res_key = 'non-commercial'
+	screenmode = 'portrait'
+	try:
+		cfg = _find_config()
 		if cfg and cfg.numRows >= 2:
 			for r in range(1, cfg.numRows):
-				if str(cfg[r, 0]).lower() == 'screenmode':
-					return str(cfg[r, 1]).strip().lower()
+				try:
+					k = str(cfg[r, 0]).strip().lower()
+					v = str(cfg[r, 1]).strip()
+					if k == 'resolution':
+						res_key = v.lower()
+					elif k == 'screenmode':
+						screenmode = v.lower()
+				except Exception:
+					pass
 	except Exception:
 		pass
-	return 'portrait'
-
-
-def _get_resolution_key():
-	"""Read Resolution key string from w2td_config (e.g. 'fhd', '4k', 'non-commercial')."""
-	try:
-		cfg = None
-		try:
-			p = me.parent()
-			if p and p.parent():
-				cfg = p.parent().op('w2td_config')
-		except (NameError, AttributeError):
-			pass
-		if cfg is None:
-			cfg = op('w2td_config')
-		if cfg and cfg.numRows >= 2:
-			for r in range(1, cfg.numRows):
-				if str(cfg[r, 0]).lower() == 'resolution':
-					return str(cfg[r, 1]).strip().lower()
-	except Exception:
-		pass
-	return 'non-commercial'
+	dim = _CAM_TOP_DIM_MAP.get(res_key, 960)
+	return res_key, dim, screenmode
 
 
 def _w2td_video():
@@ -210,14 +202,12 @@ def sync(table_dat=None):
 		return
 
 	op('/').store('w2td_cam_render_container_err', False)
-	sq = _get_cam_top_dim()
-	screenmode = _get_screenmode()
+	res_key, sq, screenmode = _read_config_values()
 	rotate_deg = -90 if screenmode == 'landscape' else 0
 	slots = _read_connected_slots(table_dat)
 	base_url = _get_cam_base_url()
 	port = _get_cam_port()
 	tls = _get_tls_flag()
-	res_key = _get_resolution_key()
 
 	target_names = [f'web_render_top_{i}' for i in range(1, len(slots) + 1)]
 	slot_list = slots
