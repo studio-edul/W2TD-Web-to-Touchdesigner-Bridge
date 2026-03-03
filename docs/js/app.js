@@ -70,6 +70,7 @@ const W2TD_VERSION = '1.0.0';
     els.btnCameraMonitor = $('btn-camera-monitor');
     els.cameraMonitor = $('camera-monitor');
     els.btnExitCameraMonitor = $('btn-exit-camera-monitor');
+    els.camResStatus = $('cam-res-status');
   }
 
   function _detectDeviceName() {
@@ -205,7 +206,21 @@ const W2TD_VERSION = '1.0.0';
     }
     if (cfg.cam_resolution != null) {
       WebRTCModule.setResolution(cfg.cam_resolution);
+      _updateCamResolutionUI();
     }
+  }
+
+  function _updateCamResolutionUI() {
+    if (!els.camResStatus) return;
+    const info = WebRTCModule.getCamResolutionInfo();
+    const key = info.key.toUpperCase();
+    const tgt = `${info.target.width}x${info.target.height}`;
+    const rearTxt  = info.actualRear  ? `${info.actualRear.width}x${info.actualRear.height}`  : '—';
+    const frontTxt = info.actualFront ? `${info.actualFront.width}x${info.actualFront.height}` : '—';
+    const parts = [`Config: ${key} (target ${tgt})`];
+    if (info.actualRear)  parts.push(`Rear: ${rearTxt}`);
+    if (info.actualFront) parts.push(`Front: ${frontTxt}`);
+    els.camResStatus.textContent = parts.join('  |  ');
   }
 
   function _webrtcStartOpts(opts) {
@@ -321,7 +336,7 @@ const W2TD_VERSION = '1.0.0';
 
   function init() {
     cacheDom();
-    addLog('W2TD 시작 v' + W2TD_VERSION + ' (protocol: ' + window.location.protocol + ')', 'info');
+    addLog('W2TD start v' + W2TD_VERSION + ' (protocol: ' + window.location.protocol + ')', 'info');
     console.log('[W2TD] App version:', W2TD_VERSION);
     // Apply cached dev mode instantly to prevent flash of wrong UI
     const _cached = localStorage.getItem('w2td-dev-mode');
@@ -472,7 +487,7 @@ const W2TD_VERSION = '1.0.0';
   function handleConnect(autoConnect = false) {
     const addr = els.tdAddress.value.trim();
     if (!addr) {
-      alert('TouchDesigner 주소를 입력하세요.');
+      alert('Please enter the TouchDesigner address.');
       return;
     }
 
@@ -530,7 +545,7 @@ const W2TD_VERSION = '1.0.0';
           addLog(`Screen info sent: ${cssWidth}x${cssHeight} CSS (${physicalWidth}x${physicalHeight} physical, DPR: ${devicePixelRatio})`, 'info');
           
           if (!SensorModule.isEnabled() && devMode) {
-            addLog('Enable Sensors를 누르면 전송 시작', 'warn');
+            addLog('Press Enable Sensors to start broadcasting', 'warn');
           }
         }
         // If connection fails while loading screen is up, fall back to modal
@@ -624,13 +639,13 @@ const W2TD_VERSION = '1.0.0';
       const err = WebRTCModule.getLastError();
       if (err === 'NotAllowedError' || err === 'PermissionDeniedError') {
         showToast('Mic permission denied — allow microphone in browser settings');
-        addLog('마이크 권한 거부됨 — 브라우저 설정에서 허용해주세요', 'error');
+        addLog('Mic permission denied — allow microphone in browser settings', 'error');
       } else if (err === 'NotFoundError') {
         showToast('Microphone not found');
-        addLog('마이크를 찾을 수 없습니다 (장치 없음)', 'error');
+        addLog('Microphone not found (no device)', 'error');
       } else {
         showToast('Mic activation failed');
-        addLog('마이크 시작 실패: ' + (err || 'unknown'), 'error');
+        addLog('Mic activation failed: ' + (err || 'unknown'), 'error');
       }
     }
     renderSensorList();
@@ -653,7 +668,7 @@ const W2TD_VERSION = '1.0.0';
 
     if (SensorModule.needsPermissionRequest()) {
       if (!window.isSecureContext) {
-        updateDebug('iOS 센서 권한은 HTTPS 필요.');
+        updateDebug('iOS sensor permissions require HTTPS.');
         return;
       }
     }
@@ -662,15 +677,27 @@ const W2TD_VERSION = '1.0.0';
       await WebRTCModule.requestCameraPermission();
     }
 
-    if (SensorModule.needsPermissionRequest()) {
-      updateDebug('Requesting permissions...');
-      const perms = await SensorModule.requestPermissions();
-      updateDebug('Permissions: ' + JSON.stringify(perms));
-    } else {
-      updateDebug('No permission request needed (non-iOS)');
-    }
+    // Always call requestPermissions: handles iOS motion/orientation popups
+    // and triggers geolocation popup on Android if GPS sensor is selected.
+    updateDebug('Requesting permissions...');
+    const perms = await SensorModule.requestPermissions();
+    updateDebug('Permissions: ' + JSON.stringify(perms));
 
     SensorModule.startListening();
+
+    // On real mobile, warn if motion data doesn't flow after 3.5s
+    if (!SensorModule.isSimulating()) {
+      setTimeout(() => {
+        if (!SensorModule.isEnabled()) return;
+        if (!SensorModule.hasDataFlowing() && SensorModule.isMotionEventFiring()) {
+          showToast(
+            'Motion sensor blocked by browser. ' +
+            'Go to Chrome Settings \u2192 Site Settings \u2192 Motion sensors \u2192 Allow',
+            6000
+          );
+        }
+      }, 3500);
+    }
 
     if (micEnabled && !WebRTCModule.isMicActive()) {
       const ok = await WebRTCModule.acquireMic({
@@ -793,7 +820,7 @@ const W2TD_VERSION = '1.0.0';
     WebRTCModule.disconnectCamera();
     if (els.packetRate) els.packetRate.classList.remove('broadcasting');
     showBroadcastStatus('', false);
-    updateDebug('Broadcast 중지됨');
+    updateDebug('Broadcast stopped');
     renderSensorList();
   }
 
@@ -873,6 +900,7 @@ const W2TD_VERSION = '1.0.0';
       return;
     }
     haptic();
+    _updateCamResolutionUI();
     els.mainUI.classList.add('hidden');
     els.cameraMonitor.classList.remove('hidden');
   }
@@ -922,9 +950,9 @@ const W2TD_VERSION = '1.0.0';
       overlay.innerHTML = `
         <div class="rejected-box">
           <div class="rejected-icon">&#x1F6AB;</div>
-          <h2>연결이 가득 찼어요</h2>
-          <p>현재 최대 접속 인원이 모두 사용 중입니다.<br>잠시 후 다시 시도해 주세요.</p>
-          <button id="btn-retry" class="btn btn-primary" style="margin-top:20px">다시 시도</button>
+          <h2>Connection Full</h2>
+          <p>All slots are currently in use.<br>Please try again in a moment.</p>
+          <button id="btn-retry" class="btn btn-primary" style="margin-top:20px">Retry</button>
         </div>`;
       document.body.appendChild(overlay);
       overlay.querySelector('#btn-retry').addEventListener('click', () => {
@@ -1119,9 +1147,9 @@ const W2TD_VERSION = '1.0.0';
     const ok = await WebRTCModule.start(_webrtcStartOpts({ mic: micEnabled }));
     if (ok === false && micEnabled) {
       const err = WebRTCModule.getLastError();
-      let msg = '마이크 활성화 실패';
-      if (err === 'NotAllowedError' || err === 'PermissionDeniedError') msg = '마이크 권한 거부';
-      else if (err === 'NotFoundError') msg = '마이크를 찾을 수 없습니다';
+      let msg = 'Mic activation failed';
+      if (err === 'NotAllowedError' || err === 'PermissionDeniedError') msg = 'Mic permission denied';
+      else if (err === 'NotFoundError') msg = 'Microphone not found';
       showToast(msg);
     }
   }

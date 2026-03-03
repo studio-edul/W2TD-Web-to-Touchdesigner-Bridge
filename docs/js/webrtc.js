@@ -6,12 +6,13 @@
  */
 const WebRTCModule = (() => {
   // ── Camera resolution presets — updated at runtime via setResolution() ───────
-  const __camResolution_MAP = {
+  const _CAM_RESOLUTION_MAP = {
     'non-commercial': { width: 960,  height: 540,  maxBitrate: 2000000 },
     'fhd':            { width: 1920, height: 1080, maxBitrate: 4000000 },
     '4k':             { width: 3840, height: 2160, maxBitrate: 8000000 },
   };
-  let _camResolution = __camResolution_MAP['fhd']; // default until config arrives from TD
+  let _camResolution = _CAM_RESOLUTION_MAP['fhd']; // default until config arrives from TD
+  let _camResolutionKey = 'fhd';
 
   const DEFAULT_ICE_SERVERS = [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -467,10 +468,14 @@ const WebRTCModule = (() => {
     const key = (resString || '').toLowerCase().trim();
     const preset = _CAM_RESOLUTION_MAP[key];
     if (!preset) return;
-    if (preset.width === _camResolution.width && preset.height === _camResolution.height) return;
+    _camResolutionKey = key;
+    if (preset.width === _camResolution.width && preset.height === _camResolution.height) {
+      _log(`Camera resolution: ${key} (${preset.width}x${preset.height}) — no change`);
+      return;
+    }
     _camResolution = preset;
-    _log(`Camera resolution: ${key} (${preset.width}x${preset.height})`);
-    for (const stream of [camRearStream, camFrontStream]) {
+    _log(`Camera resolution config: ${key} → target ${preset.width}x${preset.height}`);
+    for (const [label, stream] of [['rear', camRearStream], ['front', camFrontStream]]) {
       if (!stream) continue;
       const track = stream.getVideoTracks()[0];
       if (!track) continue;
@@ -479,10 +484,28 @@ const WebRTCModule = (() => {
           width:  { ideal: preset.width,  max: Math.max(preset.width, preset.height) },
           height: { ideal: preset.height, max: Math.max(preset.width, preset.height) },
         });
+        const s = track.getSettings();
+        _log(`Camera ${label} actual: ${s.width || '?'}x${s.height || '?'} (target ${preset.width}x${preset.height})`);
       } catch(e) {
         console.warn('[W2TD WebRTC] setResolution applyConstraints failed:', e.message);
       }
     }
+  }
+
+  /** Return current resolution config and actual track settings for diagnostic display. */
+  function getCamResolutionInfo() {
+    const getActual = (stream) => {
+      const track = stream && stream.getVideoTracks()[0];
+      if (!track) return null;
+      const s = track.getSettings();
+      return { width: s.width || 0, height: s.height || 0 };
+    };
+    return {
+      key:         _camResolutionKey,
+      target:      { width: _camResolution.width, height: _camResolution.height },
+      actualRear:  getActual(camRearStream),
+      actualFront: getActual(camFrontStream),
+    };
   }
 
   function getMicLevel() {
@@ -510,7 +533,7 @@ const WebRTCModule = (() => {
     stopCameraFront, stopCameraRear,
     handleCameraAnswer, handleCameraIce,
     onCamStateChange,
-    setResolution,
+    setResolution, getCamResolutionInfo,
     CAM_FRONT, CAM_REAR,
     isCameraFrontActive: () => !!(camFrontStream && camFrontStream.getVideoTracks().length),
     isCameraRearActive:  () => !!(camRearStream && camRearStream.getVideoTracks().length),

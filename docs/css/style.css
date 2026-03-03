@@ -662,6 +662,17 @@ input[type="checkbox"] {
 .camera-monitor-video.hidden {
   display: none !important;
 }
+.cam-res-status {
+  padding: 5px 12px;
+  font: 11px/1.5 monospace;
+  color: #9f9;
+  background: rgba(0, 0, 0, 0.65);
+  text-align: center;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+.cam-res-status:empty { display: none; }
+
 .camera-monitor .btn-exit-camera-monitor {
   position: absolute;
   top: 12px;

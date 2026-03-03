@@ -57,6 +57,27 @@ def _get_screenmode():
 	return 'portrait'
 
 
+def _get_resolution_key():
+	"""Read Resolution key string from w2td_config (e.g. 'fhd', '4k', 'non-commercial')."""
+	try:
+		cfg = None
+		try:
+			p = me.parent()
+			if p and p.parent():
+				cfg = p.parent().op('w2td_config')
+		except (NameError, AttributeError):
+			pass
+		if cfg is None:
+			cfg = op('w2td_config')
+		if cfg and cfg.numRows >= 2:
+			for r in range(1, cfg.numRows):
+				if str(cfg[r, 0]).lower() == 'resolution':
+					return str(cfg[r, 1]).strip().lower()
+	except Exception:
+		pass
+	return 'non-commercial'
+
+
 def _w2td_video():
 	"""Find webrtc_video_container. Uses me.parent() if DAT Execute is inside it."""
 	try:
@@ -196,6 +217,7 @@ def sync(table_dat=None):
 	base_url = _get_cam_base_url()
 	port = _get_cam_port()
 	tls = _get_tls_flag()
+	res_key = _get_resolution_key()
 
 	target_names = [f'web_render_top_{i}' for i in range(1, len(slots) + 1)]
 	slot_list = slots
@@ -247,7 +269,7 @@ def sync(table_dat=None):
 				print(f'[Cam Render Sync] Error creating {name}: {e}')
 				continue
 		slot = slot_list[i] if i < len(slot_list) else idx
-		url = f'{base_url}/cam_receiver.html?port={port}&slot={slot}'
+		url = f'{base_url}/cam_receiver.html?port={port}&slot={slot}&res={res_key}'
 		if tls:
 			url += '&tls=1'
 		try:
@@ -369,12 +391,12 @@ def sync(table_dat=None):
 			except Exception as e:
 				print(f'[Cam Render Sync] Error connecting {c_name} -> {o_name}: {e}')
 
-		# Connect to layout1: touch_out -> layout (fallback: crop -> layout, etc.)
-		connect_src = o_top or c_top or t_top or top
+		# Connect crop_top -> layout1 (touch_out_top is a side output only, not in the layout chain)
+		layout_src = c_top or t_top or top
 		try:
 			layout1 = _find_layout1(container)
 			if layout1 and i < len(layout1.inputConnectors):
-				connect_src.outputConnectors[0].connect(layout1.inputConnectors[i])
+				layout_src.outputConnectors[0].connect(layout1.inputConnectors[i])
 		except Exception:
 			pass
 

@@ -30,6 +30,7 @@ const SensorModule = (() => {
   let geoWatchId = null;
   let motionDataReceived = false;
   let orientDataReceived = false;
+  let motionEventFired = false; // event fires but accelerationIncludingGravity may be null
 
   // Simulation
   let simulationMode = false;
@@ -150,6 +151,7 @@ const SensorModule = (() => {
     sensorsEnabled = true;
     motionDataReceived = false;
     orientDataReceived = false;
+    motionEventFired = false;
 
     if (!isMobileDevice()) {
       debug('PC detected - simulation mode');
@@ -162,6 +164,7 @@ const SensorModule = (() => {
     // DeviceMotion
     if (availability.motion) {
       motionListener = (e) => {
+        motionEventFired = true;
         const a = e.accelerationIncludingGravity;
         if (a) {
           if (!motionDataReceived) {
@@ -213,14 +216,20 @@ const SensorModule = (() => {
       startGeolocation();
     }
 
-    // Check if data arrives after 2 seconds
+    // Check if data arrives after 3 seconds
     setTimeout(() => {
       if (sensorsEnabled && !simulationMode) {
-        if (!motionDataReceived && !orientDataReceived) {
-          debug('WARNING: No sensor data after 2s. Permission may be denied.');
+        if (!motionDataReceived) {
+          if (motionEventFired) {
+            debug('WARNING: Motion events are firing but accelerationIncludingGravity is null. ' +
+              'Chrome may have blocked motion sensors for this site — ' +
+              'check Chrome Settings > Site Settings > Motion sensors and allow access.');
+          } else if (!orientDataReceived) {
+            debug('WARNING: No sensor data after 3s. Permission may be denied or sensors unavailable.');
+          }
         }
       }
-    }, 2000);
+    }, 3000);
   }
 
   function startGeolocation() {
@@ -316,5 +325,6 @@ const SensorModule = (() => {
     isSimulating: () => simulationMode,
     setDebugCallback: (cb) => { onDebug = cb; },
     hasDataFlowing: () => motionDataReceived || orientDataReceived,
+    isMotionEventFiring: () => motionEventFired,
   };
 })();

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
@@ -40,11 +40,21 @@
   const slotParam = params.get('slot');
   const mySlot = slotParam ? parseInt(slotParam, 10) : null;
   const useTls = params.get('tls') === '1' || params.get('tls') === 'true';
-  const debugRes = params.get('debug') === '1';
+  const hideDebug = params.get('debug') === '0';
+  const configRes = params.get('res') ? params.get('res').toUpperCase() : '?';
 
   const viewportW = window.innerWidth;
   const viewportH = window.innerHeight;
   console.log('[CAM-RCV] Web Render TOP viewport:', viewportW, 'x', viewportH);
+
+  const _dbg = document.getElementById('res-debug');
+  function _updateDebug(received) {
+    if (!_dbg || hideDebug) return;
+    _dbg.classList.remove('hidden');
+    _dbg.textContent =
+      `Config: ${configRes}  |  Viewport: ${viewportW}x${viewportH}\n` +
+      (received ? `Received: ${received}` : 'Waiting for video...');
+  }
 
   function applyVideoRotation(videoEl) {
     const vw = videoEl.videoWidth, vh = videoEl.videoHeight;
@@ -61,13 +71,7 @@
       const scale = Math.min(viewportW / vh, viewportH / vw);
       videoEl.style.transform = `rotate(-90deg) scale(${scale.toFixed(4)})`;
     }
-    if (debugRes) {
-      const dbg = document.getElementById('res-debug');
-      if (dbg) {
-        dbg.classList.remove('hidden');
-        dbg.textContent = `Received: ${vw}x${vh}\nViewport (TOP): ${viewportW}x${viewportH}`;
-      }
-    }
+    _updateDebug(`${vw}x${vh}`);
   }
 
   const protocol = useTls ? 'wss' : 'ws';
@@ -219,13 +223,7 @@
     }
   }
 
-  if (debugRes) {
-    const dbg = document.getElementById('res-debug');
-    if (dbg) {
-      dbg.classList.remove('hidden');
-      dbg.textContent = 'Viewport (TOP): ' + viewportW + 'x' + viewportH + '\nWaiting for video...';
-    }
-  }
+  _updateDebug(null);
 
   connect();
 </script>
