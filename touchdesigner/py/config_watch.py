@@ -125,18 +125,6 @@ def _do_broadcast():
 			pass
 	if valid or slots:
 		print(f'[W2TD] Config broadcast -> {len(valid)} clients' + (f' ({len(slots) - len(valid)} stale)' if len(slots) > len(valid) else ''))
-	# Also send config to cam_receiver connections (Web Render TOP)
-	cam_recv_sent = 0
-	for _slot in range(1, 21):
-		cr_addr = op('/').fetch(f'w2td_cam_receiver_addr_{_slot}', None)
-		if cr_addr and str(cr_addr) in active:
-			try:
-				web.webSocketSendText(str(cr_addr), msg)
-				cam_recv_sent += 1
-			except Exception:
-				pass
-	if cam_recv_sent:
-		print(f'[W2TD] Config broadcast -> {cam_recv_sent} cam_receiver(s)')
 	# Update web_render_top resolution + transform_top rotation inside webrtc_video_container
 	_dim_map = {'non-commercial': 960, 'fhd': 1920}
 	try:

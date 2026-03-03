@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
@@ -16,13 +16,6 @@
     display: block;
   }
   #video-wrap video.hidden { display: none; }
-  #res-debug {
-    position: fixed; top: 8px; left: 8px; z-index: 9999;
-    font: 12px monospace; color: #0f0; background: rgba(0,0,0,0.8);
-    padding: 8px; border-radius: 4px; pointer-events: none;
-    white-space: pre-wrap;
-  }
-  #res-debug.hidden { display: none !important; }
 </style>
 </head>
 <body>
@@ -30,7 +23,6 @@
   <video id="remote-video-rear" class="hidden" autoplay playsinline muted></video>
   <video id="remote-video-front" class="hidden" autoplay playsinline muted></video>
 </div>
-<div id="res-debug" class="hidden"></div>
 <script>
   const videoRear  = document.getElementById('remote-video-rear');
   const videoFront = document.getElementById('remote-video-front');
@@ -40,32 +32,12 @@
   const slotParam = params.get('slot');
   const mySlot = slotParam ? parseInt(slotParam, 10) : null;
   const useTls = params.get('tls') === '1' || params.get('tls') === 'true';
-  const hideDebug = params.get('debug') === '0';
-  let configRes = params.get('res') ? params.get('res').toUpperCase() : '?';
 
-  let viewportW = window.innerWidth;
-  let viewportH = window.innerHeight;
-  console.log('[CAM-RCV] Web Render TOP viewport:', viewportW, 'x', viewportH);
-
-  // Re-capture viewport on resize (TD Web Render TOP may resize after page load
-  // when cam_render_sync.py sets resolutionw/h from config)
+  // Re-apply rotation when Web Render TOP resizes
   window.addEventListener('resize', () => {
-    viewportW = window.innerWidth;
-    viewportH = window.innerHeight;
-    console.log('[CAM-RCV] Viewport resized to:', viewportW, 'x', viewportH);
-    _updateDebug(null);
     if (videoRear  && !videoRear.classList.contains('hidden'))  applyVideoRotation(videoRear);
     if (videoFront && !videoFront.classList.contains('hidden')) applyVideoRotation(videoFront);
   });
-
-  const _dbg = document.getElementById('res-debug');
-  function _updateDebug(received) {
-    if (!_dbg || hideDebug) return;
-    _dbg.classList.remove('hidden');
-    _dbg.textContent =
-      `Config: ${configRes}  |  Viewport: ${viewportW}x${viewportH}\n` +
-      (received ? `Received: ${received}` : 'Waiting for video...');
-  }
 
   function applyVideoRotation(videoEl) {
     const vw = videoEl.videoWidth, vh = videoEl.videoHeight;
@@ -73,20 +45,19 @@
     ['inset','width','height','left','top','transform','objectFit','transformOrigin']
       .forEach(p => videoEl.style.removeProperty(p));
     if (vw > vh) {
+      const vpW = window.innerWidth, vpH = window.innerHeight;
       videoEl.style.inset = 'unset';
       videoEl.style.width = vw + 'px';
       videoEl.style.height = vh + 'px';
-      videoEl.style.left = (viewportW - vw) / 2 + 'px';
-      videoEl.style.top = (viewportH - vh) / 2 + 'px';
+      videoEl.style.left = (vpW - vw) / 2 + 'px';
+      videoEl.style.top = (vpH - vh) / 2 + 'px';
       videoEl.style.transformOrigin = 'center center';
-      const scale = Math.min(viewportW / vh, viewportH / vw);
+      const scale = Math.min(vpW / vh, vpH / vw);
       videoEl.style.transform = `rotate(-90deg) scale(${scale.toFixed(4)})`;
     }
-    _updateDebug(`${vw}x${vh}`);
   }
 
   const protocol = useTls ? 'wss' : 'ws';
-  // Use page's own hostname (local IP) so TLS cert matches; falls back to localhost
   const wsHost = location.hostname || 'localhost';
   const wsUrl = protocol + '://' + wsHost + ':' + port;
 
@@ -135,12 +106,7 @@
       let msg;
       try { msg = JSON.parse(e.data); } catch { return; }
 
-      if (msg.type === 'config') {
-        if (msg.cam_resolution) {
-          configRes = msg.cam_resolution.toUpperCase();
-          _updateDebug(null);
-        }
-      } else if (msg.type === 'cam_offer') {
+      if (msg.type === 'cam_offer') {
         if (mySlot != null && msg.slot !== mySlot) return;
         await handleOffer(msg.slot, msg.sdp, msg.camType);
       } else if (msg.type === 'cam_ice') {
@@ -165,30 +131,16 @@
 
     pc.ontrack = (e) => {
       if (e.streams && e.streams[0] && videoEl) {
-        // Attach metadata handler BEFORE setting srcObject to avoid missing the event
         videoEl.onloadedmetadata = () => {
           const vw = videoEl.videoWidth, vh = videoEl.videoHeight;
-          console.log('[CAM-RCV] loadedmetadata:', vw, 'x', vh, '| viewport:', viewportW, 'x', viewportH);
-          // videoWidth/Height may be 0 at loadedmetadata on some mobile browsers (especially for
-          // downscaled WebRTC video). Defer to playing event in that case.
           if (vw && vh) {
             send({ type: 'cam_resolution', width: vw, height: vh, slot: mySlot });
             applyVideoRotation(videoEl);
           }
         };
-        // playing fires when first frame is rendered — dimensions are always valid here
-        videoEl.addEventListener('playing', () => {
-          const vw = videoEl.videoWidth, vh = videoEl.videoHeight;
-          if (!vw || !vh) return;
-          console.log('[CAM-RCV] playing:', vw, 'x', vh);
-          send({ type: 'cam_resolution', width: vw, height: vh, slot: mySlot });
-          applyVideoRotation(videoEl);
-        }, { once: true });
-        // Re-apply rotation if video dimensions change mid-stream (e.g. device rotates on sender side)
         videoEl.addEventListener('resize', () => applyVideoRotation(videoEl));
         videoEl.srcObject = e.streams[0];
         videoEl.classList.remove('hidden');
-        // Explicit play() — Web Render TOP Chromium may not honour autoplay attribute alone
         videoEl.play().catch(err => console.warn('[CAM-RCV] play() failed:', err.message));
       }
     };
@@ -250,8 +202,6 @@
       videoEl.classList.add('hidden');
     }
   }
-
-  _updateDebug(null);
 
   connect();
 </script>

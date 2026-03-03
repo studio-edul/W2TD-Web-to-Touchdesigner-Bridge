@@ -341,41 +341,12 @@ const WebRTCModule = (() => {
     try {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      await _setCameraSenderParams(pc);
       const sent = WSClient.send({ type: 'webrtc_offer_cam', sdp: offer.sdp, camType });
       _log(sent ? 'Cam ' + camType + ' offer sent' : 'Cam offer FAILED');
       return sent ? true : false;
     } catch (e) {
       _setCamState('failed');
       return false;
-    }
-  }
-
-  async function _setCameraSenderParams(pc) {
-    const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-    if (!sender) return;
-    try {
-      const params = sender.getParameters();
-      params.encodings = params.encodings || [{}];
-      const track = sender.track;
-      const s = track && track.getSettings ? track.getSettings() : {};
-      // getSettings() returns 0 on mobile right after getUserMedia (before frames flow).
-      // Fall back to FHD portrait (1080×1920) so scale is calculated correctly.
-      const w = s.width  || 1080;
-      const h = s.height || 1920;
-      const maxPx = Math.max(_camResolution.width, _camResolution.height);
-      const minPx = Math.min(_camResolution.width, _camResolution.height);
-      const scale = Math.max(
-        Math.ceil(Math.max(w, h) / maxPx),
-        Math.ceil(Math.min(w, h) / minPx),
-        1
-      );
-      params.encodings[0].scaleResolutionDownBy = scale;
-      params.degradationPreference = 'maintain-resolution';
-      await sender.setParameters(params);
-      _log(`Cam sender: ${w}x${h} → scale ×${scale} → ~${Math.round(w/scale)}x${Math.round(h/scale)} (target ${_camResolution.width}x${_camResolution.height})`);
-    } catch (e) {
-      console.warn('[W2TD WebRTC] setParameters failed:', e.message);
     }
   }
 

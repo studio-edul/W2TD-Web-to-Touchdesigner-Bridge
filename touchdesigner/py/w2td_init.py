@@ -315,33 +315,31 @@ def generate():
 		print(f'[W2TD Error] TOP reload failed: {e}')
 		return
 
-	# 6. Set Web Render TOP URL to cam_receiver (served locally via TD Web Server)
-	# Serving locally avoids GitHub Pages dependency and mixed-content WS/WSS issues.
+	# 6. Store base URL info for cam_render_sync.py to build slot Web Render TOP URLs.
+	# Web Render TOPs are managed dynamically inside webrtc_video_container by cam_render_sync.py.
 	try:
+		tls_on = False
+		web_srv = _op('web_server_dat')
+		if web_srv is not None:
+			for _par in ('secure', 'tls', 'https', 'usessl'):
+				if bool(getattr(web_srv.par, _par, False)):
+					tls_on = True
+					break
+		local_ip = get_local_ip()
+		scheme = 'https' if tls_on else 'http'
+		op('/').store('w2td_cam_base_url', f'{scheme}://{local_ip}:{port}')
+		op('/').store('w2td_web_port', port)
+		op('/').store('w2td_cam_tls', tls_on)
+		print(f'[W2TD] cam base URL stored: {scheme}://{local_ip}:{port}')
+		# Also set URL on legacy single web_render_top if it exists
 		web_render = _op('web_render_top')
 		if web_render is not None:
-			tls_on = False
-			web_srv = _op('web_server_dat')
-			if web_srv is not None:
-				for _par in ('secure', 'tls', 'https', 'usessl'):
-					if bool(getattr(web_srv.par, _par, False)):
-						tls_on = True
-						break
-			# Use local IP — TLS cert is usually issued for the LAN IP
-			local_ip = get_local_ip()
-			scheme = 'https' if tls_on else 'http'
 			receiver_url = f'{scheme}://{local_ip}:{port}/cam_receiver.html?port={port}'
 			if tls_on:
 				receiver_url += '&tls=1'
 			web_render.par.url = receiver_url
-			# Store for cam_render_sync to build slot URLs
-			op('/').store('w2td_cam_base_url', f'{scheme}://{local_ip}:{port}')
-			op('/').store('w2td_web_port', port)
-			op('/').store('w2td_cam_tls', tls_on)
-			print(f'[W2TD] web_render_top URL set (local): {receiver_url}')
-		else:
-			print('[W2TD Error] web_render_top not found - create a Web Render TOP named "web_render_top"')
+			print(f'[W2TD] web_render_top URL set: {receiver_url}')
 	except Exception as e:
-		print(f'[W2TD Error] web_render_top URL set failed: {e}')
+		print(f'[W2TD Error] cam base URL store failed: {e}')
 
 	print('[W2TD] generate() done')
