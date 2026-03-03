@@ -330,11 +330,6 @@ const WebRTCModule = (() => {
     pc.onconnectionstatechange = () => {
       const s = pc.connectionState;
       _setCamState(s);
-      if (s === 'connected') {
-        // Re-apply after connection is established — setParameters() before
-        // setRemoteDescription() may be silently ignored on some browsers.
-        _setCameraSenderParams(pc);
-      }
       if (s === 'failed' || s === 'closed') {
         if (isFront) stopCameraFront();
         else stopCameraRear();

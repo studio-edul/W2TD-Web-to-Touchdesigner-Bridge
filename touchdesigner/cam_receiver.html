@@ -168,10 +168,22 @@
         // Attach metadata handler BEFORE setting srcObject to avoid missing the event
         videoEl.onloadedmetadata = () => {
           const vw = videoEl.videoWidth, vh = videoEl.videoHeight;
-          console.log('[CAM-RCV] Received video:', vw, 'x', vh, '| viewport:', viewportW, 'x', viewportH);
+          console.log('[CAM-RCV] loadedmetadata:', vw, 'x', vh, '| viewport:', viewportW, 'x', viewportH);
+          // videoWidth/Height may be 0 at loadedmetadata on some mobile browsers (especially for
+          // downscaled WebRTC video). Defer to playing event in that case.
+          if (vw && vh) {
+            send({ type: 'cam_resolution', width: vw, height: vh, slot: mySlot });
+            applyVideoRotation(videoEl);
+          }
+        };
+        // playing fires when first frame is rendered — dimensions are always valid here
+        videoEl.addEventListener('playing', () => {
+          const vw = videoEl.videoWidth, vh = videoEl.videoHeight;
+          if (!vw || !vh) return;
+          console.log('[CAM-RCV] playing:', vw, 'x', vh);
           send({ type: 'cam_resolution', width: vw, height: vh, slot: mySlot });
           applyVideoRotation(videoEl);
-        };
+        }, { once: true });
         // Re-apply rotation if video dimensions change mid-stream (e.g. device rotates on sender side)
         videoEl.addEventListener('resize', () => applyVideoRotation(videoEl));
         videoEl.srcObject = e.streams[0];
