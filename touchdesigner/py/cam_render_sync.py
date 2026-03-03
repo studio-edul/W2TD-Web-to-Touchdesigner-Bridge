@@ -11,8 +11,8 @@ Setup in TD:
   5. Paste this script
 """
 NODE_OFFSET_Y = 100
-# Square side per Resolution config: Non-Commercial(960), FHD(1920), 4K(3840)
-_CAM_TOP_DIM_MAP = {'non-commercial': 960, 'fhd': 1920, '4k': 3840}
+# Square side per Resolution config: Non-Commercial(960), FHD(1920)
+_CAM_TOP_DIM_MAP = {'non-commercial': 960, 'fhd': 1920}
 
 
 def _find_config():
@@ -267,9 +267,6 @@ def sync(table_dat=None):
 			if getattr(top.par, 'url', None) != url:
 				top.par.url = url
 			top.par.active = 1
-			# --- Web Render TOP resolution (temporarily fixed at 960x960 for testing) ---
-			# To restore dynamic resolution from config, remove _test_dim and uncomment sq lines.
-			_test_dim = 960  # TEMP: fixed for testing
 			if hasattr(top.par, 'outputresolution'):
 				try:
 					top.par.outputresolution = 'custom'
@@ -277,13 +274,10 @@ def sync(table_dat=None):
 					pass
 			if hasattr(top.par, 'resolutionw') and hasattr(top.par, 'resolutionh'):
 				try:
-					top.par.resolutionw = _test_dim   # TEMP: was sq
-					top.par.resolutionh = _test_dim   # TEMP: was sq
-					# top.par.resolutionw = sq         # restore for dynamic resolution
-					# top.par.resolutionh = sq         # restore for dynamic resolution
+					top.par.resolutionw = sq
+					top.par.resolutionh = sq
 				except Exception:
 					pass
-			# --- end resolution block ---
 			top.nodeX = 0
 			top.nodeY = -i * NODE_OFFSET_Y
 		except Exception as e:

@@ -9,7 +9,6 @@ const WebRTCModule = (() => {
   const _CAM_RESOLUTION_MAP = {
     'non-commercial': { width: 960,  height: 540,  maxBitrate: 2000000 },
     'fhd':            { width: 1920, height: 1080, maxBitrate: 4000000 },
-    '4k':             { width: 3840, height: 2160, maxBitrate: 8000000 },
   };
   let _camResolution = _CAM_RESOLUTION_MAP['fhd']; // default until config arrives from TD
   let _camResolutionKey = 'fhd';

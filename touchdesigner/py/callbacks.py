@@ -301,7 +301,7 @@ def _handle_cam_receiver_msg(webServerDAT, addr, msg):
 				top = op(path)
 				if top:
 					try:
-						_dim_map = {'non-commercial': 960, 'fhd': 1920, '4k': 3840}
+						_dim_map = {'non-commercial': 960, 'fhd': 1920}
 						cfg = _read_config()
 						res_key = 'non-commercial'
 						for _k, _v in cfg.items():
@@ -830,6 +830,13 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			except Exception:
 				pass
 		print(f'[W2TD Cam] cam_receiver_ready broadcast -> {len(_slots())} clients')
+		# Send current config to newly connected cam_receiver so it knows resolution immediately
+		try:
+			cfg = _read_config()
+			config_msg = json.dumps(_config_msg(cfg))
+			webServerDAT.webSocketSendText(addr, config_msg)
+		except Exception as e:
+			print(f'[W2TD Cam Error] config send to cam_receiver failed: {e}')
 		return
 
 	slots = _slots()

@@ -126,7 +126,7 @@ def _do_broadcast():
 	if valid or slots:
 		print(f'[W2TD] Config broadcast -> {len(valid)} clients' + (f' ({len(slots) - len(valid)} stale)' if len(slots) > len(valid) else ''))
 	# Update web_render_top resolution + transform_top rotation inside webrtc_video_container
-	_dim_map = {'non-commercial': 960, 'fhd': 1920, '4k': 3840}
+	_dim_map = {'non-commercial': 960, 'fhd': 1920}
 	try:
 		res_str = ''
 		screenmode_str = 'portrait'
