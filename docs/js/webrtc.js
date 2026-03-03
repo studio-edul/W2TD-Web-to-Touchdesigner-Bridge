@@ -330,6 +330,11 @@ const WebRTCModule = (() => {
     pc.onconnectionstatechange = () => {
       const s = pc.connectionState;
       _setCamState(s);
+      if (s === 'connected') {
+        // Re-apply after connection is established — setParameters() before
+        // setRemoteDescription() may be silently ignored on some browsers.
+        _setCameraSenderParams(pc);
+      }
       if (s === 'failed' || s === 'closed') {
         if (isFront) stopCameraFront();
         else stopCameraRear();
@@ -359,8 +364,10 @@ const WebRTCModule = (() => {
       params.encodings = params.encodings || [{}];
       const track = sender.track;
       const s = track && track.getSettings ? track.getSettings() : {};
-      const w = s.width || _camResolution.width;
-      const h = s.height || _camResolution.height;
+      // getSettings() returns 0 on mobile right after getUserMedia (before frames flow).
+      // Fall back to FHD portrait (1080×1920) so scale is calculated correctly.
+      const w = s.width  || 1080;
+      const h = s.height || 1920;
       const maxPx = Math.max(_camResolution.width, _camResolution.height);
       const minPx = Math.min(_camResolution.width, _camResolution.height);
       const scale = Math.max(
@@ -369,10 +376,9 @@ const WebRTCModule = (() => {
         1
       );
       params.encodings[0].scaleResolutionDownBy = scale;
-      params.encodings[0].maxBitrate = _camResolution.maxBitrate;
       params.degradationPreference = 'maintain-resolution';
       await sender.setParameters(params);
-      _log(`Cam sender: ${w}x${h} → scale ${scale} → FHD, maxBitrate=${_camResolution.maxBitrate / 1e6}Mbps`);
+      _log(`Cam sender: ${w}x${h} → scale ×${scale} → ~${Math.round(w/scale)}x${Math.round(h/scale)} (target ${_camResolution.width}x${_camResolution.height})`);
     } catch (e) {
       console.warn('[W2TD WebRTC] setParameters failed:', e.message);
     }

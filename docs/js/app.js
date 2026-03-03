@@ -673,10 +673,6 @@ const W2TD_VERSION = '1.0.0';
       }
     }
 
-    if (navigator.mediaDevices?.getUserMedia) {
-      await WebRTCModule.requestCameraPermission();
-    }
-
     // Always call requestPermissions: handles iOS motion/orientation popups
     // and triggers geolocation popup on Android if GPS sensor is selected.
     updateDebug('Requesting permissions...');
