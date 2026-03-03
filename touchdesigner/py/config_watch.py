@@ -175,13 +175,13 @@ def _do_broadcast():
 						if screenmode_str == 'landscape':
 							c_top.par.cropleft   = 0
 							c_top.par.cropright  = sq
-							c_top.par.croptop    = crop_px
-							c_top.par.cropbottom = sq - crop_px
+							c_top.par.croptop    = sq - crop_px
+							c_top.par.cropbottom = crop_px
 						else:
 							c_top.par.cropleft   = crop_px
 							c_top.par.cropright  = sq - crop_px
-							c_top.par.croptop    = 0
-							c_top.par.cropbottom = sq
+							c_top.par.croptop    = sq
+							c_top.par.cropbottom = 0
 					except Exception as e:
 						print(f'[W2TD] Error setting crop_top_{i} values: {e}')
 			if updated:

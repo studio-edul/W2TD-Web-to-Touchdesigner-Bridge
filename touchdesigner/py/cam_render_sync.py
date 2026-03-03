@@ -327,14 +327,14 @@ def sync(table_dat=None):
 					# After -90 transform: black bars appear on top/bottom
 					c_top.par.cropleft   = 0
 					c_top.par.cropright  = sq
-					c_top.par.croptop    = crop_px
-					c_top.par.cropbottom = sq - crop_px
+					c_top.par.croptop    = sq - crop_px
+					c_top.par.cropbottom = crop_px
 				else:
 					# Portrait: black bars on left/right from 9:16 content in square
 					c_top.par.cropleft   = crop_px
 					c_top.par.cropright  = sq - crop_px
-					c_top.par.croptop    = 0
-					c_top.par.cropbottom = sq
+					c_top.par.croptop    = sq
+					c_top.par.cropbottom = 0
 			except Exception as e:
 				print(f'[Cam Render Sync] Error setting {c_name} crop values: {e}')
 			try:
@@ -348,7 +348,7 @@ def sync(table_dat=None):
 		o_top = container.op(o_name)
 		if o_top is None:
 			try:
-				o_top = container.create('touchOutTOP', o_name)
+				o_top = container.create('touchoutTOP', o_name)
 				print(f'[Cam Render Sync] Created {o_name}')
 			except Exception as e:
 				print(f'[Cam Render Sync] Error creating {o_name}: {e}')
