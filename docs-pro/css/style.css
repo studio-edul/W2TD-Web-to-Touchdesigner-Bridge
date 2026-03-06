@@ -34,6 +34,7 @@
   justify-content: center;
   z-index: 9999;
 }
+
 .rejected-box {
   background: #1a1a2e;
   border: 1px solid #ff4444;
@@ -43,15 +44,18 @@
   max-width: 320px;
   width: 90%;
 }
+
 .rejected-icon {
   font-size: 3em;
   margin-bottom: 12px;
 }
+
 .rejected-box h2 {
   color: #ff6677;
   margin: 0 0 12px;
   font-size: 1.3em;
 }
+
 .rejected-box p {
   color: #aaa;
   line-height: 1.6;
@@ -99,7 +103,8 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-html, body {
+html,
+body {
   width: 100%;
   height: 100%;
   overflow: hidden;
@@ -146,9 +151,10 @@ html, body {
 .pro-badge {
   font-size: 14px;
   font-weight: 700;
-  color: var(--success);
+  color: #ffffff;
   position: absolute;
-  bottom: 0px;
+  bottom: 6px;
+  /* 48px 로고의 베이스라인과 14px 텍스트의 하단을 맞춤 */
   right: -24px;
   letter-spacing: normal;
 }
@@ -206,7 +212,8 @@ input[type="number"] {
   border: 1px solid var(--border);
   border-radius: 8px;
   color: var(--text);
-  font-size: 16px; /* Prevents iOS zoom */
+  font-size: 16px;
+  /* Prevents iOS zoom */
   outline: none;
   transition: border-color 0.2s;
 }
@@ -319,8 +326,15 @@ input[type="checkbox"] {
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.75; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.75;
+  }
 }
 
 /* ===== Layout ===== */
@@ -357,17 +371,43 @@ input[type="checkbox"] {
   flex-shrink: 0;
 }
 
-.status-dot.connected { background: var(--success); }
-.status-dot.connected.ack-pulse { animation: status-dot-ack 0.5s ease-out; }
-.status-dot.disconnected { background: var(--danger); }
+.status-dot.connected {
+  background: var(--success);
+}
+
+.status-dot.connected.ack-pulse {
+  animation: status-dot-ack 0.5s ease-out;
+}
+
+.status-dot.disconnected {
+  background: var(--danger);
+}
+
 .status-dot.connecting,
-.status-dot.reconnecting { background: var(--warning); animation: pulse 1s infinite; }
-.status-dot.error { background: var(--danger); }
+.status-dot.reconnecting {
+  background: var(--warning);
+  animation: pulse 1s infinite;
+}
+
+.status-dot.error {
+  background: var(--danger);
+}
 
 @keyframes status-dot-ack {
-  0% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.3); opacity: 0.9; }
-  100% { transform: scale(1); opacity: 1; }
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  50% {
+    transform: scale(1.3);
+    opacity: 0.9;
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 #connection-label {
@@ -657,14 +697,17 @@ input[type="checkbox"] {
   display: flex;
   flex-direction: column;
 }
+
 .camera-monitor.hidden {
   display: none !important;
 }
+
 .camera-monitor-video-area {
   flex: 1;
   position: relative;
   overflow: hidden;
 }
+
 .camera-monitor-video {
   position: absolute;
   inset: 0;
@@ -672,9 +715,11 @@ input[type="checkbox"] {
   height: 100%;
   object-fit: contain;
 }
+
 .camera-monitor-video.hidden {
   display: none !important;
 }
+
 .cam-res-status {
   padding: 5px 12px;
   font: 11px/1.5 monospace;
@@ -684,7 +729,10 @@ input[type="checkbox"] {
   letter-spacing: 0.02em;
   flex-shrink: 0;
 }
-.cam-res-status:empty { display: none; }
+
+.cam-res-status:empty {
+  display: none;
+}
 
 .camera-monitor .btn-exit-camera-monitor {
   position: absolute;
@@ -747,9 +795,11 @@ input[type="checkbox"] {
   flex-direction: column;
   padding: 12px;
 }
+
 .log-viewer-overlay.hidden {
   display: none;
 }
+
 .log-viewer-box {
   flex: 1;
   display: flex;
@@ -759,6 +809,7 @@ input[type="checkbox"] {
   border-radius: 8px;
   overflow: hidden;
 }
+
 .log-viewer-header {
   display: flex;
   justify-content: space-between;
@@ -767,6 +818,7 @@ input[type="checkbox"] {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
+
 .log-viewer-content {
   flex: 1;
   padding: 12px;
@@ -779,6 +831,7 @@ input[type="checkbox"] {
   white-space: pre-wrap;
   word-break: break-all;
 }
+
 .btn-tiny {
   padding: 4px 8px;
   font-size: 11px;
@@ -800,9 +853,18 @@ input[type="checkbox"] {
   max-width: 85%;
   text-align: center;
 }
+
 @keyframes w2td-toast-fade {
-  0%, 70% { opacity: 1; }
-  100% { opacity: 0; visibility: hidden; }
+
+  0%,
+  70% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    visibility: hidden;
+  }
 }
 
 /* ===== Safe area (notch) ===== */
@@ -810,9 +872,11 @@ input[type="checkbox"] {
   #top-bar {
     padding-top: calc(8px + env(safe-area-inset-top));
   }
+
   #broadcast-bar {
     padding-bottom: calc(10px + env(safe-area-inset-bottom));
   }
+
   .camera-monitor .btn-exit-camera-monitor {
     top: calc(12px + env(safe-area-inset-top));
     right: calc(12px + env(safe-area-inset-right));
@@ -823,95 +887,256 @@ input[type="checkbox"] {
 
 /* Very small phones: iPhone SE (375px), sub-375 Androids */
 @media (max-width: 374px) {
-  html, body { font-size: 13px; }
 
-  .logo { font-size: 40px; letter-spacing: 5px; }
-  .subtitle { font-size: 12px; margin-bottom: 24px; }
+  html,
+  body {
+    font-size: 13px;
+  }
 
-  #top-bar { padding: 6px 10px; }
+  .logo {
+    font-size: 40px;
+    letter-spacing: 5px;
+  }
 
-  .panel { padding: 10px; }
-  #sensor-panel h3 { margin-bottom: 5px; }
-  .sensor-list { gap: 5px; margin-bottom: 8px; }
-  .sensor-list li { padding: 5px 10px; font-size: 11px; }
-  .control-row { gap: 4px; }
+  .subtitle {
+    font-size: 12px;
+    margin-bottom: 24px;
+  }
 
-  #broadcast-bar { padding: 8px 10px; gap: 6px; }
-  .broadcast-buttons { gap: 6px; }
-  .btn-broadcast { padding: 14px; font-size: 16px; }
+  #top-bar {
+    padding: 6px 10px;
+  }
+
+  .panel {
+    padding: 10px;
+  }
+
+  #sensor-panel h3 {
+    margin-bottom: 5px;
+  }
+
+  .sensor-list {
+    gap: 5px;
+    margin-bottom: 8px;
+  }
+
+  .sensor-list li {
+    padding: 5px 10px;
+    font-size: 11px;
+  }
+
+  .control-row {
+    gap: 4px;
+  }
+
+  #broadcast-bar {
+    padding: 8px 10px;
+    gap: 6px;
+  }
+
+  .broadcast-buttons {
+    gap: 6px;
+  }
+
+  .btn-broadcast {
+    padding: 14px;
+    font-size: 16px;
+  }
 
 
-  .w2td-toast { bottom: 76px; }
+  .w2td-toast {
+    bottom: 76px;
+  }
 }
 
 @supports (padding-bottom: env(safe-area-inset-bottom)) {
   @media (max-width: 374px) {
-    #top-bar { padding-top: calc(6px + env(safe-area-inset-top)); }
-    #broadcast-bar { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+    #top-bar {
+      padding-top: calc(6px + env(safe-area-inset-top));
+    }
+
+    #broadcast-bar {
+      padding-bottom: calc(8px + env(safe-area-inset-bottom));
+    }
   }
 }
 
 /* Large phones: iPhone Pro Max (430px+), Android XL */
 @media (min-width: 430px) {
-  html, body { font-size: 15px; }
 
-  .logo { font-size: 54px; letter-spacing: 10px; }
-  .subtitle { font-size: 14px; margin-bottom: 36px; }
+  html,
+  body {
+    font-size: 15px;
+  }
 
-  #top-bar { padding: 10px 16px; }
+  .logo {
+    font-size: 54px;
+    letter-spacing: 10px;
+  }
 
-  .panel { padding: 14px 16px; }
-  #sensor-panel h3 { margin-bottom: 8px; }
-  .sensor-list { gap: 8px; margin-bottom: 12px; }
-  .sensor-list li { padding: 7px 14px; font-size: 13px; }
-  .control-row { gap: 8px; }
+  .subtitle {
+    font-size: 14px;
+    margin-bottom: 36px;
+  }
 
-  #broadcast-bar { padding: 12px 16px; gap: 10px; }
-  .broadcast-buttons { gap: 10px; }
-  .btn-broadcast { padding: 20px; font-size: 20px; }
+  #top-bar {
+    padding: 10px 16px;
+  }
+
+  .panel {
+    padding: 14px 16px;
+  }
+
+  #sensor-panel h3 {
+    margin-bottom: 8px;
+  }
+
+  .sensor-list {
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .sensor-list li {
+    padding: 7px 14px;
+    font-size: 13px;
+  }
+
+  .control-row {
+    gap: 8px;
+  }
+
+  #broadcast-bar {
+    padding: 12px 16px;
+    gap: 10px;
+  }
+
+  .broadcast-buttons {
+    gap: 10px;
+  }
+
+  .btn-broadcast {
+    padding: 20px;
+    font-size: 20px;
+  }
 
 
-  .w2td-toast { bottom: 95px; }
+  .w2td-toast {
+    bottom: 95px;
+  }
 }
 
 @supports (padding-bottom: env(safe-area-inset-bottom)) {
   @media (min-width: 430px) {
-    #top-bar { padding-top: calc(10px + env(safe-area-inset-top)); }
-    #broadcast-bar { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+    #top-bar {
+      padding-top: calc(10px + env(safe-area-inset-top));
+    }
+
+    #broadcast-bar {
+      padding-bottom: calc(12px + env(safe-area-inset-bottom));
+    }
   }
 }
 
 /* Tablets: iPad, Android tablets (768px+) */
 @media (min-width: 768px) {
-  html, body { font-size: 16px; }
 
-  .logo { font-size: 64px; letter-spacing: 14px; }
-  .subtitle { font-size: 15px; margin-bottom: 40px; }
-  .modal { padding: 24px; }
-  .modal-content { max-width: 480px; }
+  html,
+  body {
+    font-size: 16px;
+  }
 
-  .form-group label { font-size: 13px; }
-  .form-group small { font-size: 12px; }
+  .logo {
+    font-size: 64px;
+    letter-spacing: 14px;
+  }
+
+  .subtitle {
+    font-size: 15px;
+    margin-bottom: 40px;
+  }
+
+  .modal {
+    padding: 24px;
+  }
+
+  .modal-content {
+    max-width: 480px;
+  }
+
+  .form-group label {
+    font-size: 13px;
+  }
+
+  .form-group small {
+    font-size: 12px;
+  }
+
   input[type="text"],
-  input[type="number"] { padding: 14px 16px; }
+  input[type="number"] {
+    padding: 14px 16px;
+  }
 
-  #top-bar { padding: 14px 24px; }
-  #connection-label { font-size: 15px; }
+  #top-bar {
+    padding: 14px 24px;
+  }
 
-  .panel { padding: 18px 24px; }
-  #sensor-panel h3 { margin-bottom: 10px; }
-  .sensor-list { gap: 10px; margin-bottom: 14px; }
-  .sensor-list li { padding: 9px 18px; font-size: 14px; }
-  .control-row { gap: 10px; }
+  #connection-label {
+    font-size: 15px;
+  }
 
-  .btn { padding: 16px 28px; }
-  .btn-primary { font-size: 18px; }
-  .btn-small { padding: 10px 16px; font-size: 13px; }
+  .panel {
+    padding: 18px 24px;
+  }
 
-  #broadcast-bar { padding: 14px 24px; gap: 12px; }
-  .broadcast-buttons { gap: 12px; }
-  .btn-broadcast { padding: 24px; font-size: 22px; border-radius: 14px; }
+  #sensor-panel h3 {
+    margin-bottom: 10px;
+  }
+
+  .sensor-list {
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .sensor-list li {
+    padding: 9px 18px;
+    font-size: 14px;
+  }
+
+  .control-row {
+    gap: 10px;
+  }
+
+  .btn {
+    padding: 16px 28px;
+  }
+
+  .btn-primary {
+    font-size: 18px;
+  }
+
+  .btn-small {
+    padding: 10px 16px;
+    font-size: 13px;
+  }
+
+  #broadcast-bar {
+    padding: 14px 24px;
+    gap: 12px;
+  }
+
+  .broadcast-buttons {
+    gap: 12px;
+  }
+
+  .btn-broadcast {
+    padding: 24px;
+    font-size: 22px;
+    border-radius: 14px;
+  }
 
 
-  .w2td-toast { bottom: 110px; font-size: 14px; }
+  .w2td-toast {
+    bottom: 110px;
+    font-size: 14px;
+  }
 }
