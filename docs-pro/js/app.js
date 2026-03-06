@@ -1,7 +1,7 @@
 /**
  * W2TD Main App Controller
  * Direct WebSocket connection to TouchDesigner.
- * Settings (sample rate, wake lock) are pushed from TD via config message.
+ * Settings (sample rate, wake lock, haptic) are pushed from TD via config message.
  */
 const W2TD_VERSION = '1.0.0';
 
@@ -118,7 +118,7 @@ const W2TD_VERSION = '1.0.0';
 
   /**
    * Apply config pushed from TD via {type:'config'} message.
-   * w2td_config keys: sample_rate, wake_lock, sensors, dev_mode
+   * w2td_config keys: sample_rate, wake_lock, haptic, sensors, dev_mode
    */
   function applyConfig(cfg) {
     if (cfg.sample_rate != null) {
@@ -132,6 +132,9 @@ const W2TD_VERSION = '1.0.0';
     if (cfg.wake_lock != null) {
       if (parseInt(cfg.wake_lock)) requestWakeLock();
       else releaseWakeLock();
+    }
+    if (cfg.haptic != null) {
+      hapticEnabled = !!parseInt(cfg.haptic);
     }
     let sensorChanged = false;
     ['motion', 'orientation', 'geolocation', 'touch'].forEach(key => {
@@ -346,6 +349,11 @@ const W2TD_VERSION = '1.0.0';
     initLogViewer();
     if (typeof WebRTCModule !== 'undefined' && WebRTCModule.setOnLog) {
       WebRTCModule.setOnLog((msg) => addLog('WebRTC ' + msg, 'info'));
+    }
+    // Pro: Initialize AudioModule and unlock on first user interaction
+    if (typeof AudioModule !== 'undefined') {
+      document.addEventListener('touchstart', () => AudioModule.unlock(), { once: true });
+      document.addEventListener('click', () => AudioModule.unlock(), { once: true });
     }
     renderSensorList();
     SensorModule.setDebugCallback((msg) => updateDebug(msg));
@@ -564,8 +572,47 @@ const W2TD_VERSION = '1.0.0';
         else if (msg.type === 'webrtc_ice_cam')    WebRTCModule.handleCameraIce(msg);
         else if (msg.type === 'cam_receiver_ready') _maybeStartCamera();
       },
+        onHaptic: (data) => {
+          handleHapticFeedback(data);
+        },
       onDataAck: () => {
         updateDataAckIndicator();
+      },
+      // Pro: Background color sync (strobe/flash effect)
+      onBgColor: (color, duration) => {
+        if (typeof AudioModule === 'undefined') return; // Pro feature check
+        document.body.style.backgroundColor = color;
+        if (duration > 0) {
+          setTimeout(() => {
+            document.body.style.backgroundColor = '';
+          }, duration);
+        }
+      },
+      // Pro: Audio playback trigger
+      onPlaySound: (filename, startTime) => {
+        if (typeof AudioModule === 'undefined') return; // Pro feature check
+        const options = {};
+        if (startTime !== undefined && startTime > 0) {
+          options.startTime = startTime / 1000; // convert ms to seconds
+        }
+        AudioModule.play(filename, options).then(success => {
+          if (success) {
+            addLog(`Audio: ${filename}`, 'info');
+          } else {
+            addLog(`Audio failed: ${filename}`, 'warn');
+          }
+        });
+      },
+      // Pro: Flashlight control
+      onFlashlight: (state) => {
+        if (typeof WebRTCModule === 'undefined' || !WebRTCModule.toggleFlashlight) return;
+        WebRTCModule.toggleFlashlight(state).then(success => {
+          if (success) {
+            addLog(`Flashlight ${state ? 'ON' : 'OFF'}`, 'info');
+          } else {
+            addLog('Flashlight: Requires active rear camera', 'warn');
+          }
+        });
       },
     });
 
@@ -603,6 +650,16 @@ const W2TD_VERSION = '1.0.0';
     els.userStartOverlay.classList.add('hidden');
     els.w2tdLoading.classList.add('hidden');
     els.mainUI.classList.add('hidden');
+    
+    // Stop haptic vibration on disconnect
+    if (hapticInterval !== null) {
+      clearInterval(hapticInterval);
+      hapticInterval = null;
+      hapticState = 0;
+      if (navigator.vibrate) {
+        navigator.vibrate(0);
+      }
+    }
     els.modal.classList.add('active');
   }
 
@@ -1023,6 +1080,96 @@ const W2TD_VERSION = '1.0.0';
       requestWakeLock();
     }
   });
+
+  // Haptic state management (for CHOP-based continuous vibration)
+  let hapticState = 0;  // 0 = stop, 1 = vibrate
+  let hapticInterval = null;
+  const HAPTIC_INTERVAL_MS = 100;  // Vibrate every 100ms when state=1
+
+  /**
+   * Handle haptic feedback from TD.
+   * Supports two modes:
+   * 1. Pattern mode: {"type": "haptic", "pattern": [200, 100, 200]}
+   * 2. State mode: {"type": "haptic", "state": 0 or 1} (CHOP-based)
+   */
+  function handleHapticFeedback(data) {
+    // Check Vibration API support
+    if (!navigator.vibrate) {
+      console.log('[W2TD] Vibration API not supported');
+      return;
+    }
+
+    // State-based mode (CHOP): state = 0 (stop) or 1 (vibrate continuously)
+    if (data.state !== undefined) {
+      const newState = data.state === 1 ? 1 : 0;
+      
+      if (newState !== hapticState) {
+        hapticState = newState;
+        
+        // Stop existing vibration interval
+        if (hapticInterval !== null) {
+          clearInterval(hapticInterval);
+          hapticInterval = null;
+          navigator.vibrate(0);  // Stop vibration
+        }
+        
+        // Start continuous vibration if state = 1
+        if (hapticState === 1) {
+          // Vibrate immediately
+          navigator.vibrate(HAPTIC_INTERVAL_MS);
+          
+          // Continue vibrating at intervals
+          hapticInterval = setInterval(() => {
+            if (hapticState === 1) {
+              navigator.vibrate(HAPTIC_INTERVAL_MS);
+            } else {
+              clearInterval(hapticInterval);
+              hapticInterval = null;
+            }
+          }, HAPTIC_INTERVAL_MS);
+          
+          addLog('Haptic: ON (continuous)', 'info');
+        } else {
+          addLog('Haptic: OFF', 'info');
+        }
+      }
+      return;
+    }
+
+    // Pattern-based mode (legacy): pattern = [200, 100, 200]
+    const pattern = data.pattern;
+    if (!pattern || !Array.isArray(pattern) || pattern.length === 0) {
+      console.warn('[W2TD] Invalid haptic pattern:', pattern);
+      return;
+    }
+
+    // Stop any continuous vibration before playing pattern
+    if (hapticInterval !== null) {
+      clearInterval(hapticInterval);
+      hapticInterval = null;
+      hapticState = 0;
+    }
+
+    try {
+      // Convert pattern to integers (safety check)
+      const intPattern = pattern.map(v => Math.max(0, Math.min(Number(v) || 0, 10000)));
+      
+      // iOS Safari may not support pattern arrays, fallback to single value
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+      if (isIOS && intPattern.length > 1) {
+        // iOS: use first value only
+        navigator.vibrate(intPattern[0]);
+        addLog(`Haptic (iOS): ${intPattern[0]}ms`, 'info');
+      } else {
+        // Android/Desktop: full pattern support
+        navigator.vibrate(intPattern);
+        addLog(`Haptic pattern: ${intPattern.join(', ')}ms`, 'info');
+      }
+    } catch (e) {
+      console.error('[W2TD] Haptic error:', e);
+      addLog('Haptic failed: ' + e.message, 'error');
+    }
+  }
 
   function haptic(duration = 30) {
     if (hapticEnabled && navigator.vibrate) {

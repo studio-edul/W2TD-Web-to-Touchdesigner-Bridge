@@ -15,7 +15,11 @@ const WSClient = (() => {
   let onErrorDetail = null;
   let onConfig = null;
   let onWebRTCSignal = null; // callback(msg) for webrtc_answer / webrtc_ice / webrtc_state
+  let onHaptic = null; // callback(pattern) for haptic feedback
   let onDataAck = null; // callback() for data acknowledgment
+  let onBgColor = null; // callback(color, duration) for Pro background color sync
+  let onPlaySound = null; // callback(filename, startTime) for Pro audio playback
+  let onFlashlight = null; // callback(state) for Pro flashlight control
   
   // Heartbeat
   let heartbeatInterval = null;
@@ -36,7 +40,11 @@ const WSClient = (() => {
     onErrorDetail = callbacks.onErrorDetail || null;
     onConfig = callbacks.onConfig || null;
     onWebRTCSignal = callbacks.onWebRTCSignal || null;
+    onHaptic = callbacks.onHaptic || null;
     onDataAck = callbacks.onDataAck || null;
+    onBgColor = callbacks.onBgColor || null;
+    onPlaySound = callbacks.onPlaySound || null;
+    onFlashlight = callbacks.onFlashlight || null;
     reconnectAttempts = 0; // reset in case previous session was rejected
 
     // Strip any existing protocol prefix, then re-add the correct one
@@ -85,6 +93,12 @@ const WSClient = (() => {
         } else if (msg.type === 'webrtc_answer' || msg.type === 'webrtc_ice' || msg.type === 'webrtc_state' ||
                    msg.type === 'webrtc_answer_cam' || msg.type === 'webrtc_ice_cam' || msg.type === 'cam_receiver_ready') {
           if (onWebRTCSignal) onWebRTCSignal(msg);
+        } else if (msg.type === 'haptic') {
+          // Haptic feedback (pattern or state)
+          if (onHaptic) {
+            // Pass entire message object (supports both pattern and state)
+            onHaptic(msg);
+          }
         } else if (msg.type === 'ping') {
           // TD heartbeat ping → respond with pong
           send({ type: 'pong' });
@@ -94,6 +108,15 @@ const WSClient = (() => {
         } else if (msg.type === 'data_ack') {
           // TD data acknowledgment → show indicator
           if (onDataAck) onDataAck();
+        } else if (msg.type === 'bg_color') {
+          // Pro: Background color sync (strobe/flash effect)
+          if (onBgColor) onBgColor(msg.color || msg.colour, msg.duration || 0);
+        } else if (msg.type === 'play_sound') {
+          // Pro: Audio playback trigger
+          if (onPlaySound) onPlaySound(msg.filename, msg.startTime);
+        } else if (msg.type === 'flashlight') {
+          // Pro: Flashlight control
+          if (onFlashlight) onFlashlight(msg.state);
         } else if (msg.type === 'rejected') {
           // Server full — cancel reconnect and surface the reason
           if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }

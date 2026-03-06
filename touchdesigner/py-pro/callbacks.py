@@ -400,6 +400,7 @@ def _config_msg(cfg):
 		'type':               'config',
 		'sample_rate':        _config_val(cfg, 'Samplerate', 'samplerate', 'sample_rate', default=30),
 		'wake_lock':          _config_val(cfg, 'Wakelock', 'wakelock', 'wake_lock', default=1),
+		'haptic':             _config_val(cfg, 'Haptic', 'haptic', default=1),
 		'sensor_motion':      _config_val(cfg, 'Motion', 'motion', 'sensor_motion', default=1),
 		'sensor_orientation': _config_val(cfg, 'Orientation', 'orientation', 'sensor_orientation', default=1),
 		'sensor_geolocation': _config_val(cfg, 'Geolocation', 'geolocation', 'sensor_geolocation', default=1),
@@ -424,7 +425,7 @@ def broadcast_config(webServerDAT):
 	"""Push updated config to all connected clients.
 	Call from TD script after editing w2td_config:
 	    op('web_server_dat').module.broadcast_config(op('web_server_dat'))
-	w2td_config keys: sample_rate, wake_lock, sensors, dev_mode, camera, microphone
+	w2td_config keys: sample_rate, wake_lock, haptic, sensors, dev_mode, camera, microphone
 	"""
 	cfg = _read_config()
 	msg = json.dumps(_config_msg(cfg))
@@ -434,6 +435,325 @@ def broadcast_config(webServerDAT):
 		except Exception:
 			pass
 	print(f'[W2TD] Config broadcast -> {len(_slots())} clients')
+
+
+def send_haptic_to_client(webServerDAT, slot, pattern):
+	"""Send haptic feedback pattern to a specific client.
+	
+	Args:
+		webServerDAT: Web Server DAT operator
+		slot: Client slot number (int)
+		pattern: List of vibration durations in milliseconds
+			Example: [200, 100, 200] = vibrate 200ms, pause 100ms, vibrate 200ms
+			Single value: [200] = vibrate 200ms once
+	
+	Usage in TD:
+		op('web_server_dat').module.send_haptic_to_client(op('web_server_dat'), 1, [200, 100, 200])
+		op('web_server_dat').module.send_haptic_to_all(op('web_server_dat'), [200])
+	"""
+	addr = _addr_for_slot(slot)
+	if addr is None:
+		print(f'[W2TD Haptic Error] No client found for slot {slot}')
+		return False
+	
+	if not isinstance(pattern, list) or len(pattern) == 0:
+		print(f'[W2TD Haptic Error] Invalid pattern: {pattern}')
+		return False
+	
+	try:
+		msg = json.dumps({
+			'type': 'haptic',
+			'pattern': pattern
+		})
+		webServerDAT.webSocketSendText(addr, msg)
+		print(f'[W2TD Haptic] Sent pattern {pattern} to slot {slot}')
+		return True
+	except Exception as e:
+		print(f'[W2TD Haptic Error] Send failed for slot {slot}: {e}')
+		return False
+
+
+def send_haptic_to_all(webServerDAT, pattern):
+	"""Send haptic feedback pattern to all connected clients.
+	
+	Args:
+		webServerDAT: Web Server DAT operator
+		pattern: List of vibration durations in milliseconds
+	
+	Usage in TD:
+		op('web_server_dat').module.send_haptic_to_all(op('web_server_dat'), [200, 100, 200])
+	"""
+	success_count = 0
+	for slot in _slots().values():
+		if send_haptic_to_client(webServerDAT, slot, pattern):
+			success_count += 1
+	print(f'[W2TD Haptic] Sent pattern {pattern} to {success_count} clients')
+	return success_count
+
+
+def send_haptic_state(webServerDAT, slot, state):
+	"""Send haptic state (0 or 1) to a specific client.
+	
+	Args:
+		webServerDAT: Web Server DAT operator
+		slot: Client slot number (int)
+		state: Vibration state (0 = stop, 1 = vibrate continuously)
+	
+	Usage in TD:
+		op('web_server_dat').module.send_haptic_state(op('web_server_dat'), 1, 1)  # slot 1 vibrate
+		op('web_server_dat').module.send_haptic_state(op('web_server_dat'), 1, 0)  # slot 1 stop
+	"""
+	addr = _addr_for_slot(slot)
+	if addr is None:
+		return False
+	
+	if state not in (0, 1):
+		print(f'[W2TD Haptic Error] Invalid state: {state} (must be 0 or 1)')
+		return False
+	
+	try:
+		msg = json.dumps({
+			'type': 'haptic',
+			'state': state
+		})
+		webServerDAT.webSocketSendText(addr, msg)
+		return True
+	except Exception as e:
+		print(f'[W2TD Haptic Error] Send state failed for slot {slot}: {e}')
+		return False
+
+
+def broadcast_haptic_from_chop(webServerDAT, chop_name='w2td_haptic'):
+	"""Read haptic CHOP and send state to all connected clients.
+	
+	CHOP structure:
+		- Channel names: 'slot1', 'slot2', ... or 'ch1', 'ch2', ... or '1', '2', ...
+		- Values: 0 = stop vibration, 1 = vibrate continuously
+		- Non-zero values are treated as 1
+	
+	Args:
+		webServerDAT: Web Server DAT operator
+		chop_name: Name of the CHOP operator (default: 'w2td_haptic')
+	
+	Usage in TD (Timer CHOP or Execute DAT):
+		op('web_server_dat').module.broadcast_haptic_from_chop(op('web_server_dat'))
+		op('web_server_dat').module.broadcast_haptic_from_chop(op('web_server_dat'), 'my_haptic_chop')
+	
+	Setup:
+		1. Create a Constant CHOP or any CHOP named 'w2td_haptic' (or custom name)
+		2. Add channels: 'slot1', 'slot2', ... (or 'ch1', 'ch2', ... or '1', '2', ...)
+		3. Connect Timer CHOP or Execute DAT to call this function periodically
+	"""
+	chop = op(chop_name)
+	if chop is None:
+		return 0
+	
+	success_count = 0
+	active_slots = _slots().values()
+	
+	# Try different channel naming conventions
+	# Note: chop.chans is a collection of Channel objects — use chop[name] to look up by name
+	for slot in active_slots:
+		state = 0
+
+		# Try channel names: 'slot1', 'slot2', ...
+		try:
+			ch = chop[f'slot{slot}']
+			if ch is not None:
+				state = 1 if ch[0] != 0 else 0
+		except Exception:
+			pass
+
+		# Fallback: try 'ch1', 'ch2', ...
+		if state == 0:
+			try:
+				ch = chop[f'ch{slot}']
+				if ch is not None:
+					state = 1 if ch[0] != 0 else 0
+			except Exception:
+				pass
+
+		# Fallback: try numeric channel names '1', '2', ...
+		if state == 0:
+			try:
+				ch = chop[str(slot)]
+				if ch is not None:
+					state = 1 if ch[0] != 0 else 0
+			except Exception:
+				pass
+
+		# Fallback: try channel index (slot-1 as index)
+		if state == 0 and slot - 1 < len(chop.chans):
+			try:
+				val = chop[slot - 1][0]
+				state = 1 if val != 0 else 0
+			except Exception:
+				pass
+		
+		# Send state to client
+		if send_haptic_state(webServerDAT, slot, state):
+			success_count += 1
+	
+	return success_count
+
+
+# ── Pro Features (TD → Mobile) ────────────────────────────────────────────────
+
+def send_bg_color_to_client(webServerDAT, slot, color, duration=0):
+	"""Pro: Send background color sync (strobe/flash effect) to a specific client.
+	
+	Args:
+		webServerDAT: Web Server DAT operator
+		slot: Client slot number (int)
+		color: CSS color string (e.g., '#ff0000', 'red', 'white')
+		duration: Duration in milliseconds (0 = indefinite, >0 = clear after duration)
+	
+	Usage in TD:
+		op('web_server_dat').module.send_bg_color_to_client(op('web_server_dat'), 1, '#ff0000', 50)
+		op('web_server_dat').module.send_bg_color_to_all(op('web_server_dat'), 'white', 0)
+	"""
+	addr = _addr_for_slot(slot)
+	if addr is None:
+		print(f'[W2TD Pro Error] No client found for slot {slot}')
+		return False
+	
+	try:
+		msg = json.dumps({
+			'type': 'bg_color',
+			'color': color,
+			'duration': int(duration)
+		})
+		webServerDAT.webSocketSendText(addr, msg)
+		print(f'[W2TD Pro] Sent bg_color {color} (duration={duration}ms) to slot {slot}')
+		return True
+	except Exception as e:
+		print(f'[W2TD Pro Error] bg_color send failed for slot {slot}: {e}')
+		return False
+
+
+def send_bg_color_to_all(webServerDAT, color, duration=0):
+	"""Pro: Send background color sync to all connected clients.
+	
+	Args:
+		webServerDAT: Web Server DAT operator
+		color: CSS color string
+		duration: Duration in milliseconds (0 = indefinite)
+	
+	Usage in TD:
+		op('web_server_dat').module.send_bg_color_to_all(op('web_server_dat'), 'white', 0)
+	"""
+	success_count = 0
+	for slot in _slots().values():
+		if send_bg_color_to_client(webServerDAT, slot, color, duration):
+			success_count += 1
+	print(f'[W2TD Pro] Sent bg_color {color} to {success_count} clients')
+	return success_count
+
+
+def send_play_sound_to_client(webServerDAT, slot, filename, startTime=None):
+	"""Pro: Trigger audio playback on a specific client.
+	
+	Args:
+		webServerDAT: Web Server DAT operator
+		slot: Client slot number (int)
+		filename: Audio filename (e.g., 'synth.mp3', 'drop.wav')
+			File must be in touchdesigner/audio/ directory
+		startTime: Optional scheduled start time in milliseconds (for synchronization)
+			If None, plays immediately
+	
+	Usage in TD:
+		op('web_server_dat').module.send_play_sound_to_client(op('web_server_dat'), 1, 'synth.mp3')
+		op('web_server_dat').module.send_play_sound_to_all(op('web_server_dat'), 'drop.wav')
+	"""
+	addr = _addr_for_slot(slot)
+	if addr is None:
+		print(f'[W2TD Pro Error] No client found for slot {slot}')
+		return False
+	
+	try:
+		msg = {'type': 'play_sound', 'filename': filename}
+		if startTime is not None:
+			msg['startTime'] = int(startTime)
+		webServerDAT.webSocketSendText(addr, json.dumps(msg))
+		print(f'[W2TD Pro] Sent play_sound {filename} to slot {slot}' + (f' (startTime={startTime}ms)' if startTime else ''))
+		return True
+	except Exception as e:
+		print(f'[W2TD Pro Error] play_sound send failed for slot {slot}: {e}')
+		return False
+
+
+def send_play_sound_to_all(webServerDAT, filename, startTime=None):
+	"""Pro: Trigger audio playback on all connected clients.
+	
+	Args:
+		webServerDAT: Web Server DAT operator
+		filename: Audio filename
+		startTime: Optional scheduled start time in milliseconds
+	
+	Usage in TD:
+		op('web_server_dat').module.send_play_sound_to_all(op('web_server_dat'), 'drop.wav')
+	"""
+	success_count = 0
+	for slot in _slots().values():
+		if send_play_sound_to_client(webServerDAT, slot, filename, startTime):
+			success_count += 1
+	print(f'[W2TD Pro] Sent play_sound {filename} to {success_count} clients')
+	return success_count
+
+
+def send_flashlight_to_client(webServerDAT, slot, state):
+	"""Pro: Toggle flashlight (torch) on/off for a specific client.
+	
+	Requires active rear camera stream on the mobile device.
+	
+	Args:
+		webServerDAT: Web Server DAT operator
+		slot: Client slot number (int)
+		state: Flashlight state (0 = off, 1 = on)
+	
+	Usage in TD:
+		op('web_server_dat').module.send_flashlight_to_client(op('web_server_dat'), 1, 1)  # slot 1 ON
+		op('web_server_dat').module.send_flashlight_to_all(op('web_server_dat'), 0)  # all OFF
+	"""
+	addr = _addr_for_slot(slot)
+	if addr is None:
+		print(f'[W2TD Pro Error] No client found for slot {slot}')
+		return False
+	
+	if state not in (0, 1):
+		print(f'[W2TD Pro Error] Invalid flashlight state: {state} (must be 0 or 1)')
+		return False
+	
+	try:
+		msg = json.dumps({
+			'type': 'flashlight',
+			'state': state
+		})
+		webServerDAT.webSocketSendText(addr, msg)
+		print(f'[W2TD Pro] Sent flashlight {state} to slot {slot}')
+		return True
+	except Exception as e:
+		print(f'[W2TD Pro Error] flashlight send failed for slot {slot}: {e}')
+		return False
+
+
+def send_flashlight_to_all(webServerDAT, state):
+	"""Pro: Toggle flashlight on/off for all connected clients.
+	
+	Args:
+		webServerDAT: Web Server DAT operator
+		state: Flashlight state (0 = off, 1 = on)
+	
+	Usage in TD:
+		op('web_server_dat').module.send_flashlight_to_all(op('web_server_dat'), 1)  # all ON
+		op('web_server_dat').module.send_flashlight_to_all(op('web_server_dat'), 0)  # all OFF
+	"""
+	success_count = 0
+	for slot in _slots().values():
+		if send_flashlight_to_client(webServerDAT, slot, state):
+			success_count += 1
+	print(f'[W2TD Pro] Sent flashlight {state} to {success_count} clients')
+	return success_count
 
 
 def send_heartbeat(webServerDAT, slot=None):
@@ -469,7 +789,7 @@ def send_heartbeat(webServerDAT, slot=None):
 
 
 def onHTTPRequest(webServerDAT, request, response):
-	"""Serve cam_receiver.html locally; redirect all other requests to GitHub Pages."""
+	"""Serve cam_receiver.html locally; serve audio files from audio/ directory; redirect all other requests to GitHub Pages."""
 	uri = request.get('uri', '/')
 
 	# Serve cam_receiver.html for Web Render TOP (served from Text DAT — no external file needed)
@@ -486,6 +806,58 @@ def onHTTPRequest(webServerDAT, request, response):
 			response['data'] = '<html><body>cam_receiver_html DAT not found in W2TD</body></html>'
 			print('[W2TD Error] cam_receiver_html Text DAT not found — create a Text DAT named "cam_receiver_html" inside W2TD')
 		return response
+
+	# Pro: Serve audio files from touchdesigner/audio/ directory
+	if uri.startswith('/audio/'):
+		filename = uri.replace('/audio/', '').strip('/')
+		if not filename or '..' in filename or '/' in filename:
+			response['statusCode'] = 400
+			response['statusReason'] = 'Bad Request'
+			response['data'] = 'Invalid filename'
+			return response
+		
+		# Get project folder path
+		proj_path = project.folder
+		audio_path = os.path.join(proj_path, 'audio', filename)
+		
+		if not os.path.exists(audio_path) or not os.path.isfile(audio_path):
+			response['statusCode'] = 404
+			response['statusReason'] = 'Not Found'
+			response['data'] = f'Audio file not found: {filename}'
+			print(f'[W2TD Pro] Audio file not found: {audio_path}')
+			return response
+		
+		try:
+			with open(audio_path, 'rb') as f:
+				audio_data = f.read()
+			
+			# Determine content type from extension
+			ext = os.path.splitext(filename)[1].lower()
+			content_types = {
+				'.mp3': 'audio/mpeg',
+				'.wav': 'audio/wav',
+				'.ogg': 'audio/ogg',
+				'.m4a': 'audio/mp4',
+				'.aac': 'audio/aac',
+			}
+			content_type = content_types.get(ext, 'application/octet-stream')
+			
+			response['statusCode'] = 200
+			response['statusReason'] = 'OK'
+			response['headers'] = {
+				'Content-Type': content_type,
+				'Content-Length': str(len(audio_data)),
+				'Cache-Control': 'public, max-age=3600',  # Cache for 1 hour
+			}
+			response['data'] = audio_data
+			print(f'[W2TD Pro] Served audio: {filename} ({len(audio_data)} bytes)')
+			return response
+		except Exception as e:
+			response['statusCode'] = 500
+			response['statusReason'] = 'Internal Server Error'
+			response['data'] = f'Error reading audio file: {e}'
+			print(f'[W2TD Pro Error] Audio serve error: {e}')
+			return response
 
 	stored_url = op('/').fetch('w2td_url', '')
 	host = stored_url.replace('https://', '').replace('http://', '').strip()
