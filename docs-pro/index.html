@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
@@ -8,6 +9,7 @@
   <title>W2TD - Web to TouchDesigner</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
+
 <body>
   <!-- Connection Modal -->
   <div id="connection-modal" class="modal active">
@@ -18,9 +20,9 @@
       <p class="subtitle">Web to TouchDesigner Bridge</p>
 
       <div class="form-group">
-        <label for="td-address">TouchDesigner Address</label>
-        <input type="text" id="td-address" placeholder="192.168.0.100:9980" autocomplete="off">
-        <small>Enter TD PC local IP and port (e.g. 192.168.0.100:9980)</small>
+        <label for="td-address">Cloudflare Tunnel URL</label>
+        <input type="text" id="td-address" placeholder="e.g. your-tunnel.trycloudflare.com" autocomplete="off">
+        <small>Enter the Cloudflare Tunnel URL shown in TD</small>
       </div>
 
       <div class="form-group">
@@ -88,7 +90,8 @@
   <div id="touch-pad" class="hidden">
     <canvas id="touch-canvas"></canvas>
     <div class="touch-pad-controls">
-      <button id="btn-toggle-touch-points" class="btn btn-small btn-toggle-touch-points hidden" title="Toggle touch point display">Show Dots</button>
+      <button id="btn-toggle-touch-points" class="btn btn-small btn-toggle-touch-points hidden"
+        title="Toggle touch point display">Show Dots</button>
       <button id="btn-exit-touch" class="btn btn-small btn-exit-touch">Exit Touch Pad</button>
     </div>
   </div>
@@ -104,7 +107,7 @@
   <!-- Full-screen camera monitor (enter via Video Monitor button) -->
   <div id="camera-monitor" class="camera-monitor hidden">
     <div class="camera-monitor-video-area">
-      <video id="webrtc-preview-rear"  class="camera-monitor-video hidden" autoplay muted playsinline></video>
+      <video id="webrtc-preview-rear" class="camera-monitor-video hidden" autoplay muted playsinline></video>
       <video id="webrtc-preview-front" class="camera-monitor-video hidden" autoplay muted playsinline></video>
     </div>
     <div id="cam-res-status" class="cam-res-status"></div>
@@ -130,4 +133,5 @@
   <script src="js/audio.js?v=20260305"></script>
   <script src="js/app.js?v=20260305"></script>
 </body>
+
 </html>
