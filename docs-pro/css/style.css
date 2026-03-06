@@ -139,7 +139,20 @@ html, body {
   text-align: center;
   color: var(--primary);
   margin-bottom: 4px;
+  position: relative;
+  display: inline-block;
 }
+
+.pro-badge {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--success);
+  position: absolute;
+  bottom: 0px;
+  right: -24px;
+  letter-spacing: normal;
+}
+
 
 .subtitle {
   text-align: center;
