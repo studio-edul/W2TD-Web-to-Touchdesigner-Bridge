@@ -1,7 +1,7 @@
-# Execute CHOP — controls mobile haptic when w2td_haptic channel value changes
+# Execute CHOP — controls mobile flashlight when w2td_flashlight channel value changes
 # Setup in TD:
 #   1. Create a CHOP Execute DAT
-#   2. CHOPs parameter: w2td_haptic
+#   2. CHOPs parameter: w2td_flashlight
 #   3. Value Change parameter: On
 #   4. Paste this script
 
@@ -32,12 +32,12 @@ def _op(path_suffix, fallback_name=None):
 	return op(fallback_name or path_suffix.split('/')[-1])
 
 def onValueChange(channel, sampleIndex, val, prev):
-	"""Send haptic state to slot when w2td_haptic channel value changes.
+	"""Send flashlight state to slot when w2td_flashlight channel value changes.
 	Assumes channel name is the slot number (e.g., '1', '2', etc.).
 	"""
 	# Find web_server_dat
 	web = _op('web_server_dat')
-	if not web or not hasattr(web, 'module') or not hasattr(web.module, 'send_haptic_state'):
+	if not web or not hasattr(web, 'module') or not hasattr(web.module, 'send_flashlight_to_client'):
 		return
 
 	# Channel name should correspond to slot number, e.g. "1" or "chan1"
@@ -51,6 +51,5 @@ def onValueChange(channel, sampleIndex, val, prev):
 
 	if slot is not None:
 		state = 1 if val > 0.5 else 0
-		# Only send if state changed to 1 (trigger) or 0 (off), depending on your logic
 		if val != prev:
-			web.module.send_haptic_state(web, slot=slot, state=state)
+			web.module.send_flashlight_to_client(web, slot=slot, state=state)
