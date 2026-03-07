@@ -7,23 +7,19 @@
 const WebRTCModule = (() => {
   // ── Camera resolution presets — updated at runtime via setResolution() ───────
   const _CAM_RESOLUTION_MAP = {
-    'non-commercial': { width: 960,  height: 540,  maxBitrate: 2000000 },
-    'fhd':            { width: 1920, height: 1080, maxBitrate: 4000000 },
+    'non-commercial': { width: 960, height: 540, maxBitrate: 2000000 },
+    'fhd': { width: 1920, height: 1080, maxBitrate: 4000000 },
   };
   let _camResolution = _CAM_RESOLUTION_MAP['fhd']; // default until config arrives from TD
   let _camResolutionKey = 'fhd';
 
   const DEFAULT_ICE_SERVERS = [
     { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'turn:freeturn.net:3478',        username: 'free', credential: 'free' },
-    { urls: 'turns:freeturn.net:5349',       username: 'free', credential: 'free' },
-    { urls: 'turn:openrelay.metered.ca:80',  username: 'openrelayproject', credential: 'openrelayproject' },
-    { urls: 'turns:openrelay.metered.ca:443',username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'stun:stun1.l.google.com:19302' }
   ];
 
   // ── Mic (→ TD WebRTC DAT) ──────────────────────────────────────────────────
-  let micPc     = null;
+  let micPc = null;
   let micStream = null;
   let micActive = false;
   let _onStateChange = null;
@@ -32,15 +28,15 @@ const WebRTCModule = (() => {
   // ── Camera (→ Web Render TOP via cam_receiver.html) ───────────────────────
   // Front (user/selfie) and Rear (environment) as separate connections
   let camFrontPc = null, camFrontStream = null;
-  let camRearPc   = null, camRearStream   = null;
+  let camRearPc = null, camRearStream = null;
   let _onCamStateChange = null;
   let _camFrontIceRecv = 0, _camRearIceRecv = 0;
 
   // ── Shared ────────────────────────────────────────────────────────────────
   let _lastError = null;
-  let _audioCtx  = null;
-  let _analyser  = null;
-  let _onLog     = null;
+  let _audioCtx = null;
+  let _analyser = null;
+  let _onLog = null;
 
   // ── Orientation lock ───────────────────────────────────────────────────────
   let _orientationLocked = false;
@@ -54,7 +50,7 @@ const WebRTCModule = (() => {
 
   function _clearOrientationLock() {
     if (_orientationLocked) {
-      try { screen.orientation.unlock(); } catch(e) {}
+      try { screen.orientation.unlock(); } catch (e) { }
       _orientationLocked = false;
     }
   }
@@ -89,7 +85,7 @@ const WebRTCModule = (() => {
   async function acquireMic({
     echoCancellation = false,
     noiseSuppression = false,
-    autoGainControl  = false,
+    autoGainControl = false,
   } = {}) {
     _lastError = null;
     if (micStream && micStream.getAudioTracks().length > 0) return true;
@@ -121,8 +117,8 @@ const WebRTCModule = (() => {
     mic = true,
     echoCancellation = false,
     noiseSuppression = false,
-    autoGainControl  = false,
-    iceServers       = null,
+    autoGainControl = false,
+    iceServers = null,
     iceTransportPolicy = null,
   } = {}) {
     _lastError = null;
@@ -256,7 +252,7 @@ const WebRTCModule = (() => {
   // ── Camera public API (Front / Rear) ───────────────────────────────────────
 
   const CAM_FRONT = 'front';
-  const CAM_REAR  = 'rear';
+  const CAM_REAR = 'rear';
 
   /** Request camera permission only (for Enable Sensors). Gets stream and releases immediately. */
   async function requestCameraPermission() {
@@ -284,7 +280,7 @@ const WebRTCModule = (() => {
       const s = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: facingMode },
-          width:  { ideal: _camResolution.width,  max: Math.max(_camResolution.width, _camResolution.height) },
+          width: { ideal: _camResolution.width, max: Math.max(_camResolution.width, _camResolution.height) },
           height: { ideal: _camResolution.height, max: Math.max(_camResolution.width, _camResolution.height) },
         },
         audio: false,
@@ -324,7 +320,7 @@ const WebRTCModule = (() => {
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: facingMode },
-            width:  { ideal: _camResolution.width,  max: Math.max(_camResolution.width, _camResolution.height) },
+            width: { ideal: _camResolution.width, max: Math.max(_camResolution.width, _camResolution.height) },
             height: { ideal: _camResolution.height, max: Math.max(_camResolution.width, _camResolution.height) },
           },
           audio: false,
@@ -427,13 +423,13 @@ const WebRTCModule = (() => {
 
   // ── Shared callbacks ───────────────────────────────────────────────────────
 
-  function onStateChange(fn)    { _onStateChange    = fn; }
+  function onStateChange(fn) { _onStateChange = fn; }
   function onCamStateChange(fn) { _onCamStateChange = fn; }
-  function setOnLog(fn)         { _onLog = fn; }
+  function setOnLog(fn) { _onLog = fn; }
 
   // ── Private helpers ────────────────────────────────────────────────────────
 
-  function _setMicState(state) { if (_onStateChange)    _onStateChange(state); }
+  function _setMicState(state) { if (_onStateChange) _onStateChange(state); }
   function _setCamState(state) { if (_onCamStateChange) _onCamStateChange(state); }
 
   function _setupAnalyser(stream) {
@@ -448,17 +444,17 @@ const WebRTCModule = (() => {
   }
 
   function _updatePreview() {
-    const rearVid  = document.getElementById('webrtc-preview-rear');
+    const rearVid = document.getElementById('webrtc-preview-rear');
     const frontVid = document.getElementById('webrtc-preview-front');
-    const hasRear  = !!(camRearStream  && camRearStream.getVideoTracks().length  > 0);
+    const hasRear = !!(camRearStream && camRearStream.getVideoTracks().length > 0);
     const hasFront = !!(camFrontStream && camFrontStream.getVideoTracks().length > 0);
     if (rearVid) {
-      if (hasRear) { rearVid.srcObject = camRearStream;  rearVid.classList.remove('hidden'); }
-      else         { rearVid.srcObject = null;            rearVid.classList.add('hidden'); }
+      if (hasRear) { rearVid.srcObject = camRearStream; rearVid.classList.remove('hidden'); }
+      else { rearVid.srcObject = null; rearVid.classList.add('hidden'); }
     }
     if (frontVid) {
       if (hasFront) { frontVid.srcObject = camFrontStream; frontVid.classList.remove('hidden'); }
-      else          { frontVid.srcObject = null;            frontVid.classList.add('hidden'); }
+      else { frontVid.srcObject = null; frontVid.classList.add('hidden'); }
     }
   }
 
@@ -480,12 +476,12 @@ const WebRTCModule = (() => {
       if (!track) continue;
       try {
         await track.applyConstraints({
-          width:  { ideal: preset.width,  max: Math.max(preset.width, preset.height) },
+          width: { ideal: preset.width, max: Math.max(preset.width, preset.height) },
           height: { ideal: preset.height, max: Math.max(preset.width, preset.height) },
         });
         const s = track.getSettings();
         _log(`Camera ${label} actual: ${s.width || '?'}x${s.height || '?'} (target ${preset.width}x${preset.height})`);
-      } catch(e) {
+      } catch (e) {
         console.warn('[W2TD WebRTC] setResolution applyConstraints failed:', e.message);
       }
     }
@@ -500,9 +496,9 @@ const WebRTCModule = (() => {
       return { width: s.width || 0, height: s.height || 0 };
     };
     return {
-      key:         _camResolutionKey,
-      target:      { width: _camResolution.width, height: _camResolution.height },
-      actualRear:  getActual(camRearStream),
+      key: _camResolutionKey,
+      target: { width: _camResolution.width, height: _camResolution.height },
+      actualRear: getActual(camRearStream),
       actualFront: getActual(camFrontStream),
     };
   }
@@ -553,8 +549,8 @@ const WebRTCModule = (() => {
     acquireMic, start, stop, disconnect,
     handleAnswer, handleIce,
     onStateChange,
-    isMicActive:  () => micActive,
-    isPCActive:   () => micPc !== null,
+    isMicActive: () => micActive,
+    isPCActive: () => micPc !== null,
     // Camera
     requestCameraPermission, acquireCamera, startCamera, stopCamera, disconnectCamera,
     stopCameraFront, stopCameraRear,
@@ -563,9 +559,9 @@ const WebRTCModule = (() => {
     setResolution, getCamResolutionInfo,
     CAM_FRONT, CAM_REAR,
     isCameraFrontActive: () => !!(camFrontStream && camFrontStream.getVideoTracks().length),
-    isCameraRearActive:  () => !!(camRearStream && camRearStream.getVideoTracks().length),
-    isCameraActive:      () => !!(camFrontStream?.getVideoTracks().length || camRearStream?.getVideoTracks().length),
-    isCamPCActive:       () => camFrontPc !== null || camRearPc !== null,
+    isCameraRearActive: () => !!(camRearStream && camRearStream.getVideoTracks().length),
+    isCameraActive: () => !!(camFrontStream?.getVideoTracks().length || camRearStream?.getVideoTracks().length),
+    isCamPCActive: () => camFrontPc !== null || camRearPc !== null,
     // Shared
     isActive: () => micActive || !!(camFrontStream?.getVideoTracks().length || camRearStream?.getVideoTracks().length),
     setOnLog,

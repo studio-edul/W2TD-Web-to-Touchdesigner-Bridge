@@ -88,23 +88,12 @@ def _init_tables():
 		print('[W2TD Error] webrtc_table DAT not found - create a Table DAT named "webrtc_table"')
 
 def _init_webrtc_ice():
-	"""Configure WebRTC DAT TURN servers for cross-network (tunnel/cloudflared)."""
+	"""Configure WebRTC DAT TURN servers if needed."""
 	w = _op('webrtc_audio_container/webrtc_dat', 'webrtc_dat')
 	if w is None:
 		return
-
-	# freeTURN server 0: TURN (UDP/TCP)
-	_set_par(w, 'turn0server', 'turn:freeturn.net:3478')
-	# Credential parameter names vary by TD version — try all known names
-	_set_par(w, 'turn0username',   'free', ('turn0user',))
-	_set_par(w, 'turn0credential', 'free', ('turn0password', 'turn0pass'))
-
-	# freeTURN server 1: TURNS (TLS)
-	_set_par(w, 'turn1server', 'turns:freeturn.net:5349')
-	_set_par(w, 'turn1username',   'free', ('turn1user',))
-	_set_par(w, 'turn1credential', 'free', ('turn1password', 'turn1pass'))
-
-	print('[W2TD] WebRTC DAT TURN configured for cross-network')
+	# TURN servers can be added manually through TouchDesigner UI if needed.
+	print('[W2TD] WebRTC DAT ICE initialization complete')
 
 
 def _set_par(op_node, primary, value, fallbacks=()):

@@ -212,10 +212,10 @@ const W2TD_VERSION = '1.0.0';
     const info = WebRTCModule.getCamResolutionInfo();
     const key = info.key.toUpperCase();
     const tgt = `${info.target.width}x${info.target.height}`;
-    const rearTxt  = info.actualRear  ? `${info.actualRear.width}x${info.actualRear.height}`  : '—';
+    const rearTxt = info.actualRear ? `${info.actualRear.width}x${info.actualRear.height}` : '—';
     const frontTxt = info.actualFront ? `${info.actualFront.width}x${info.actualFront.height}` : '—';
     const parts = [`Config: ${key} (target ${tgt})`];
-    if (info.actualRear)  parts.push(`Rear: ${rearTxt}`);
+    if (info.actualRear) parts.push(`Rear: ${rearTxt}`);
     if (info.actualFront) parts.push(`Front: ${frontTxt}`);
     els.camResStatus.textContent = parts.join('  |  ');
   }
@@ -305,7 +305,7 @@ const W2TD_VERSION = '1.0.0';
       // iOS: DeviceMotionEvent.requestPermission() must be in a direct button-click handler.
       // Show a dedicated START button — this is the most reliable iOS gesture trigger.
       els.userStartOverlay.classList.remove('hidden');
-      els.btnUserStart.addEventListener('click', async function() {
+      els.btnUserStart.addEventListener('click', async function () {
         els.userStartOverlay.classList.add('hidden');
         // Integrated permission request: sensors + mic + wakeLock
         await requestAllPermissions();
@@ -510,21 +510,21 @@ const W2TD_VERSION = '1.0.0';
             WSClient.send({ type: 'client_name', name: clientName });
             addLog(`Client name sent: ${clientName}`, 'info');
           }
-          
+
           // Send screen resolution info
           // CSS pixel dimensions (viewport size)
           const cssWidth = window.innerWidth;
           const cssHeight = window.innerHeight;
           const devicePixelRatio = window.devicePixelRatio || 1.0;
-          
+
           // Physical pixel dimensions (actual screen resolution)
           const physicalWidth = Math.round(cssWidth * devicePixelRatio);
           const physicalHeight = Math.round(cssHeight * devicePixelRatio);
-          
+
           // Screen dimensions (device screen size)
           const screenWidth = window.screen.width;
           const screenHeight = window.screen.height;
-          
+
           const screenInfo = {
             type: 'screen_info',
             // CSS viewport size (web-optimized resolution)
@@ -540,14 +540,14 @@ const W2TD_VERSION = '1.0.0';
           };
           WSClient.send(screenInfo);
           addLog(`Screen info sent: ${cssWidth}x${cssHeight} CSS (${physicalWidth}x${physicalHeight} physical, DPR: ${devicePixelRatio})`, 'info');
-          
+
           if (!SensorModule.isEnabled() && devMode) {
             addLog('Press Enable Sensors to start broadcasting', 'warn');
           }
         }
         // If connection fails while loading screen is up, fall back to modal
         if ((status === 'error' || status === 'rejected' || status === 'disconnected') &&
-            !els.w2tdLoading.classList.contains('hidden')) {
+          !els.w2tdLoading.classList.contains('hidden')) {
           els.w2tdLoading.classList.add('hidden');
           els.modal.classList.add('active');
         }
@@ -558,10 +558,10 @@ const W2TD_VERSION = '1.0.0';
       },
       onConfig: (cfg) => applyConfig(cfg),
       onWebRTCSignal: (msg) => {
-        if (msg.type === 'webrtc_answer')         WebRTCModule.handleAnswer(msg.sdp);
-        else if (msg.type === 'webrtc_ice')        WebRTCModule.handleIce(msg);
+        if (msg.type === 'webrtc_answer') WebRTCModule.handleAnswer(msg.sdp);
+        else if (msg.type === 'webrtc_ice') WebRTCModule.handleIce(msg);
         else if (msg.type === 'webrtc_answer_cam') WebRTCModule.handleCameraAnswer(msg.sdp, msg.camType);
-        else if (msg.type === 'webrtc_ice_cam')    WebRTCModule.handleCameraIce(msg);
+        else if (msg.type === 'webrtc_ice_cam') WebRTCModule.handleCameraIce(msg);
         else if (msg.type === 'cam_receiver_ready') _maybeStartCamera();
       },
       onDataAck: () => {
@@ -608,9 +608,9 @@ const W2TD_VERSION = '1.0.0';
 
   async function _maybeStartWebRTC() {
     if (!WSClient.isConnected() || !micEnabled || !SensorModule.isEnabled() ||
-        WebRTCModule.isPCActive() || !broadcasting) return;
+      WebRTCModule.isPCActive() || !broadcasting) return;
     if (_isTunnelConnection()) {
-      showToast('Warning: Mic over tunnel may fail. Cross-network requires a TURN server.', 4500);
+      // Warning removed since TURN server is now built-in
     }
     const ok = await WebRTCModule.start(_webrtcStartOpts({
       mic: micEnabled,
@@ -825,15 +825,15 @@ const W2TD_VERSION = '1.0.0';
   // Prevent browser swipe navigation and system gestures while touch pad is active.
   // Multi-touch touchstart blocks pinch/2-finger-swipe; touchmove blocks all scroll.
   function _onDocTouchStart(e) { if (e.touches.length >= 2) e.preventDefault(); }
-  function _onDocTouchMove(e)  { e.preventDefault(); }
+  function _onDocTouchMove(e) { e.preventDefault(); }
 
   function _enableTouchLock() {
     document.addEventListener('touchstart', _onDocTouchStart, { passive: false });
-    document.addEventListener('touchmove',  _onDocTouchMove,  { passive: false });
+    document.addEventListener('touchmove', _onDocTouchMove, { passive: false });
   }
   function _disableTouchLock() {
     document.removeEventListener('touchstart', _onDocTouchStart);
-    document.removeEventListener('touchmove',  _onDocTouchMove);
+    document.removeEventListener('touchmove', _onDocTouchMove);
   }
 
   function enterTouchPad() {
@@ -983,7 +983,7 @@ const W2TD_VERSION = '1.0.0';
   }
 
   function _esc(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
   }
 
   function showToast(msg, duration = 2800) {
@@ -1255,7 +1255,7 @@ const W2TD_VERSION = '1.0.0';
     saveSettings();
     updateTouchPointsToggleUI();
     haptic();
-    
+
     // If touchpad is active, clear or redraw immediately
     if (touchPadActive) {
       const snapshot = TouchModule.getSnapshot();
@@ -1275,7 +1275,7 @@ const W2TD_VERSION = '1.0.0';
    */
   function updateTouchPointsToggleUI() {
     if (!els.btnToggleTouchPoints) return;
-    
+
     if (showTouchPoints) {
       els.btnToggleTouchPoints.classList.add('active');
       els.btnToggleTouchPoints.textContent = 'Show Dots';
