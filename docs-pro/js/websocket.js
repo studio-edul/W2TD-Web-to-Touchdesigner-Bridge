@@ -95,8 +95,8 @@ const WSClient = (() => {
           if (onWebRTCSignal) onWebRTCSignal(msg);
         } else if (msg.type === 'haptic') {
           // Haptic feedback (pattern or state)
+          console.log('[WS] Haptic signal received:', msg.state !== undefined ? 'state=' + msg.state : 'pattern=' + JSON.stringify(msg.pattern));
           if (onHaptic) {
-            // Pass entire message object (supports both pattern and state)
             onHaptic(msg);
           }
         } else if (msg.type === 'ping') {
@@ -116,6 +116,7 @@ const WSClient = (() => {
           if (onPlaySound) onPlaySound(msg.filename, msg.startTime);
         } else if (msg.type === 'flashlight') {
           // Pro: Flashlight control
+          console.log('[WS] Flashlight signal received: state=' + msg.state);
           if (onFlashlight) onFlashlight(msg.state);
         } else if (msg.type === 'rejected') {
           // Server full — cancel reconnect and surface the reason

@@ -7,7 +7,7 @@ GITHUB_PAGES_URL = 'https://w2td-pro.studio-edul.com/'
 MAX_CLIENTS = 20
 ACK_INTERVAL = 1.0  # seconds between data_ack signals per slot
 
-W2TD_BASE = 'W2TD'
+W2TD_BASE = 'W2TD_Pro'
 W2TD_AUDIO = f'{W2TD_BASE}/webrtc_audio_container'
 
 

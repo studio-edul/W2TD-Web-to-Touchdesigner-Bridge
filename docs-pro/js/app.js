@@ -605,7 +605,11 @@ const W2TD_VERSION = '1.0.0';
       },
       // Pro: Flashlight control
       onFlashlight: (state) => {
-        if (typeof WebRTCModule === 'undefined' || !WebRTCModule.toggleFlashlight) return;
+        addLog(`Flashlight signal received: state=${state}`, 'info');
+        if (typeof WebRTCModule === 'undefined' || !WebRTCModule.toggleFlashlight) {
+          addLog('Flashlight: WebRTCModule not available', 'warn');
+          return;
+        }
         WebRTCModule.toggleFlashlight(state).then(success => {
           if (success) {
             addLog(`Flashlight ${state ? 'ON' : 'OFF'}`, 'info');

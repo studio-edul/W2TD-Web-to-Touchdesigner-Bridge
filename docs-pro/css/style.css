@@ -432,6 +432,17 @@ input[type="checkbox"] {
   word-break: break-all;
 }
 
+.pro-badge {
+  font-size: 9px;
+  font-weight: 700;
+  color: #111;
+  background: linear-gradient(135deg, #f5c842, #e6a817);
+  padding: 1px 5px;
+  border-radius: 3px;
+  letter-spacing: 0.5px;
+  margin-left: 4px;
+}
+
 .packet-rate {
   margin-left: auto;
   font-size: 12px;
