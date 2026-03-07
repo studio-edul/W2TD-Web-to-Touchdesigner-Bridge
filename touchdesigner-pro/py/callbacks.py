@@ -445,7 +445,7 @@ def _config_msg(cfg):
 def broadcast_config(webServerDAT):
 	"""Push updated config to all connected clients.
 	Call from TD script after editing w2td_config:
-	    op('web_server_dat').module.broadcast_config(op('web_server_dat'))
+		op('web_server_dat').module.broadcast_config(op('web_server_dat'))
 	w2td_config keys: sample_rate, wake_lock, haptic, sensors, dev_mode, camera, microphone
 	"""
 	cfg = _read_config()
