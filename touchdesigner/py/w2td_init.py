@@ -284,12 +284,14 @@ def generate():
 	host = url.replace('https://', '').replace('http://', '').strip()
 	GITHUB_PAGES_URL = 'https://w2td.studio-edul.com/'
 	qr_url = GITHUB_PAGES_URL + '?td=' + host
-	w2td = op('../W2TD') or _w2td_base()
-	if w2td and hasattr(w2td.par, 'url'):
+	
+	parent_comp = op('..')
+	if parent_comp and hasattr(parent_comp.par, 'url'):
 		try:
-			w2td.par.url = qr_url
+			parent_comp.par.url = host
 		except Exception as e:
 			print(f'[W2TD Error] W2TD.par.url set failed: {e}')
+	
 	print(f'[W2TD] QR URL: {qr_url}')
 
 	# 3. Generate QR code
