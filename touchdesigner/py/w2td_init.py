@@ -88,12 +88,35 @@ def _init_tables():
 		print('[W2TD Error] webrtc_table DAT not found - create a Table DAT named "webrtc_table"')
 
 def _init_webrtc_ice():
-	"""Configure WebRTC DAT TURN servers if needed."""
+	"""Configure WebRTC DAT TURN servers if provided via w2td_config."""
 	w = _op('webrtc_audio_container/webrtc_dat', 'webrtc_dat')
 	if w is None:
 		return
-	# TURN servers can be added manually through TouchDesigner UI if needed.
-	print('[W2TD] WebRTC DAT ICE initialization complete')
+
+	# Clear previous turn0/turn1 values
+	_set_par(w, 'turn0server', '')
+	_set_par(w, 'turn0username', '')
+	_set_par(w, 'turn0credential', '', ('turn0password', 'turn0pass'))
+	_set_par(w, 'turn1server', '')
+	_set_par(w, 'turn1username', '')
+	_set_par(w, 'turn1credential', '', ('turn1password', 'turn1pass'))
+
+	# Check for user-provided TURN server
+	cfg = _read_config()
+	if cfg:
+		turn_srv = (cfg.get('Turnserver') or cfg.get('turn_server') or '').strip()
+		turn_user = (cfg.get('Turnusername') or cfg.get('turn_username') or '').strip()
+		turn_pass = (cfg.get('Turnpassword') or cfg.get('turn_password') or '').strip()
+
+		if turn_srv:
+			_set_par(w, 'turn0server', turn_srv)
+			_set_par(w, 'turn0username', turn_user, ('turn0user',))
+			_set_par(w, 'turn0credential', turn_pass, ('turn0password', 'turn0pass'))
+			print(f'[W2TD] WebRTC DAT ICE TURN configured: {turn_srv}')
+		else:
+			print('[W2TD] WebRTC DAT ICE initialization complete (No TURN server set)')
+	else:
+		print('[W2TD] WebRTC DAT ICE initialization complete')
 
 
 def _set_par(op_node, primary, value, fallbacks=()):

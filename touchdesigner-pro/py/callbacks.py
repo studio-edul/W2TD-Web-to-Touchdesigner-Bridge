@@ -414,8 +414,29 @@ def _config_msg(cfg):
 		'audio_auto_gain':    _config_val(cfg, 'Audiogain', 'audiogain', 'audio_auto_gain', default=0),
 	}
 	ice_srv = (cfg.get('ice_servers') or cfg.get('Ice_servers') or '').strip()
-	if ice_srv:
-		out['ice_servers'] = ice_srv
+	turn_srv = (cfg.get('Turnserver') or cfg.get('turn_server') or '').strip()
+	if turn_srv or ice_srv:
+		servers = []
+		if ice_srv:
+			try:
+				servers = json.loads(ice_srv)
+			except Exception:
+				pass
+		if not servers:
+			servers = [
+				{'urls': 'stun:stun.l.google.com:19302'},
+				{'urls': 'stun:stun1.l.google.com:19302'}
+			]
+		if turn_srv:
+			turn_user = (cfg.get('Turnusername') or cfg.get('turn_username') or '').strip()
+			turn_pass = (cfg.get('Turnpassword') or cfg.get('turn_password') or '').strip()
+			servers.append({
+				'urls': turn_srv,
+				'username': turn_user,
+				'credential': turn_pass
+			})
+		out['ice_servers'] = servers
+
 	if (cfg.get('ice_transport_policy') or cfg.get('Ice_transport_policy') or '').strip() == 'relay':
 		out['ice_transport_policy'] = 'relay'
 	return out
