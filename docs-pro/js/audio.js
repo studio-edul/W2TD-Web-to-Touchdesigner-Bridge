@@ -41,9 +41,10 @@ const AudioModule = (() => {
 
     try {
       const url = baseUrl + filename;
+      console.log(`[W2TD Audio] Fetching: ${url}`);
       const response = await fetch(url);
       if (!response.ok) {
-        console.error(`[W2TD Audio] Failed to load ${filename}: ${response.status}`);
+        console.error(`[W2TD Audio] Failed to load ${filename}: HTTP ${response.status} from ${url}`);
         return null;
       }
       const arrayBuffer = await response.arrayBuffer();
@@ -66,15 +67,21 @@ const AudioModule = (() => {
     if (!audioContext) {
       unlock(); // Try to unlock if not already
       if (!audioContext) {
-        console.warn('[W2TD Audio] Cannot play — AudioContext not available');
+        console.warn('[W2TD Audio] Cannot play — AudioContext not available (tap screen first)');
         return false;
       }
     }
 
     // Resume context if suspended (required by some browsers)
     if (audioContext.state === 'suspended') {
-      await audioContext.resume();
+      try {
+        await audioContext.resume();
+      } catch (e) {
+        console.warn('[W2TD Audio] AudioContext resume failed (tap screen first):', e);
+        return false;
+      }
     }
+    console.log(`[W2TD Audio] Playing: ${filename} (baseUrl: ${baseUrl}, ctx: ${audioContext.state})`);
 
     const buffer = await loadAudio(filename);
     if (!buffer) return false;

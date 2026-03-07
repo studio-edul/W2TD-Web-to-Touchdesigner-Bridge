@@ -549,6 +549,21 @@ def send_haptic_state(webServerDAT, slot, state):
 		return False
 
 
+def send_haptic_state_to_all(webServerDAT, state):
+	"""Send haptic state (0 or 1) to all connected clients.
+
+	Args:
+		webServerDAT: Web Server DAT operator
+		state: Vibration state (0 = stop, 1 = vibrate continuously)
+	"""
+	success_count = 0
+	for slot in _slots().values():
+		if send_haptic_state(webServerDAT, slot, state):
+			success_count += 1
+	print(f'[W2TD Haptic] Sent state {state} to {success_count} clients')
+	return success_count
+
+
 def broadcast_haptic_from_chop(webServerDAT, chop_name='w2td_haptic'):
 	"""Read haptic CHOP and send state to all connected clients.
 	

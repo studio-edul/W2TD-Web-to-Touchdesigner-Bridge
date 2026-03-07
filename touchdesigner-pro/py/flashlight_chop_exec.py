@@ -4,6 +4,7 @@
 #   2. CHOPs parameter: w2td_flashlight
 #   3. Value Change parameter: On
 #   4. Paste this script
+#   5. Channel names: slot1, slot2, ... (targets specific slot) or 'all' (targets all connected devices)
 
 def _w2td_base():
 	try:
@@ -32,8 +33,9 @@ def _op(path_suffix, fallback_name=None):
 	return op(fallback_name or path_suffix.split('/')[-1])
 
 def onValueChange(channel, sampleIndex, val, prev):
-	"""Send flashlight state to slot when w2td_flashlight channel value changes.
-	Assumes channel name is formatted as 'chan1', 'chan2', etc.
+	"""Send flashlight state when w2td_flashlight channel value changes.
+	Channel name 'slot1', 'slot2', etc. targets a specific slot.
+	Channel name 'all' targets all connected devices.
 	"""
 	web = _op('web_server_dat')
 	cb = _op('callbacks')
@@ -43,24 +45,27 @@ def onValueChange(channel, sampleIndex, val, prev):
 		mod = cb.module
 	except:
 		return
-	if not hasattr(mod, 'send_flashlight_to_client'):
-		return
 
-	# Channel name must start with 'chan' followed by the slot number
 	chan_name = channel.name
-	if not chan_name.startswith('chan'):
+	state = 1 if val > 0.5 else 0
+	if val == prev:
 		return
 
-	slot = None
+	# 'all' channel: broadcast to all connected devices
+	if chan_name == 'all':
+		if hasattr(mod, 'send_flashlight_to_all'):
+			mod.send_flashlight_to_all(web, state=state)
+		return
+
+	# 'slot<N>' channel: target specific slot
+	if not chan_name.startswith('slot'):
+		return
 	try:
 		slot = int(chan_name[4:].strip())
 	except ValueError:
-		pass
-
-	if slot is not None:
-		state = 1 if val > 0.5 else 0
-		if val != prev:
-			mod.send_flashlight_to_client(web, slot=slot, state=state)
+		return
+	if hasattr(mod, 'send_flashlight_to_client'):
+		mod.send_flashlight_to_client(web, slot=slot, state=state)
 
 def onOffToOn(channel, sampleIndex, val, prev):
 	return
