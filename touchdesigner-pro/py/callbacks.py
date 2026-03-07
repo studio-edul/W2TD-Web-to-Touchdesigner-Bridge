@@ -1109,6 +1109,18 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			webServerDAT.webSocketSendText(client, json.dumps(_config_msg(cfg)))
 		except Exception:
 			pass
+		# Send current background color if w2td_background CHOP exists
+		try:
+			bg_chop = _op('w2td_background')
+			if bg_chop:
+				r = max(0, min(255, int(round(bg_chop['r'].eval() * 255))))
+				g = max(0, min(255, int(round(bg_chop['g'].eval() * 255))))
+				b = max(0, min(255, int(round(bg_chop['b'].eval() * 255))))
+				hex_color = f'#{r:02x}{g:02x}{b:02x}'
+				if hex_color != '#000000':
+					webServerDAT.webSocketSendText(client, json.dumps({'type': 'bg_color', 'color': hex_color, 'duration': 0}))
+		except Exception:
+			pass
 
 	op('/').store(f'w2td_last_seen_{slot}', time.time())
 

@@ -509,6 +509,11 @@ const W2TD_VERSION = '1.0.0';
         if (status === 'connected') {
           WSClient.send({ type: 'hello' });
           addLog('Hello sent to TD', 'info');
+          // Set audio base URL to TD server (audio files are served from TD, not Cloudflare)
+          if (typeof AudioModule !== 'undefined') {
+            const httpBase = (window.location.protocol === 'https:' ? 'https://' : 'http://') + addr.replace(/^(wss?|https?):\/\//, '');
+            AudioModule.setBaseUrl(httpBase + '/audio/');
+          }
           if (SensorModule.isEnabled() && WSClient.isConnected()) {
             _startDataBroadcast();
           }
