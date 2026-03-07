@@ -270,7 +270,7 @@ def generate():
 	op('/').store('w2td_url', url)
 
 	host = url.replace('https://', '').replace('http://', '').strip()
-	GITHUB_PAGES_URL = 'https://w2td.ktechmedia.com/pro/'
+	GITHUB_PAGES_URL = 'https://w2td-pro.studio-edul.com/'
 	qr_url = GITHUB_PAGES_URL + '?td=' + host
 	w2td = op('../W2TD') or _w2td_base()
 	if w2td and hasattr(w2td.par, 'url'):
