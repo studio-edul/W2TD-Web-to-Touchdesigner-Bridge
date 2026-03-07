@@ -67,7 +67,7 @@ def _auto_select_audio_chop(webrtcDAT, connectionId):
 		print('[W2TD WebRTC Error] webrtc_audio_1 not found - create Audio Stream In CHOP named "webrtc_audio_1"')
 		return
 	# TD version differences: try all known Connection parameter names.
-	# Note: getTracks() is not a valid TD Python API — connection-only is sufficient.
+	# Note: getTracks() is not a valid TD Python API - connection-only is sufficient.
 	CONN_PAR_NAMES = ('webrtcconnection', 'Webrtcconnection', 'connection', 'Connection')
 	set_ok = False
 	matched_par = None
@@ -110,20 +110,20 @@ def _send_to_client(connectionId, data):
 
 
 def onOffer(webrtcDAT, connectionId, localSdp):
-	"""Called when TD creates a local offer (TD→browser direction, not used in browser→TD flow)."""
+	"""Called when TD creates a local offer (TD->browser direction, not used in browser->TD flow)."""
 	webrtcDAT.setLocalDescription(connectionId, 'offer', localSdp, stereo=False)
 	_send_to_client(connectionId, {'type': 'webrtc_offer', 'sdp': localSdp})
 
 
 def onAnswer(webrtcDAT, connectionId, localSdp):
-	"""Called after createAnswer() — set local description and send answer to browser."""
+	"""Called after createAnswer() - set local description and send answer to browser."""
 	webrtcDAT.setLocalDescription(connectionId, 'answer', localSdp, stereo=False)
 	_send_to_client(connectionId, {'type': 'webrtc_answer', 'sdp': localSdp})
 	print(f'[W2TD WebRTC] Answer sent to connectionId={connectionId}')
 
 
 def onIceCandidate(webrtcDAT, connectionId, candidate, lineIndex, sdpMid):
-	"""Called when TD discovers an ICE candidate — forward to browser."""
+	"""Called when TD discovers an ICE candidate - forward to browser."""
 	if not candidate:
 		# End-of-candidates signal
 		_send_to_client(connectionId, {

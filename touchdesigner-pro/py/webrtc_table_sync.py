@@ -86,7 +86,7 @@ def _get_table():
 
 
 def _sanitize_channel_name(s):
-	"""Normalize channel names for CHOP usage — remove spaces and special chars."""
+	"""Normalize channel names for CHOP usage - remove spaces and special chars."""
 	if not s:
 		return ''
 	return ''.join(c if c.isalnum() or c in '_-' else '_' for c in str(s).strip())[:64] or 'ch'

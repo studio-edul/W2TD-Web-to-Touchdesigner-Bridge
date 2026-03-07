@@ -66,7 +66,7 @@ def _init_tables():
 	if t is not None:
 		t.clear()
 		t.appendRow(SENSOR_COLS)
-		# No pre-populated rows — rows are added on connect, removed on disconnect
+		# No pre-populated rows - rows are added on connect, removed on disconnect
 		print(f'[W2TD] sensor_table initialized (dynamic rows, max {MAX_CLIENTS} slots)')
 	else:
 		print('[W2TD Error] sensor_table DAT not found - create a Table DAT named "sensor_table"')

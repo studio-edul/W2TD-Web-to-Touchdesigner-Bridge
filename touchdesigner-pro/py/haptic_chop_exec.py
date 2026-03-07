@@ -1,4 +1,4 @@
-# Execute CHOP — controls mobile haptic when w2td_haptic channel value changes
+# Execute CHOP - controls mobile haptic when w2td_haptic channel value changes
 # Setup in TD:
 #   1. Create a CHOP Execute DAT
 #   2. CHOPs parameter: w2td_haptic

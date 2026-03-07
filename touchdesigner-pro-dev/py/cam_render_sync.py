@@ -325,7 +325,7 @@ def sync(table_dat=None):
 				c_top.nodeY = -i * NODE_OFFSET_Y
 			except Exception:
 				pass
-			# Crop black bars in pixels (unit=0 → pixel mode)
+			# Crop black bars in pixels (unit=0 -> pixel mode)
 			crop_px = sq * 7 // 32
 			try:
 				c_top.par.cropleftunit   = 0

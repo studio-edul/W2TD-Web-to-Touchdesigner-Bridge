@@ -1,4 +1,4 @@
-# DAT Execute DAT — watches w2td_config Table DAT
+# DAT Execute DAT - watches w2td_config Table DAT
 # Setup in TD:
 #   1. Create a DAT Execute DAT
 #   2. Set "DATs" parameter to: w2td_config
@@ -191,7 +191,7 @@ def _do_broadcast():
 
 
 def _debounced_broadcast():
-	"""Debounced broadcast — schedules _do_broadcast (no web.module access)."""
+	"""Debounced broadcast - schedules _do_broadcast (no web.module access)."""
 	global _debounce_timer
 
 	if _debounce_timer is not None:
@@ -211,7 +211,7 @@ def _debounced_broadcast():
 
 
 def onTableChange(dat):
-	"""Called when w2td_config table changes — debounced broadcast."""
+	"""Called when w2td_config table changes - debounced broadcast."""
 	try:
 		_debounced_broadcast()
 	except Exception as e:

@@ -53,7 +53,7 @@ SENSOR_COLS = [
 ]
 WEBRTC_COLS = ['slot', 'name', 'conn_id', 'state']
 
-# ── Persistent state (survives module reload via op('/').store/fetch) ──────────
+# -- Persistent state (survives module reload via op('/').store/fetch) ----------
 # These are stored in TD's global root op so module reloads don't reset them.
 
 def _slots():
@@ -323,7 +323,7 @@ def _handle_cam_receiver_msg(webServerDAT, addr, msg):
 			else:
 				print(f'[W2TD Cam] Received video resolution: {int(w)}x{int(h)} (slot {slot}, web_render not yet synced)')
 
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 
 def _read_config():
 	"""Read settings from w2td_config Table DAT (key | value)."""
@@ -498,7 +498,7 @@ def onHTTPRequest(webServerDAT, request, response):
 	"""Serve cam_receiver.html locally; redirect all other requests to GitHub Pages."""
 	uri = request.get('uri', '/')
 
-	# Serve cam_receiver.html for Web Render TOP (served from Text DAT — no external file needed)
+	# Serve cam_receiver.html for Web Render TOP (served from Text DAT - no external file needed)
 	if uri.startswith('/cam_receiver.html'):
 		dat = _op('cam_receiver_html')
 		if dat is not None:
@@ -510,7 +510,7 @@ def onHTTPRequest(webServerDAT, request, response):
 			response['statusCode'] = 404
 			response['statusReason'] = 'Not Found'
 			response['data'] = '<html><body>cam_receiver_html DAT not found in W2TD</body></html>'
-			print('[W2TD Error] cam_receiver_html Text DAT not found — create a Text DAT named "cam_receiver_html" inside W2TD')
+			print('[W2TD Error] cam_receiver_html Text DAT not found - create a Text DAT named "cam_receiver_html" inside W2TD')
 		return response
 
 	stored_url = op('/').fetch('w2td_url', '')
@@ -854,16 +854,16 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			print(f'[W2TD WebRTC Error] addIceCandidate error: {e}')
 
 	elif msg_type == 'webrtc_offer_cam':
-		# Camera offer from mobile → relay to slot's cam_receiver as cam_offer
+		# Camera offer from mobile -> relay to slot's cam_receiver as cam_offer
 		sdp = msg.get('sdp')
 		if not sdp:
 			return
 		cam_type = msg.get('camType', msg.get('cam_type', 'rear'))
 		receiver_addr = _cam_receiver_addr(slot) or _cam_receiver_addr()
 		if receiver_addr is None:
-			# cam_receiver not yet open — store offer for replay when it connects
+			# cam_receiver not yet open - store offer for replay when it connects
 			_save_pending_cam_offer(slot, cam_type, sdp)
-			print(f'[W2TD Cam] cam_receiver not connected — offer stored (slot {slot}, {cam_type})')
+			print(f'[W2TD Cam] cam_receiver not connected - offer stored (slot {slot}, {cam_type})')
 			return
 		# Clear stale pending for this slot before relaying fresh offer
 		_clear_pending_cam_for_slot(slot)
@@ -879,14 +879,14 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			print(f'[W2TD Cam Error] cam_offer relay error: {e}')
 
 	elif msg_type == 'webrtc_ice_cam':
-		# ICE from mobile → relay to slot's cam_receiver
+		# ICE from mobile -> relay to slot's cam_receiver
 		candidate = msg.get('candidate')
 		if not candidate:
 			return
 		cam_type = msg.get('camType', msg.get('cam_type', 'rear'))
 		receiver_addr = _cam_receiver_addr(slot) or _cam_receiver_addr()
 		if receiver_addr is None:
-			# cam_receiver not connected — store ICE for replay
+			# cam_receiver not connected - store ICE for replay
 			_save_pending_cam_ice(slot, cam_type, {
 				'slot': slot,
 				'candidate': candidate,
@@ -908,7 +908,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			print(f'[W2TD Cam Error] webrtc_ice_cam relay error: {e}')
 
 	elif msg_type == 'ping':
-		# Heartbeat ping from mobile → respond with pong
+		# Heartbeat ping from mobile -> respond with pong
 		try:
 			webServerDAT.webSocketSendText(addr, json.dumps({'type': 'pong'}))
 		except Exception:

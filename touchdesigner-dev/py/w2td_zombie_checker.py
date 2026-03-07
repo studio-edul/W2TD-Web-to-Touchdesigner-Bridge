@@ -53,11 +53,11 @@ def _check_zombies():
 	for addr, slot in list(slots.items()):
 		last_seen = op('/').fetch(f'w2td_last_seen_{slot}', 0)
 		if last_seen == 0:
-			# Never received a message — skip (still in hello phase)
+			# Never received a message - skip (still in hello phase)
 			continue
 		elapsed = now - last_seen
 		if elapsed > timeout:
-			print(f'[W2TD Zombie] Slot {slot} ({addr}) silent for {int(elapsed)}s — releasing')
+			print(f'[W2TD Zombie] Slot {slot} ({addr}) silent for {int(elapsed)}s - releasing')
 			if ws_module:
 				try:
 					ws_module._release_slot(addr, slot)
