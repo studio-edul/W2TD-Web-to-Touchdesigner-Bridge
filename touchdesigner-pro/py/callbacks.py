@@ -872,7 +872,8 @@ def onHTTPRequest(webServerDAT, request, response):
 			response['headers'] = {
 				'Content-Type': content_type,
 				'Content-Length': str(len(audio_data)),
-				'Cache-Control': 'public, max-age=3600',  # Cache for 1 hour
+				'Cache-Control': 'public, max-age=3600',
+				'Access-Control-Allow-Origin': '*',
 			}
 			response['data'] = audio_data
 			print(f'[W2TD Pro] Served audio: {filename} ({len(audio_data)} bytes)')

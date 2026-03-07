@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000; width: 100vw; height: 100vh; overflow: hidden; }
+  #video-wrap { position: relative; width: 100%; height: 100%; }
+  #video-wrap video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    object-position: center;
+    display: block;
+  }
+  #video-wrap video.hidden { display: none; }
+</style>
+</head>
+<body>
+<div id="video-wrap">
+  <video id="remote-video-rear" class="hidden" autoplay playsinline muted></video>
+  <video id="remote-video-front" class="hidden" autoplay playsinline muted></video>
+</div>
+<script>
+  const videoRear  = document.getElementById('remote-video-rear');
+  const videoFront = document.getElementById('remote-video-front');
+
+  const params = new URLSearchParams(location.search);
+  const port = params.get('port') || '9980';
+  const slotParam = params.get('slot');
+  const mySlot = slotParam ? parseInt(slotParam, 10) : null;
+  const useTls = params.get('tls') === '1' || params.get('tls') === 'true';
+
+  // Re-apply rotation when Web Render TOP resizes
+  window.addEventListener('resize', () => {
+    if (videoRear  && !videoRear.classList.contains('hidden'))  applyVideoRotation(videoRear);
+    if (videoFront && !videoFront.classList.contains('hidden')) applyVideoRotation(videoFront);
+  });
+
+  function applyVideoRotation(videoEl) {
+    const vw = videoEl.videoWidth, vh = videoEl.videoHeight;
+    if (!vw || !vh) return;
+    ['inset','width','height','left','top','transform','objectFit','transformOrigin']
+      .forEach(p => videoEl.style.removeProperty(p));
+    if (vw > vh) {
+      const vpW = window.innerWidth, vpH = window.innerHeight;
+      videoEl.style.inset = 'unset';
+      videoEl.style.width = vw + 'px';
+      videoEl.style.height = vh + 'px';
+      videoEl.style.left = (vpW - vw) / 2 + 'px';
+      videoEl.style.top = (vpH - vh) / 2 + 'px';
+      videoEl.style.transformOrigin = 'center center';
+      const scale = Math.min(vpW / vh, vpH / vw);
+      videoEl.style.transform = `rotate(-90deg) scale(${scale.toFixed(4)})`;
+    }
+  }
+
+  const protocol = useTls ? 'wss' : 'ws';
+  const wsHost = location.hostname || 'localhost';
+  const wsUrl = protocol + '://' + wsHost + ':' + port;
+
+  const ICE_SERVERS = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'turn:freeturn.net:3478', username: 'free', credential: 'free' },
+    { urls: 'turns:freeturn.net:5349', username: 'free', credential: 'free' },
+    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turns:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+  ];
+
+  const peers = {};
+  let ws = null;
+
+  function peerKey(slot, camType) {
+    return slot + '_' + (camType || 'rear');
+  }
+
+  function send(obj) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(obj));
+    }
+  }
+
+  function connect() {
+    ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      const msg = { type: 'hello', role: 'cam_receiver' };
+      if (mySlot != null && mySlot >= 1) msg.slot = mySlot;
+      send(msg);
+    };
+
+    ws.onclose = () => {
+      for (const k in peers) { try { peers[k].close(); } catch(e){} }
+      Object.keys(peers).forEach(k => delete peers[k]);
+      if (videoRear) videoRear.srcObject = null;
+      if (videoFront) videoFront.srcObject = null;
+      setTimeout(connect, 2000);
+    };
+
+    ws.onerror = () => {};
+
+    ws.onmessage = async (e) => {
+      let msg;
+      try { msg = JSON.parse(e.data); } catch { return; }
+
+      if (msg.type === 'cam_offer') {
+        if (mySlot != null && msg.slot !== mySlot) return;
+        await handleOffer(msg.slot, msg.sdp, msg.camType);
+      } else if (msg.type === 'cam_ice') {
+        if (mySlot != null && msg.slot !== mySlot) return;
+        await handleRemoteIce(msg.slot, msg.candidate, msg.sdpMLineIndex, msg.sdpMid, msg.camType);
+      } else if (msg.type === 'cam_peer_closed') {
+        if (mySlot != null && msg.slot !== mySlot) return;
+        closePeer(peerKey(msg.slot, msg.camType));
+      }
+    };
+  }
+
+  async function handleOffer(slot, sdp, camType) {
+    camType = camType || 'rear';
+    const key = peerKey(slot, camType);
+    if (peers[key]) { try { peers[key].close(); } catch(e){} }
+
+    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    peers[key] = pc;
+
+    const videoEl = camType === 'front' ? videoFront : videoRear;
+
+    pc.ontrack = (e) => {
+      if (e.streams && e.streams[0] && videoEl) {
+        videoEl.onloadedmetadata = () => {
+          const vw = videoEl.videoWidth, vh = videoEl.videoHeight;
+          if (vw && vh) {
+            send({ type: 'cam_resolution', width: vw, height: vh, slot: mySlot });
+            applyVideoRotation(videoEl);
+          }
+        };
+        videoEl.addEventListener('resize', () => applyVideoRotation(videoEl));
+        videoEl.srcObject = e.streams[0];
+        videoEl.classList.remove('hidden');
+        videoEl.play().catch(err => console.warn('[CAM-RCV] play() failed:', err.message));
+      }
+    };
+
+    pc.onicecandidate = ({ candidate }) => {
+      if (candidate) {
+        send({
+          type: 'cam_ice',
+          slot,
+          camType,
+          candidate: candidate.candidate,
+          sdpMLineIndex: candidate.sdpMLineIndex,
+          sdpMid: candidate.sdpMid,
+        });
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      const s = pc.connectionState;
+      if (s === 'failed' || s === 'closed' || s === 'disconnected') {
+        if (videoEl) {
+          videoEl.srcObject = null;
+          videoEl.classList.add('hidden');
+        }
+        if (s === 'failed' || s === 'closed') closePeer(key);
+      }
+    };
+
+    try {
+      await pc.setRemoteDescription({ type: 'offer', sdp });
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      send({ type: 'cam_answer', slot, camType, sdp: answer.sdp });
+    } catch (err) {
+      closePeer(key);
+    }
+  }
+
+  async function handleRemoteIce(slot, candidate, sdpMLineIndex, sdpMid, camType) {
+    const key = peerKey(slot, camType);
+    const pc = peers[key];
+    if (!pc || !candidate) return;
+    try {
+      await pc.addIceCandidate(new RTCIceCandidate({ candidate, sdpMLineIndex, sdpMid }));
+    } catch (e) {
+      console.warn('[CAM-RCV] addIceCandidate failed:', e.message);
+    }
+  }
+
+  function closePeer(key) {
+    if (peers[key]) {
+      try { peers[key].close(); } catch(e) {}
+      delete peers[key];
+    }
+    const camType = (key || '').includes('front') ? 'front' : 'rear';
+    const videoEl = camType === 'front' ? videoFront : videoRear;
+    if (videoEl) {
+      videoEl.srcObject = null;
+      videoEl.classList.add('hidden');
+    }
+  }
+
+  connect();
+</script>
+</body>
+</html>

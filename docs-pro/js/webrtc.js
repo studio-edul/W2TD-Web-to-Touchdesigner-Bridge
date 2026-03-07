@@ -519,6 +519,7 @@ const WebRTCModule = (() => {
   /**
    * Pro: Toggle flashlight (torch) on/off.
    * Requires active rear camera stream.
+   * iOS Safari: video element must be actively playing for torch to work.
    * Returns Promise<boolean> indicating success.
    */
   async function toggleFlashlight(state) {
@@ -531,6 +532,19 @@ const WebRTCModule = (() => {
     if (!track) {
       console.warn('[W2TD WebRTC] Flashlight: No video track found');
       return false;
+    }
+    // iOS Safari: ensure video element is playing so torch constraint is honoured
+    const rearVid = document.getElementById('webrtc-preview-rear');
+    if (rearVid && rearVid.paused) {
+      try { await rearVid.play(); } catch (_) { /* best-effort */ }
+    }
+    // Check torch capability before attempting
+    if (typeof track.getCapabilities === 'function') {
+      const caps = track.getCapabilities();
+      if (!caps.torch) {
+        console.warn('[W2TD WebRTC] Flashlight: torch not supported by this device/browser');
+        return false;
+      }
     }
     try {
       await track.applyConstraints({
