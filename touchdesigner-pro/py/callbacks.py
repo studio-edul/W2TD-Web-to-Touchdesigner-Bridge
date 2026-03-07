@@ -397,21 +397,21 @@ def _config_val(cfg, *keys, default=0):
 def _config_msg(cfg):
 	"""Build config JSON dict from w2td_config (Samplerate, Wakelock, Motion, Geolocation, ...)."""
 	out = {
-		'type':               'config',
-		'sample_rate':        _config_val(cfg, 'Samplerate', 'samplerate', 'sample_rate', default=30),
-		'wake_lock':          _config_val(cfg, 'Wakelock', 'wakelock', 'wake_lock', default=1),
-		'haptic':             _config_val(cfg, 'Haptic', 'haptic', default=1),
-		'sensor_motion':      _config_val(cfg, 'Motion', 'motion', 'sensor_motion', default=1),
+		'type':			   'config',
+		'sample_rate':		_config_val(cfg, 'Samplerate', 'samplerate', 'sample_rate', default=30),
+		'wake_lock':		  _config_val(cfg, 'Wakelock', 'wakelock', 'wake_lock', default=1),
+		'haptic':			 _config_val(cfg, 'Haptic', 'haptic', default=1),
+		'sensor_motion':	  _config_val(cfg, 'Motion', 'motion', 'sensor_motion', default=1),
 		'sensor_orientation': _config_val(cfg, 'Orientation', 'orientation', 'sensor_orientation', default=1),
 		'sensor_geolocation': _config_val(cfg, 'Geolocation', 'geolocation', 'sensor_geolocation', default=1),
-		'sensor_touch':       _config_val(cfg, 'Touch', 'touch', 'sensor_touch', default=1),
-		'dev_mode':           _config_val(cfg, 'Devmode', 'devmode', 'dev_mode', default=1),
+		'sensor_touch':	   _config_val(cfg, 'Touch', 'touch', 'sensor_touch', default=1),
+		'dev_mode':		   _config_val(cfg, 'Devmode', 'devmode', 'dev_mode', default=1),
 		'sensor_rear_camera': _config_val(cfg, 'Rearcamera', 'rearcamera', 'sensor_rear_camera', default=0),
 		'sensor_front_camera': _config_val(cfg, 'Frontcamera', 'frontcamera', 'sensor_front_camera', default=0),
 		'sensor_microphone':  _config_val(cfg, 'Microphone', 'microphone', 'sensor_microphone', default=1),
 		'audio_echo_cancellation': _config_val(cfg, 'Echocancellation', 'echocancellation', 'audio_echo_cancellation', default=0),
 		'audio_noise_suppression': _config_val(cfg, 'Noisesuppression', 'noisesuppression', 'audio_noise_suppression', default=0),
-		'audio_auto_gain':    _config_val(cfg, 'Audiogain', 'audiogain', 'audio_auto_gain', default=0),
+		'audio_auto_gain':	_config_val(cfg, 'Audiogain', 'audiogain', 'audio_auto_gain', default=0),
 	}
 	ice_srv = (cfg.get('ice_servers') or cfg.get('Ice_servers') or '').strip()
 	turn_srv = (cfg.get('Turnserver') or cfg.get('turn_server') or '').strip()
@@ -901,14 +901,14 @@ def onHTTPRequest(webServerDAT, request, response):
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>W2TD</title>
   <style>
-    body {{ font-family: sans-serif; text-align: center; padding: 40px 20px;
-           background: #111; color: #fff; }}
-    h1 {{ color: #4caf50; font-size: 2em; margin-bottom: 12px; }}
-    p {{ color: #aaa; margin: 8px 0; }}
-    a {{ color: #4caf50; font-size: 1.1em; word-break: break-all; }}
+	body {{ font-family: sans-serif; text-align: center; padding: 40px 20px;
+		   background: #111; color: #fff; }}
+	h1 {{ color: #4caf50; font-size: 2em; margin-bottom: 12px; }}
+	p {{ color: #aaa; margin: 8px 0; }}
+	a {{ color: #4caf50; font-size: 1.1em; word-break: break-all; }}
   </style>
   <script>
-    window.location.href = '{redirect_url}';
+	window.location.href = '{redirect_url}';
   </script>
 </head>
 <body>
