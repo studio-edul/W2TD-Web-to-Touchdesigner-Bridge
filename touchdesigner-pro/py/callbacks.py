@@ -456,6 +456,11 @@ def broadcast_config(webServerDAT):
 		except Exception:
 			pass
 	print(f'[W2TD] Config broadcast -> {len(_slots())} clients')
+	
+	try:
+		_op('w2td_init').module._init_webrtc_ice()
+	except Exception as e:
+		print(f'[W2TD Error] Failed to update WebRTC ICE on config broadcast: {e}')
 
 
 def send_haptic_to_client(webServerDAT, slot, pattern):
