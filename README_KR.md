@@ -55,9 +55,9 @@
 | `sample_rate` | `30` | 기본 센서 전송 Hz |
 | `dev_mode` | `1` | `1` = 전체 UI, `0` = 미니멀 자동 모드 |
 | `haptic_enabled` | `1` | 햅틱 피드백 활성화 |
-| `ice_servers` | _(선택)_ | 커스텀 TURN 서버 URL |
-| `ice_username` | _(선택)_ | TURN 사용자명 |
-| `ice_credential` | _(선택)_ | TURN 비밀번호 |
+| `Turnserver` | _(선택)_ | 커스텀 TURN 서버 URL (예: `turn:global.relay.metered.ca:80`) |
+| `Turnusername` | _(선택)_ | TURN 사용자명 |
+| `Turnpassword` | _(선택)_ | TURN 비밀번호 |
 
 #### w2td_init.py (Execute DAT)
 

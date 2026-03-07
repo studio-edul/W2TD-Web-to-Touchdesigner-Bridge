@@ -55,9 +55,9 @@ Create a Table DAT named `w2td_config` to override defaults without editing code
 | `sample_rate` | `30` | Default sensor Hz |
 | `dev_mode` | `1` | `1` = full UI, `0` = minimal auto mode |
 | `haptic_enabled` | `1` | Enable haptic feedback to devices |
-| `ice_servers` | _(optional)_ | Custom TURN server URL |
-| `ice_username` | _(optional)_ | TURN username |
-| `ice_credential` | _(optional)_ | TURN credential |
+| `Turnserver` | _(optional)_ | Custom TURN server URL (e.g., `turn:global.relay.metered.ca:80`) |
+| `Turnusername` | _(optional)_ | TURN username |
+| `Turnpassword` | _(optional)_ | TURN password |
 | `Resolution` | `Non-Commercial` | Camera: `Non-Commercial` (960×960), `FHD` (1920×1920) |
 | `Screenmode` | `Portrait` | Camera: `Portrait` (세로), `Landscape` (가로) |
 

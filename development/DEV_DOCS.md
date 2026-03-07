@@ -1,6 +1,6 @@
 # W2TD (Web-to-TouchDesigner Bridge) 개발 문서
 
-> 최종 업데이트: 2026-03-02 (Resolution/Screenmode 카메라 설정, w2td_init URL 설정 개선)
+> 최종 업데이트: 2026-03-07 (Custom TURN 서버 설정 추가 및 개선)
 > 목적: 추후 세션에서 파일 위치·구현 방식을 빠르게 파악하기 위한 참고 문서
 
 ---
@@ -176,7 +176,9 @@ TD의 `w2td_config` Table DAT에서 값을 읽어 연결 시 모바일로 push.
 | `audio_echo_cancellation` | 0 | 에코 제거 (0=끔/원본, 1=켜짐) |
 | `audio_noise_suppression` | 0 | 노이즈 억제 (0=끔/원본, 1=켜짐) |
 | `audio_auto_gain` | 0 | 자동 게인 (0=끔/원본, 1=켜짐) |
-| `ice_servers` | (없음) | 다른 네트워크용 TURN. JSON 배열 (예: `[{"urls":"turn:..."}]`) |
+| `Turnserver` | (없음) | 다른 네트워크용 TURN 서버 주소 (예: `turn:global.relay.metered.ca:80`) |
+| `Turnusername` | (없음) | TURN 사용자명 |
+| `Turnpassword` | (없음) | TURN 비밀번호 |
 | `ice_transport_policy` | (없음) | `relay` = TURN만 사용 (터널/다른 네트워크 시 강제) |
 | `max_clients` | 20 | 최대 접속 수 |
 | `Resolution` | Non-Commercial | 카메라 해상도: `Non-Commercial`(540×960), `FHD`(1920×1080), `4K`(3840×2160) |

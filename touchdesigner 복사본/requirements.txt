@@ -1,0 +1,5 @@
+pip==24.0
+setuptools==65.5.0
+pycloudflared==0.3.0
+tqdm==4.67.3
+PyQRCode==1.2.1
