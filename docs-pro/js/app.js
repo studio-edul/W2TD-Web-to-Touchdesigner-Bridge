@@ -582,9 +582,13 @@ const W2TD_VERSION = '1.0.0';
       onBgColor: (color, duration) => {
         if (typeof AudioModule === 'undefined') return; // Pro feature check
         document.body.style.backgroundColor = color;
+        // Apply to touch pad overlay as well (it covers body with its own background)
+        const tp = $('touch-pad');
+        if (tp) tp.style.backgroundColor = color;
         if (duration > 0) {
           setTimeout(() => {
             document.body.style.backgroundColor = '';
+            if (tp) tp.style.backgroundColor = '';
           }, duration);
         }
       },

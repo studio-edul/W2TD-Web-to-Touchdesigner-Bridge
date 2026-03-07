@@ -756,7 +756,6 @@ def send_flashlight_to_client(webServerDAT, slot, state):
 			'state': state
 		})
 		webServerDAT.webSocketSendText(addr, msg)
-		print(f'[W2TD Pro] Sent flashlight {state} to slot {slot}')
 		return True
 	except Exception as e:
 		print(f'[W2TD Pro Error] flashlight send failed for slot {slot}: {e}')
