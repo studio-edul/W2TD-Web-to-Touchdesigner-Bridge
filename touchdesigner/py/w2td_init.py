@@ -286,20 +286,27 @@ def generate():
 	qr_url = GITHUB_PAGES_URL + '?td=' + host
 	
 	parent_comp = None
+	url_par_name = 'url'
 	# Try all common parent locations
 	for p in [parent(), op('..'), op('../W2TD'), op('../W2TD_Pro'), _w2td_base()]:
-		if p is not None and hasattr(p.par, 'url'):
-			parent_comp = p
-			break
+		if p is not None:
+			if hasattr(p.par, 'url'):
+				parent_comp = p
+				url_par_name = 'url'
+				break
+			elif hasattr(p.par, 'Url'):
+				parent_comp = p
+				url_par_name = 'Url'
+				break
 			
 	if parent_comp:
 		try:
-			parent_comp.par.url = host
-			print(f'[W2TD] Target COMP found: {parent_comp.path}, URL set to {host}')
+			setattr(parent_comp.par, url_par_name, host)
+			print(f'[W2TD] Target COMP found: {parent_comp.path}, {url_par_name} set to {host}')
 		except Exception as e:
-			print(f'[W2TD Error] W2TD.par.url set failed on {parent_comp.path}: {e}')
+			print(f'[W2TD Error] W2TD.par.{url_par_name} set failed on {parent_comp.path}: {e}')
 	else:
-		print('[W2TD Error] Could not find parent COMP with a "url" parameter.')
+		print('[W2TD Error] Could not find parent COMP with a "url" or "Url" parameter.')
 	
 	print(f'[W2TD] QR URL: {qr_url}')
 
