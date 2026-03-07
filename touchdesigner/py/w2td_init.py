@@ -285,7 +285,7 @@ def generate():
 	GITHUB_PAGES_URL = 'https://w2td.studio-edul.com/'
 	qr_url = GITHUB_PAGES_URL + '?td=' + host
 	
-	parent_comp = op('../W2TD') or _w2td_base()
+	parent_comp = parent()
 	if parent_comp and hasattr(parent_comp.par, 'url'):
 		try:
 			parent_comp.par.url = host
