@@ -33,19 +33,21 @@ def _op(path_suffix, fallback_name=None):
 
 def onValueChange(channel, sampleIndex, val, prev):
 	"""Send flashlight state to slot when w2td_flashlight channel value changes.
-	Assumes channel name is the slot number (e.g., '1', '2', etc.).
+	Assumes channel name is formatted as 'chan1', 'chan2', etc.
 	"""
 	# Find web_server_dat
 	web = _op('web_server_dat')
 	if not web or not hasattr(web, 'module') or not hasattr(web.module, 'send_flashlight_to_client'):
 		return
 
-	# Channel name should correspond to slot number, e.g. "1" or "chan1"
+	# Channel name must start with 'chan' followed by the slot number
 	chan_name = channel.name
-	slot = None
+	if not chan_name.startswith('chan'):
+		return
 	
+	slot = None
 	try:
-		slot = int(chan_name.replace('chan', '').strip())
+		slot = int(chan_name[4:].strip())
 	except ValueError:
 		pass
 
