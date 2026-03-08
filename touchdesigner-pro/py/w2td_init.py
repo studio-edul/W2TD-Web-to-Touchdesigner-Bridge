@@ -4,8 +4,9 @@ import subprocess
 import sys
 import platform
 
-W2TD_BASE = 'W2TD'
+W2TD_BASE = 'W2TD_Pro'
 W2TD_AUDIO = f'{W2TD_BASE}/webrtc_audio_container'
+AUDIO_EXTS = {'.mp3', '.wav', '.ogg', '.m4a', '.aac'}
 
 
 def _w2td_base():
@@ -115,6 +116,19 @@ def _init_tables():
 		print('[W2TD] webrtc_table initialized')
 	else:
 		print('[W2TD Error] webrtc_table DAT not found - create a Table DAT named "webrtc_table"')
+
+	# Initialize w2td_audio_table with audio files from project audio/ folder
+	at = _op('w2td_audio_table')
+	if at is not None:
+		audio_dir = os.path.join(project.folder, 'audio')
+		files = []
+		if os.path.isdir(audio_dir):
+			files = sorted(f for f in os.listdir(audio_dir) if os.path.splitext(f)[1].lower() in AUDIO_EXTS)
+		at.clear()
+		at.appendRow(['slot'] + files)
+		print(f'[W2TD] w2td_audio_table initialized ({len(files)} audio files)')
+	else:
+		print('[W2TD] w2td_audio_table DAT not found - skipping')
 
 def _init_webrtc_ice():
 	"""Configure WebRTC DAT TURN servers if provided via w2td_config."""

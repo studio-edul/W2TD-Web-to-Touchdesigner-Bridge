@@ -28,9 +28,11 @@ const AudioModule = (() => {
    * Load and cache an audio file.
    * Returns Promise<AudioBuffer> or null on error.
    */
+  let lastError = '';
+
   async function loadAudio(filename) {
     if (!audioContext) {
-      console.warn('[W2TD Audio] AudioContext not unlocked — call unlock() first');
+      lastError = 'AudioContext not unlocked';
       return null;
     }
 
@@ -39,20 +41,22 @@ const AudioModule = (() => {
       return audioCache.get(filename);
     }
 
+    const url = baseUrl + filename;
+    console.log(`[W2TD Audio] Fetching: ${url}`);
+    let response;
     try {
-      const url = baseUrl + filename;
-      console.log(`[W2TD Audio] Fetching: ${url}`);
-      let response;
-      try {
-        response = await fetch(url);
-      } catch (fetchErr) {
-        console.error(`[W2TD Audio] Network/CORS error for ${filename}: ${fetchErr.message} (url: ${url})`);
-        return null;
-      }
-      if (!response.ok) {
-        console.error(`[W2TD Audio] HTTP ${response.status} for ${filename} from ${url}`);
-        return null;
-      }
+      response = await fetch(url);
+    } catch (fetchErr) {
+      lastError = `Network/CORS error: ${fetchErr.message} (${url})`;
+      console.error(`[W2TD Audio] ${lastError}`);
+      return null;
+    }
+    if (!response.ok) {
+      lastError = `HTTP ${response.status} from ${url}`;
+      console.error(`[W2TD Audio] ${lastError}`);
+      return null;
+    }
+    try {
       const arrayBuffer = await response.arrayBuffer();
       console.log(`[W2TD Audio] Received ${arrayBuffer.byteLength} bytes, decoding...`);
       const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
@@ -60,7 +64,8 @@ const AudioModule = (() => {
       console.log(`[W2TD Audio] Cached: ${filename}`);
       return audioBuffer;
     } catch (e) {
-      console.error(`[W2TD Audio] Decode error for ${filename}:`, e);
+      lastError = `Decode error: ${e.message || e}`;
+      console.error(`[W2TD Audio] ${lastError}`);
       return null;
     }
   }
@@ -71,10 +76,11 @@ const AudioModule = (() => {
    * Returns Promise<boolean> indicating success.
    */
   async function play(filename, options = {}) {
+    lastError = '';
     if (!audioContext) {
       unlock(); // Try to unlock if not already
       if (!audioContext) {
-        console.warn('[W2TD Audio] Cannot play — AudioContext not available (tap screen first)');
+        lastError = 'AudioContext not available (tap screen first)';
         return false;
       }
     }
@@ -84,7 +90,11 @@ const AudioModule = (() => {
       try {
         await audioContext.resume();
       } catch (e) {
-        console.warn('[W2TD Audio] AudioContext resume failed (tap screen first):', e);
+        lastError = 'AudioContext suspended (tap screen first)';
+        return false;
+      }
+      if (audioContext.state === 'suspended') {
+        lastError = 'AudioContext still suspended (tap screen first)';
         return false;
       }
     }
@@ -160,5 +170,6 @@ const AudioModule = (() => {
     setBaseUrl,
     isUnlocked: () => isUnlocked,
     getContext: () => audioContext,
+    getLastError: () => lastError,
   };
 })();

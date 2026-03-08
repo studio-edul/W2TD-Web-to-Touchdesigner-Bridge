@@ -600,14 +600,6 @@ const W2TD_VERSION = '1.0.0';
       // Pro: Audio playback trigger
       onPlaySound: (filename, startTime) => {
         if (typeof AudioModule === 'undefined') return; // Pro feature check
-        if (!AudioModule.isUnlocked()) {
-          addLog(`Audio failed: ${filename} (tap screen to unlock audio)`, 'warn');
-          return;
-        }
-        const ctx = AudioModule.getContext();
-        if (ctx && ctx.state === 'suspended') {
-          addLog(`Audio failed: ${filename} (AudioContext suspended)`, 'warn');
-        }
         const options = {};
         if (startTime !== undefined && startTime > 0) {
           options.startTime = startTime / 1000; // convert ms to seconds
@@ -616,7 +608,8 @@ const W2TD_VERSION = '1.0.0';
           if (success) {
             addLog(`Audio: ${filename}`, 'info');
           } else {
-            addLog(`Audio failed: ${filename} (fetch or decode error)`, 'warn');
+            const err = AudioModule.getLastError ? AudioModule.getLastError() : 'unknown';
+            addLog(`Audio failed: ${filename} (${err})`, 'warn');
           }
         }).catch(e => {
           addLog(`Audio error: ${filename} (${e.message || e})`, 'error');

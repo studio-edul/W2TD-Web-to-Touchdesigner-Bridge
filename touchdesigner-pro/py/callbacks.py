@@ -402,7 +402,7 @@ def init_tables():
 	else:
 		print('[W2TD Error] webrtc_table DAT not found - create a Table DAT named "webrtc_table"')
 
-	_init_audio_cmd()
+	_init_audio_table()
 
 
 def _scan_audio_files():
@@ -419,14 +419,14 @@ def _scan_audio_files():
 	return files
 
 
-def _init_audio_cmd():
-	"""Initialize w2td_audio_cmd Table DAT.
+def _init_audio_table():
+	"""Initialize w2td_audio_table Table DAT.
 	Columns: slot | <filename1> | <filename2> | ...
 	Rows: one per connected slot (from sensor_table), values default to 0.
 	"""
-	at = _op('w2td_audio_cmd')
+	at = _op('w2td_audio_table')
 	if at is None:
-		print('[W2TD] w2td_audio_cmd DAT not found - skipping audio cmd table init')
+		print('[W2TD] w2td_audio_table DAT not found - skipping audio cmd table init')
 		return
 
 	files = _scan_audio_files()
@@ -443,12 +443,12 @@ def _init_audio_cmd():
 			except Exception:
 				pass
 
-	print(f'[W2TD] w2td_audio_cmd initialized ({len(files)} audio files)')
+	print(f'[W2TD] w2td_audio_table initialized ({len(files)} audio files)')
 
 
-def _audio_cmd_add_slot(slot):
-	"""Add a row for a new slot to w2td_audio_cmd."""
-	at = _op('w2td_audio_cmd')
+def _audio_table_add_slot(slot):
+	"""Add a row for a new slot to w2td_audio_table."""
+	at = _op('w2td_audio_table')
 	if at is None:
 		return
 	# Check if row already exists
@@ -462,9 +462,9 @@ def _audio_cmd_add_slot(slot):
 	at.appendRow([slot] + [0] * num_files)
 
 
-def _audio_cmd_remove_slot(slot):
-	"""Remove the row for a slot from w2td_audio_cmd."""
-	at = _op('w2td_audio_cmd')
+def _audio_table_remove_slot(slot):
+	"""Remove the row for a slot from w2td_audio_table."""
+	at = _op('w2td_audio_table')
 	if at is None:
 		return
 	for r in range(1, at.numRows):
@@ -1061,7 +1061,7 @@ def onWebSocketClose(webServerDAT, client):
 		if row is not None:
 			t.deleteRow(row)
 
-	_audio_cmd_remove_slot(slot)
+	_audio_table_remove_slot(slot)
 
 	tt = _op('touch_table')
 	if tt is not None:
@@ -1201,7 +1201,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			names = _client_names()
 			client_name = names.get(slot, f'Slot {slot}')
 			t2.appendRow([slot, 1, client_name] + [0.0] * (len(SENSOR_COLS) - 3))
-		_audio_cmd_add_slot(slot)
+		_audio_table_add_slot(slot)
 		print(f'[W2TD] Connected -> slot {slot} | {addr} | {len(slots)}/{MAX_CLIENTS} active')
 		op('/').store(f'w2td_last_seen_{slot}', time.time())
 		try:
