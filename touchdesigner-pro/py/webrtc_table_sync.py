@@ -409,7 +409,7 @@ def sync():
 				print(f'[W2TD WebRTC Sync TX] Error Destroy webrtc_audio_out_{slot}: {e}')
 
 	# Create/update TX nodes for active slots
-	TX_BASE_X = 1000
+	TX_BASE_X = 1200
 	TX_OFFSET_Y = 150
 	tx_count = 0
 	newly_created_slots = []

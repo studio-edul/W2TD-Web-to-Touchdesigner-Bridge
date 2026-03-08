@@ -319,14 +319,14 @@ def _handle_cam_receiver_msg(webServerDAT, addr, msg):
 				top = op(path)
 				if top:
 					try:
-						_dim_map = {'non-commercial': 960, 'fhd': 1920}
+						_dim_map = {'non-commercial': 1280, 'fhd': 1920}
 						cfg = _read_config()
 						res_key = 'non-commercial'
 						for _k, _v in cfg.items():
 							if _k.lower() == 'resolution':
 								res_key = _v.strip().lower()
 								break
-						sq = _dim_map.get(res_key, 960)
+						sq = _dim_map.get(res_key, 1280)
 						top.par.outputresolution = 'custom'
 						top.par.resolutionw = sq
 						top.par.resolutionh = sq
@@ -1180,6 +1180,22 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 		try:
 			wrtc.setRemoteDescription(conn_id, 'answer', sdp)
 			print(f'[W2TD WebRTC] Reanswer from slot {slot}, conn_id={conn_id} — audio track negotiated')
+			# Auto-select WebRTC Track on Audio Stream Out CHOP after renegotiation
+			_slot = slot
+			def _auto_select_tx_track():
+				out_chop = _op(f'webrtc_audio_container/webrtc_audio_out_{_slot}')
+				if out_chop is None:
+					return
+				for par_name in ('webrtctrack', 'Webrtctrack', 'track', 'Track'):
+					if hasattr(out_chop.par, par_name):
+						p = getattr(out_chop.par, par_name)
+						if hasattr(p, 'menuNames') and p.menuNames:
+							setattr(out_chop.par, par_name, p.menuNames[0])
+							print(f'[W2TD WebRTC] Auto-selected track "{p.menuNames[0]}" on webrtc_audio_out_{_slot}')
+						else:
+							print(f'[W2TD WebRTC] No tracks available yet on webrtc_audio_out_{_slot}')
+						break
+			run(_auto_select_tx_track, delayFrames=2, fromOP=wrtc)
 		except Exception as e:
 			print(f'[W2TD WebRTC Error] Reanswer handling error: {e}')
 

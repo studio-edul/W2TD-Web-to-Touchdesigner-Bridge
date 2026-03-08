@@ -11,8 +11,8 @@ Setup in TD:
   5. Paste this script
 """
 NODE_OFFSET_Y = 100
-# Square side per Resolution config: Non-Commercial(960), FHD(1920)
-_CAM_TOP_DIM_MAP = {'non-commercial': 960, 'fhd': 1920}
+# Square side per Resolution config: Non-Commercial(1280), FHD(1920)
+_CAM_TOP_DIM_MAP = {'non-commercial': 1280, 'fhd': 1920}
 
 
 def _find_config():
@@ -66,7 +66,7 @@ def _read_config_values():
 					pass
 	except Exception:
 		pass
-	dim = _CAM_TOP_DIM_MAP.get(res_key, 960)
+	dim = _CAM_TOP_DIM_MAP.get(res_key, 1280)
 	return res_key, dim, screenmode
 
 

@@ -7,7 +7,7 @@
 const WebRTCModule = (() => {
   // ── Camera resolution presets — updated at runtime via setResolution() ───────
   const _CAM_RESOLUTION_MAP = {
-    'non-commercial': { width: 960, height: 540, maxBitrate: 2000000 },
+    'non-commercial': { width: 1280, height: 720, maxBitrate: 2000000 },
     'fhd': { width: 1920, height: 1080, maxBitrate: 4000000 },
   };
   let _camResolution = _CAM_RESOLUTION_MAP['fhd']; // default until config arrives from TD
