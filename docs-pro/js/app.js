@@ -570,6 +570,7 @@ const W2TD_VERSION = '1.0.0';
       onConfig: (cfg) => applyConfig(cfg),
       onWebRTCSignal: (msg) => {
         if (msg.type === 'webrtc_answer') WebRTCModule.handleAnswer(msg.sdp);
+        else if (msg.type === 'webrtc_offer') WebRTCModule.handleOffer(msg.sdp);
         else if (msg.type === 'webrtc_ice') WebRTCModule.handleIce(msg);
         else if (msg.type === 'webrtc_renegotiate') WebRTCModule.renegotiate();
         else if (msg.type === 'webrtc_answer_cam') WebRTCModule.handleCameraAnswer(msg.sdp, msg.camType);

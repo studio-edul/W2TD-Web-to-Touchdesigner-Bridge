@@ -1164,6 +1164,25 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 		except Exception as e:
 			print(f'[W2TD WebRTC Error] Reoffer handling error: {e}')
 
+	elif msg_type == 'webrtc_reanswer':
+		# TD-initiated renegotiation: browser answers TD's createOffer
+		# (TD sent offer after creating Audio Stream Out CHOP)
+		sdp = msg.get('sdp')
+		if not sdp:
+			return
+		wrtc = _wt_dat()
+		if wrtc is None:
+			return
+		conn_id = op('/').fetch(f'w2td_webrtc_slot_to_uuid_{slot}', None)
+		if conn_id is None:
+			print(f'[W2TD WebRTC] Reanswer: no existing connection for slot {slot}')
+			return
+		try:
+			wrtc.setRemoteDescription(conn_id, 'answer', sdp)
+			print(f'[W2TD WebRTC] Reanswer from slot {slot}, conn_id={conn_id} — audio track negotiated')
+		except Exception as e:
+			print(f'[W2TD WebRTC Error] Reanswer handling error: {e}')
+
 	elif msg_type == 'webrtc_ice':
 		candidate = msg.get('candidate')
 		if not candidate:

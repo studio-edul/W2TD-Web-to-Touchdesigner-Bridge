@@ -90,7 +90,7 @@ const WSClient = (() => {
           if (onConfig) onConfig(msg);
         } else if (msg.type === 'webrtc_answer' || msg.type === 'webrtc_ice' || msg.type === 'webrtc_state' ||
                    msg.type === 'webrtc_answer_cam' || msg.type === 'webrtc_ice_cam' || msg.type === 'cam_receiver_ready' ||
-                   msg.type === 'webrtc_renegotiate') {
+                   msg.type === 'webrtc_renegotiate' || msg.type === 'webrtc_offer') {
           if (onWebRTCSignal) onWebRTCSignal(msg);
         } else if (msg.type === 'haptic') {
           // Haptic feedback (pattern or state)

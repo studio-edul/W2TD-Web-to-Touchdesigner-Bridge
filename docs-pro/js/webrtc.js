@@ -276,6 +276,29 @@ const WebRTCModule = (() => {
     }
   }
 
+  /**
+   * Handle TD-initiated offer (renegotiation).
+   * TD calls createOffer after adding Audio Stream Out CHOP,
+   * so the SDP now includes TD's outgoing audio track.
+   * Browser sets remote description, creates answer, sends it back.
+   */
+  async function handleOffer(sdp) {
+    if (!micPc || micPc.connectionState === 'closed') {
+      _log('handleOffer: no active PC, ignoring TD offer');
+      return;
+    }
+    try {
+      await micPc.setRemoteDescription({ type: 'offer', sdp });
+      const answer = await micPc.createAnswer();
+      await micPc.setLocalDescription(answer);
+      const sent = WSClient.send({ type: 'webrtc_reanswer', sdp: answer.sdp });
+      _log(sent ? 'TD offer handled, answer sent' : 'TD offer handled but answer FAILED — WS not connected');
+    } catch (e) {
+      console.error('[W2TD WebRTC] handleOffer failed:', e);
+      _log('handleOffer failed: ' + (e.message || e));
+    }
+  }
+
   async function handleIce({ candidate, sdpMLineIndex, sdpMid }) {
     if (!micPc || !candidate) return;
     _micIceRecvCount++;
@@ -599,7 +622,7 @@ const WebRTCModule = (() => {
   return {
     // Mic
     acquireMic, start, stop, disconnect, renegotiate,
-    handleAnswer, handleIce,
+    handleAnswer, handleOffer, handleIce,
     onStateChange,
     isMicActive: () => micActive,
     isPCActive: () => micPc !== null,

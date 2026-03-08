@@ -412,6 +412,7 @@ def sync():
 	TX_BASE_X = 1000
 	TX_OFFSET_Y = 150
 	tx_count = 0
+	newly_created_slots = []
 	for idx, slot in enumerate(sorted(active_slots)):
 		conn_id = slot_to_conn[slot]
 		select_name = f'select_slot{slot}'
@@ -451,7 +452,8 @@ def sync():
 
 		# Audio Stream Out CHOP
 		out = existing_outs.get(slot) or w2td_audio_c.op(out_name)
-		if out is None:
+		is_new = out is None
+		if is_new:
 			try:
 				out = w2td_audio_c.create('audiostreamoutCHOP', out_name)
 				print(f'[W2TD WebRTC Sync TX] Created {out_name}')
@@ -474,22 +476,29 @@ def sync():
 		# Set WebRTC connection params
 		_set_audio_out_params(out, conn_id)
 		tx_count += 1
+		if is_new:
+			newly_created_slots.append(slot)
 
 	if tx_count:
 		print(f'[W2TD WebRTC Sync TX] {tx_count} audio stream out chops synced')
-		# Send renegotiate signal to each active slot so browser creates new offer
-		# with TD's audio tracks included in the SDP negotiation
-		import json
-		ws = _get_web_server()
-		if ws:
-			for slot in sorted(active_slots):
-				addr = op('/').fetch(f'w2td_webrtc_addr_{slot_to_conn[slot]}', None)
-				if addr:
-					try:
-						ws.webSocketSendText(addr, json.dumps({'type': 'webrtc_renegotiate'}))
-						print(f'[W2TD WebRTC Sync TX] Sent renegotiate to slot {slot}')
-					except Exception as e:
-						print(f'[W2TD WebRTC Sync TX] Error sending renegotiate to slot {slot}: {e}')
+		# TD-initiated renegotiation: call createOffer on the WebRTC DAT
+		# so TD's new audio track is included in the SDP.
+		# Delay a few frames to let Audio Stream Out CHOP cook first.
+		if newly_created_slots:
+			webrtc = _get_webrtc()
+			if webrtc:
+				_slots_to_offer = list(newly_created_slots)
+				_conn_map = dict(slot_to_conn)
+				def _trigger_offers():
+					for s in _slots_to_offer:
+						cid = _conn_map.get(s)
+						if cid:
+							try:
+								webrtc.createOffer(cid)
+								print(f'[W2TD WebRTC Sync TX] TD createOffer for slot {s}, conn_id={cid}')
+							except Exception as ex:
+								print(f'[W2TD WebRTC Sync TX] createOffer error for slot {s}: {ex}')
+				run(_trigger_offers, delayFrames=3, fromOP=webrtc)
 	elif active_slots:
 		print('[W2TD WebRTC Sync TX] Warning: active slots but no TX chops created')
 
