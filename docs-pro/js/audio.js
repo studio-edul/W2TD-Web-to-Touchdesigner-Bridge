@@ -42,18 +42,25 @@ const AudioModule = (() => {
     try {
       const url = baseUrl + filename;
       console.log(`[W2TD Audio] Fetching: ${url}`);
-      const response = await fetch(url);
+      let response;
+      try {
+        response = await fetch(url);
+      } catch (fetchErr) {
+        console.error(`[W2TD Audio] Network/CORS error for ${filename}: ${fetchErr.message} (url: ${url})`);
+        return null;
+      }
       if (!response.ok) {
-        console.error(`[W2TD Audio] Failed to load ${filename}: HTTP ${response.status} from ${url}`);
+        console.error(`[W2TD Audio] HTTP ${response.status} for ${filename} from ${url}`);
         return null;
       }
       const arrayBuffer = await response.arrayBuffer();
+      console.log(`[W2TD Audio] Received ${arrayBuffer.byteLength} bytes, decoding...`);
       const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
       audioCache.set(filename, audioBuffer);
       console.log(`[W2TD Audio] Cached: ${filename}`);
       return audioBuffer;
     } catch (e) {
-      console.error(`[W2TD Audio] Load error for ${filename}:`, e);
+      console.error(`[W2TD Audio] Decode error for ${filename}:`, e);
       return null;
     }
   }

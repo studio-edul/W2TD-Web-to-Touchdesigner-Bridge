@@ -9,6 +9,7 @@ ACK_INTERVAL = 1.0  # seconds between data_ack signals per slot
 
 W2TD_BASE = 'W2TD_Pro'
 W2TD_AUDIO = f'{W2TD_BASE}/webrtc_audio_container'
+AUDIO_EXTS = {'.mp3', '.wav', '.ogg', '.m4a', '.aac'}
 
 
 def _w2td_base():
@@ -247,6 +248,25 @@ def _release_slot(addr, slot):
 	op('/').store(f'w2td_last_seen_{slot}', 0)
 	op('/').store(f'w2td_last_ack_{slot}', 0)
 
+def _broadcast_msg(webServerDAT, msg_str):
+	"""Send a JSON message to all actually connected clients.
+	Cleans up stale slots on send failure.
+	Returns number of successful sends.
+	"""
+	success = 0
+	stale = []
+	for addr, slot in list(_slots().items()):
+		try:
+			webServerDAT.webSocketSendText(addr, msg_str)
+			success += 1
+		except Exception:
+			stale.append((addr, slot))
+	for addr, slot in stale:
+		_release_slot(addr, slot)
+		print(f'[W2TD] Cleaned stale slot {slot}')
+	return success
+
+
 def _handle_cam_receiver_msg(webServerDAT, addr, msg):
 	"""Process messages from cam_receiver.html (Web Render TOP)."""
 	msg_type = msg.get('type')
@@ -382,6 +402,79 @@ def init_tables():
 	else:
 		print('[W2TD Error] webrtc_table DAT not found - create a Table DAT named "webrtc_table"')
 
+	_init_audio_cmd()
+
+
+def _scan_audio_files():
+	"""Scan project audio/ folder and return sorted list of audio filenames."""
+	audio_dir = os.path.join(project.folder, 'audio')
+	if not os.path.isdir(audio_dir):
+		return []
+	files = []
+	for f in os.listdir(audio_dir):
+		ext = os.path.splitext(f)[1].lower()
+		if ext in AUDIO_EXTS:
+			files.append(f)
+	files.sort()
+	return files
+
+
+def _init_audio_cmd():
+	"""Initialize w2td_audio_cmd Table DAT.
+	Columns: slot | <filename1> | <filename2> | ...
+	Rows: one per connected slot (from sensor_table), values default to 0.
+	"""
+	at = _op('w2td_audio_cmd')
+	if at is None:
+		print('[W2TD] w2td_audio_cmd DAT not found - skipping audio cmd table init')
+		return
+
+	files = _scan_audio_files()
+	at.clear()
+	at.appendRow(['slot'] + files)
+
+	# Add rows for currently connected slots (from sensor_table)
+	t = _op('sensor_table')
+	if t is not None:
+		for r in range(1, t.numRows):
+			try:
+				slot = int(t[r, 'slot'])
+				at.appendRow([slot] + [0] * len(files))
+			except Exception:
+				pass
+
+	print(f'[W2TD] w2td_audio_cmd initialized ({len(files)} audio files)')
+
+
+def _audio_cmd_add_slot(slot):
+	"""Add a row for a new slot to w2td_audio_cmd."""
+	at = _op('w2td_audio_cmd')
+	if at is None:
+		return
+	# Check if row already exists
+	for r in range(1, at.numRows):
+		try:
+			if int(at[r, 0]) == slot:
+				return
+		except Exception:
+			pass
+	num_files = max(0, at.numCols - 1)
+	at.appendRow([slot] + [0] * num_files)
+
+
+def _audio_cmd_remove_slot(slot):
+	"""Remove the row for a slot from w2td_audio_cmd."""
+	at = _op('w2td_audio_cmd')
+	if at is None:
+		return
+	for r in range(1, at.numRows):
+		try:
+			if int(at[r, 0]) == slot:
+				at.deleteRow(r)
+				return
+		except Exception:
+			pass
+
 
 def _config_val(cfg, *keys, default=0):
 	"""Try config keys in order; normalize to int."""
@@ -501,20 +594,18 @@ def send_haptic_to_client(webServerDAT, slot, pattern):
 
 def send_haptic_to_all(webServerDAT, pattern):
 	"""Send haptic feedback pattern to all connected clients.
-	
+
 	Args:
 		webServerDAT: Web Server DAT operator
 		pattern: List of vibration durations in milliseconds
-	
+
 	Usage in TD:
 		op('web_server_dat').module.send_haptic_to_all(op('web_server_dat'), [200, 100, 200])
 	"""
-	success_count = 0
-	for slot in _slots().values():
-		if send_haptic_to_client(webServerDAT, slot, pattern):
-			success_count += 1
-	print(f'[W2TD Haptic] Sent pattern {pattern} to {success_count} clients')
-	return success_count
+	msg = json.dumps({'type': 'haptic', 'pattern': [int(d) for d in pattern]})
+	count = _broadcast_msg(webServerDAT, msg)
+	print(f'[W2TD Haptic] Sent pattern {pattern} to {count} clients')
+	return count
 
 
 def send_haptic_state(webServerDAT, slot, state):
@@ -556,12 +647,10 @@ def send_haptic_state_to_all(webServerDAT, state):
 		webServerDAT: Web Server DAT operator
 		state: Vibration state (0 = stop, 1 = vibrate continuously)
 	"""
-	success_count = 0
-	for slot in _slots().values():
-		if send_haptic_state(webServerDAT, slot, state):
-			success_count += 1
-	print(f'[W2TD Haptic] Sent state {state} to {success_count} clients')
-	return success_count
+	msg = json.dumps({'type': 'haptic', 'state': state})
+	count = _broadcast_msg(webServerDAT, msg)
+	print(f'[W2TD Haptic] Sent state {state} to {count} clients')
+	return count
 
 
 def broadcast_haptic_from_chop(webServerDAT, chop_name='w2td_haptic'):
@@ -674,21 +763,19 @@ def send_bg_color_to_client(webServerDAT, slot, color, duration=0):
 
 def send_bg_color_to_all(webServerDAT, color, duration=0):
 	"""Pro: Send background color sync to all connected clients.
-	
+
 	Args:
 		webServerDAT: Web Server DAT operator
 		color: CSS color string
 		duration: Duration in milliseconds (0 = indefinite)
-	
+
 	Usage in TD:
 		op('web_server_dat').module.send_bg_color_to_all(op('web_server_dat'), 'white', 0)
 	"""
-	success_count = 0
-	for slot in _slots().values():
-		if send_bg_color_to_client(webServerDAT, slot, color, duration):
-			success_count += 1
-	print(f'[W2TD Pro] Sent bg_color {color} to {success_count} clients')
-	return success_count
+	msg = json.dumps({'type': 'bg_color', 'color': color, 'duration': int(duration)})
+	count = _broadcast_msg(webServerDAT, msg)
+	print(f'[W2TD Pro] Sent bg_color {color} to {count} clients')
+	return count
 
 
 def send_play_sound_to_client(webServerDAT, slot, filename, startTime=None):
@@ -725,21 +812,21 @@ def send_play_sound_to_client(webServerDAT, slot, filename, startTime=None):
 
 def send_play_sound_to_all(webServerDAT, filename, startTime=None):
 	"""Pro: Trigger audio playback on all connected clients.
-	
+
 	Args:
 		webServerDAT: Web Server DAT operator
 		filename: Audio filename
 		startTime: Optional scheduled start time in milliseconds
-	
+
 	Usage in TD:
 		op('web_server_dat').module.send_play_sound_to_all(op('web_server_dat'), 'drop.wav')
 	"""
-	success_count = 0
-	for slot in _slots().values():
-		if send_play_sound_to_client(webServerDAT, slot, filename, startTime):
-			success_count += 1
-	print(f'[W2TD Pro] Sent play_sound {filename} to {success_count} clients')
-	return success_count
+	msg = {'type': 'play_sound', 'filename': filename}
+	if startTime is not None:
+		msg['startTime'] = int(startTime)
+	count = _broadcast_msg(webServerDAT, json.dumps(msg))
+	print(f'[W2TD Pro] Sent play_sound {filename} to {count} clients')
+	return count
 
 
 def send_flashlight_to_client(webServerDAT, slot, state):
@@ -779,21 +866,19 @@ def send_flashlight_to_client(webServerDAT, slot, state):
 
 def send_flashlight_to_all(webServerDAT, state):
 	"""Pro: Toggle flashlight on/off for all connected clients.
-	
+
 	Args:
 		webServerDAT: Web Server DAT operator
 		state: Flashlight state (0 = off, 1 = on)
-	
+
 	Usage in TD:
 		op('web_server_dat').module.send_flashlight_to_all(op('web_server_dat'), 1)  # all ON
 		op('web_server_dat').module.send_flashlight_to_all(op('web_server_dat'), 0)  # all OFF
 	"""
-	success_count = 0
-	for slot in _slots().values():
-		if send_flashlight_to_client(webServerDAT, slot, state):
-			success_count += 1
-	print(f'[W2TD Pro] Sent flashlight {state} to {success_count} clients')
-	return success_count
+	msg = json.dumps({'type': 'flashlight', 'state': state})
+	count = _broadcast_msg(webServerDAT, msg)
+	print(f'[W2TD Pro] Sent flashlight {state} to {count} clients')
+	return count
 
 
 def send_heartbeat(webServerDAT, slot=None):
@@ -976,6 +1061,8 @@ def onWebSocketClose(webServerDAT, client):
 		if row is not None:
 			t.deleteRow(row)
 
+	_audio_cmd_remove_slot(slot)
+
 	tt = _op('touch_table')
 	if tt is not None:
 		rows_to_delete = [
@@ -1114,6 +1201,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			names = _client_names()
 			client_name = names.get(slot, f'Slot {slot}')
 			t2.appendRow([slot, 1, client_name] + [0.0] * (len(SENSOR_COLS) - 3))
+		_audio_cmd_add_slot(slot)
 		print(f'[W2TD] Connected -> slot {slot} | {addr} | {len(slots)}/{MAX_CLIENTS} active')
 		op('/').store(f'w2td_last_seen_{slot}', time.time())
 		try:

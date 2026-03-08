@@ -62,6 +62,32 @@ SENSOR_COLS = [
 MAX_CLIENTS = 20
 
 def _init_tables():
+	global MAX_CLIENTS
+	cfg = _read_config()
+	val = cfg.get('Maxclients') or cfg.get('maxclients') or cfg.get('max_clients')
+	if val:
+		try:
+			MAX_CLIENTS = max(1, int(val))
+		except ValueError:
+			pass
+
+	# Reset persistent slot state so new connections start from slot 1
+	op('/').store('w2td_client_slots', {})
+	op('/').store('w2td_free_slots', list(range(1, MAX_CLIENTS + 1)))
+	op('/').store('w2td_touch_count', {})
+	op('/').store('w2td_client_names', {})
+	op('/').store('w2td_pending_cam_offers', {})
+	op('/').store('w2td_pending_cam_ice', {})
+	for s in range(1, MAX_CLIENTS + 1):
+		op('/').store(f'w2td_last_seen_{s}', 0)
+		op('/').store(f'w2td_last_ack_{s}', 0)
+		op('/').store(f'w2td_webrtc_slot_to_uuid_{s}', None)
+		op('/').store(f'w2td_cam_receiver_addr_{s}', None)
+		op('/').store(f'w2td_web_render_slot_{s}', None)
+		op('/').store(f'w2td_cam_res_logged_{s}', False)
+		op('/').store(f'w2td_screen_{s}', {})
+	print(f'[W2TD] Slot state reset (max {MAX_CLIENTS} slots)')
+
 	t = _op('sensor_table')
 	if t is not None:
 		t.clear()
