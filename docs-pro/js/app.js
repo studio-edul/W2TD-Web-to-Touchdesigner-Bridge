@@ -26,7 +26,9 @@ const W2TD_VERSION = '1.0.0';
 
   function _isTunnelConnection() {
     const addr = (els.tdAddress && els.tdAddress.value || '').toLowerCase();
-    return addr.includes('trycloudflare.com') || addr.includes('cloudflare') || addr.includes('.cfargotunnel.com');
+    // Short tunnel ID (no dot) is also a tunnel connection
+    const noProt = addr.replace(/^(wss?|https?):\/\//, '');
+    return !noProt.includes('.') || addr.includes('trycloudflare.com') || addr.includes('cloudflare') || addr.includes('.cfargotunnel.com');
   }
 
   const $ = (id) => document.getElementById(id);
@@ -490,10 +492,16 @@ const W2TD_VERSION = '1.0.0';
   }
 
   function handleConnect(autoConnect = false) {
-    const addr = els.tdAddress.value.trim();
+    let addr = els.tdAddress.value.trim();
     if (!addr) {
       alert('Please enter the TouchDesigner address.');
       return;
+    }
+
+    // Auto-append .trycloudflare.com if address has no dot (short tunnel ID)
+    const addrNoProt = addr.replace(/^(wss?|https?):\/\//, '');
+    if (!addrNoProt.includes('.')) {
+      addr = addrNoProt + '.trycloudflare.com';
     }
 
     saveSettings();

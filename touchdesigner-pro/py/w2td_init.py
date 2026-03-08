@@ -325,6 +325,8 @@ def generate():
 	op('/').store('w2td_url', url)
 
 	host = url.replace('https://', '').replace('http://', '').strip()
+	# Store short tunnel ID (without .trycloudflare.com) for cleaner display
+	short_host = host.replace('.trycloudflare.com', '') if host.endswith('.trycloudflare.com') else host
 	GITHUB_PAGES_URL = 'https://w2td-pro.studio-edul.com/'
 	qr_url = GITHUB_PAGES_URL + '?td=' + host
 	
@@ -344,8 +346,8 @@ def generate():
 			
 	if parent_comp:
 		try:
-			setattr(parent_comp.par, url_par_name, host)
-			print(f'[W2TD] Target COMP found: {parent_comp.path}, {url_par_name} set to {host}')
+			setattr(parent_comp.par, url_par_name, short_host)
+			print(f'[W2TD] Target COMP found: {parent_comp.path}, {url_par_name} set to {short_host}')
 		except Exception as e:
 			print(f'[W2TD Error] W2TD.par.{url_par_name} set failed on {parent_comp.path}: {e}')
 	else:

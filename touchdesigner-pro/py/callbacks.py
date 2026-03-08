@@ -989,8 +989,10 @@ def onHTTPRequest(webServerDAT, request, response):
 	host = stored_url.replace('https://', '').replace('http://', '').strip()
 	if not host:
 		host = request.get('headers', {}).get('Host', '')
-	print(f'[W2TD] HTTP request -> host: {host}')
-	redirect_url = GITHUB_PAGES_URL + ('?td=' + host if host else '')
+	# Use short tunnel ID (without .trycloudflare.com)
+	short_host = host.replace('.trycloudflare.com', '') if host.endswith('.trycloudflare.com') else host
+	print(f'[W2TD] HTTP request -> host: {short_host}')
+	redirect_url = GITHUB_PAGES_URL + ('?td=' + short_host if short_host else '')
 
 	response['statusCode'] = 200
 	response['statusReason'] = 'OK'
