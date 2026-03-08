@@ -391,7 +391,7 @@ def sync(table_dat=None):
 			pass
 
 	# Clean up slot mappings for disconnected slots
-	for s in range(1, 21):
+	for s in range(1, op('/').fetch('w2td_max_clients', 20) + 1):
 		if s not in slot_list:
 			op('/').store(f'w2td_web_render_slot_{s}', None)
 			op('/').store(f'w2td_cam_res_logged_{s}', False)

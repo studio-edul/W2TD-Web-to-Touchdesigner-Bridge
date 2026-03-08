@@ -190,7 +190,7 @@ def _wt_remove_by_slot(slot):
 
 def _slot_for_conn_id(conn_id):
 	"""Find slot number for a given conn_id from stored mapping."""
-	for slot in range(1, 21):
+	for slot in range(1, op('/').fetch('w2td_max_clients', 20) + 1):
 		stored = op('/').fetch(f'w2td_webrtc_slot_to_uuid_{slot}', None)
 		if stored is not None and str(stored) == str(conn_id):
 			return slot

@@ -71,6 +71,9 @@ def _init_tables():
 		except ValueError:
 			pass
 
+	# Store MAX_CLIENTS globally so other modules can access it
+	op('/').store('w2td_max_clients', MAX_CLIENTS)
+
 	# Reset persistent slot state so new connections start from slot 1
 	op('/').store('w2td_client_slots', {})
 	op('/').store('w2td_free_slots', list(range(1, MAX_CLIENTS + 1)))
