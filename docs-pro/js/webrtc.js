@@ -143,15 +143,36 @@ const WebRTCModule = (() => {
     }
 
     micPc = new RTCPeerConnection(_buildRtcConfig(iceServers, iceTransportPolicy));
-    micStream.getTracks().forEach(track => micPc.addTrack(track, micStream));
 
-    // Pro: Listen for incoming tracks from TD (TD -> Mobile streaming)
+    // Add mic tracks if available, otherwise add recvonly transceiver
+    // so TD can still send audio downlink even when mic is off
+    if (micStream && micStream.getAudioTracks().length > 0) {
+      micStream.getTracks().forEach(track => micPc.addTrack(track, micStream));
+    } else {
+      micPc.addTransceiver('audio', { direction: 'recvonly' });
+      _log('No mic — added recvonly audio transceiver for TD downlink');
+    }
+
+    // Listen for incoming tracks from TD (TD -> Mobile audio/video streaming)
     micPc.ontrack = (event) => {
       const track = event.track;
-      const stream = event.streams[0];
+      const stream = event.streams[0] || new MediaStream([track]);
       _log('Received track from TD: ' + track.kind);
-      if (track.kind === 'audio' || track.kind === 'video') {
-        // Create video element for TD stream (hidden, plays in background)
+
+      if (track.kind === 'audio') {
+        // Audio downlink from TD → dedicated <audio> element
+        let audioEl = document.getElementById('webrtc-td-audio');
+        if (!audioEl) {
+          audioEl = document.createElement('audio');
+          audioEl.id = 'webrtc-td-audio';
+          audioEl.autoplay = true;
+          audioEl.playsInline = true;
+          document.body.appendChild(audioEl);
+        }
+        audioEl.srcObject = stream;
+        audioEl.play().catch(e => console.warn('[W2TD WebRTC] TD audio play failed:', e));
+      } else if (track.kind === 'video') {
+        // Video downlink from TD → background <video> element
         let videoEl = document.getElementById('webrtc-td-stream');
         if (!videoEl) {
           videoEl = document.createElement('video');
@@ -169,7 +190,7 @@ const WebRTCModule = (() => {
           document.body.appendChild(videoEl);
         }
         videoEl.srcObject = stream;
-        videoEl.play().catch(e => console.warn('[W2TD WebRTC] TD stream play failed:', e));
+        videoEl.play().catch(e => console.warn('[W2TD WebRTC] TD video play failed:', e));
       }
     };
 

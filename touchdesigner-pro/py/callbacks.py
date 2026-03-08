@@ -1,5 +1,4 @@
 import json
-import os
 import time
 
 W2TD_VERSION = '1.0.0'
@@ -9,7 +8,6 @@ ACK_INTERVAL = 1.0  # seconds between data_ack signals per slot
 
 W2TD_BASE = 'W2TD_Pro'
 W2TD_AUDIO = f'{W2TD_BASE}/webrtc_audio_container'
-AUDIO_EXTS = {'.mp3', '.wav', '.ogg', '.m4a', '.aac'}
 
 
 def _w2td_base():
@@ -402,78 +400,6 @@ def init_tables():
 	else:
 		print('[W2TD Error] webrtc_table DAT not found - create a Table DAT named "webrtc_table"')
 
-	_init_audio_table()
-
-
-def _scan_audio_files():
-	"""Scan project audio/ folder and return sorted list of audio filenames."""
-	audio_dir = os.path.join(project.folder, 'audio')
-	if not os.path.isdir(audio_dir):
-		return []
-	files = []
-	for f in os.listdir(audio_dir):
-		ext = os.path.splitext(f)[1].lower()
-		if ext in AUDIO_EXTS:
-			files.append(f)
-	files.sort()
-	return files
-
-
-def _init_audio_table():
-	"""Initialize w2td_audio_table Table DAT.
-	Columns: slot | <filename1> | <filename2> | ...
-	Rows: one per connected slot (from sensor_table), values default to 0.
-	"""
-	at = _op('w2td_audio_table')
-	if at is None:
-		print('[W2TD] w2td_audio_table DAT not found - skipping audio cmd table init')
-		return
-
-	files = _scan_audio_files()
-	at.clear()
-	at.appendRow(['slot'] + files)
-
-	# Add rows for currently connected slots (from sensor_table)
-	t = _op('sensor_table')
-	if t is not None:
-		for r in range(1, t.numRows):
-			try:
-				slot = int(t[r, 'slot'])
-				at.appendRow([slot] + [0] * len(files))
-			except Exception:
-				pass
-
-	print(f'[W2TD] w2td_audio_table initialized ({len(files)} audio files)')
-
-
-def _audio_table_add_slot(slot):
-	"""Add a row for a new slot to w2td_audio_table."""
-	at = _op('w2td_audio_table')
-	if at is None:
-		return
-	# Check if row already exists
-	for r in range(1, at.numRows):
-		try:
-			if int(at[r, 0]) == slot:
-				return
-		except Exception:
-			pass
-	num_files = max(0, at.numCols - 1)
-	at.appendRow([slot] + [0] * num_files)
-
-
-def _audio_table_remove_slot(slot):
-	"""Remove the row for a slot from w2td_audio_table."""
-	at = _op('w2td_audio_table')
-	if at is None:
-		return
-	for r in range(1, at.numRows):
-		try:
-			if int(at[r, 0]) == slot:
-				at.deleteRow(r)
-				return
-		except Exception:
-			pass
 
 
 def _config_val(cfg, *keys, default=0):
@@ -778,57 +704,6 @@ def send_bg_color_to_all(webServerDAT, color, duration=0):
 	return count
 
 
-def send_play_sound_to_client(webServerDAT, slot, filename, startTime=None):
-	"""Pro: Trigger audio playback on a specific client.
-	
-	Args:
-		webServerDAT: Web Server DAT operator
-		slot: Client slot number (int)
-		filename: Audio filename (e.g., 'synth.mp3', 'drop.wav')
-			File must be in touchdesigner/audio/ directory
-		startTime: Optional scheduled start time in milliseconds (for synchronization)
-			If None, plays immediately
-	
-	Usage in TD:
-		op('web_server_dat').module.send_play_sound_to_client(op('web_server_dat'), 1, 'synth.mp3')
-		op('web_server_dat').module.send_play_sound_to_all(op('web_server_dat'), 'drop.wav')
-	"""
-	addr = _addr_for_slot(slot)
-	if addr is None:
-		print(f'[W2TD Pro Error] No client found for slot {slot}')
-		return False
-	
-	try:
-		msg = {'type': 'play_sound', 'filename': filename}
-		if startTime is not None:
-			msg['startTime'] = int(startTime)
-		webServerDAT.webSocketSendText(addr, json.dumps(msg))
-		print(f'[W2TD Pro] Sent play_sound {filename} to slot {slot}' + (f' (startTime={startTime}ms)' if startTime else ''))
-		return True
-	except Exception as e:
-		print(f'[W2TD Pro Error] play_sound send failed for slot {slot}: {e}')
-		return False
-
-
-def send_play_sound_to_all(webServerDAT, filename, startTime=None):
-	"""Pro: Trigger audio playback on all connected clients.
-
-	Args:
-		webServerDAT: Web Server DAT operator
-		filename: Audio filename
-		startTime: Optional scheduled start time in milliseconds
-
-	Usage in TD:
-		op('web_server_dat').module.send_play_sound_to_all(op('web_server_dat'), 'drop.wav')
-	"""
-	msg = {'type': 'play_sound', 'filename': filename}
-	if startTime is not None:
-		msg['startTime'] = int(startTime)
-	count = _broadcast_msg(webServerDAT, json.dumps(msg))
-	print(f'[W2TD Pro] Sent play_sound {filename} to {count} clients')
-	return count
-
-
 def send_flashlight_to_client(webServerDAT, slot, state):
 	"""Pro: Toggle flashlight (torch) on/off for a specific client.
 	
@@ -914,22 +789,9 @@ def send_heartbeat(webServerDAT, slot=None):
 
 
 def onHTTPRequest(webServerDAT, request, response):
-	"""Serve cam_receiver.html locally; serve audio files from audio/ directory; redirect all other requests to GitHub Pages."""
+	"""Serve cam_receiver.html locally; redirect all other requests to GitHub Pages."""
 	uri = request.get('uri', '/')
 	method = request.get('method', 'GET').upper()
-
-	# Handle CORS preflight OPTIONS request
-	if method == 'OPTIONS':
-		response['statusCode'] = 204
-		response['statusReason'] = 'No Content'
-		response['headers'] = {
-			'Access-Control-Allow-Origin': '*',
-			'Access-Control-Allow-Methods': 'GET, OPTIONS',
-			'Access-Control-Allow-Headers': '*',
-			'Access-Control-Max-Age': '86400',
-		}
-		response['data'] = ''
-		return response
 
 	# Serve cam_receiver.html for Web Render TOP (served from Text DAT - no external file needed)
 	if uri.startswith('/cam_receiver.html'):
@@ -945,59 +807,6 @@ def onHTTPRequest(webServerDAT, request, response):
 			response['data'] = '<html><body>cam_receiver_html DAT not found in W2TD</body></html>'
 			print('[W2TD Error] cam_receiver_html Text DAT not found - create a Text DAT named "cam_receiver_html" inside W2TD')
 		return response
-
-	# Pro: Serve audio files from touchdesigner/audio/ directory
-	if uri.startswith('/audio/'):
-		filename = uri.replace('/audio/', '').strip('/')
-		if not filename or '..' in filename or '/' in filename:
-			response['statusCode'] = 400
-			response['statusReason'] = 'Bad Request'
-			response['data'] = 'Invalid filename'
-			return response
-		
-		# Get project folder path
-		proj_path = project.folder
-		audio_path = os.path.join(proj_path, 'audio', filename)
-		
-		if not os.path.exists(audio_path) or not os.path.isfile(audio_path):
-			response['statusCode'] = 404
-			response['statusReason'] = 'Not Found'
-			response['data'] = f'Audio file not found: {filename}'
-			print(f'[W2TD Pro] Audio file not found: {audio_path}')
-			return response
-		
-		try:
-			with open(audio_path, 'rb') as f:
-				audio_data = f.read()
-			
-			# Determine content type from extension
-			ext = os.path.splitext(filename)[1].lower()
-			content_types = {
-				'.mp3': 'audio/mpeg',
-				'.wav': 'audio/wav',
-				'.ogg': 'audio/ogg',
-				'.m4a': 'audio/mp4',
-				'.aac': 'audio/aac',
-			}
-			content_type = content_types.get(ext, 'application/octet-stream')
-			
-			response['statusCode'] = 200
-			response['statusReason'] = 'OK'
-			response['headers'] = {
-				'Content-Type': content_type,
-				'Content-Length': str(len(audio_data)),
-				'Cache-Control': 'public, max-age=3600',
-				'Access-Control-Allow-Origin': '*',
-			}
-			response['data'] = audio_data
-			print(f'[W2TD Pro] Served audio: {filename} ({len(audio_data)} bytes)')
-			return response
-		except Exception as e:
-			response['statusCode'] = 500
-			response['statusReason'] = 'Internal Server Error'
-			response['data'] = f'Error reading audio file: {e}'
-			print(f'[W2TD Pro Error] Audio serve error: {e}')
-			return response
 
 	stored_url = op('/').fetch('w2td_url', '')
 	host = stored_url.replace('https://', '').replace('http://', '').strip()
@@ -1076,8 +885,6 @@ def onWebSocketClose(webServerDAT, client):
 		row = _find_row(t, slot)
 		if row is not None:
 			t.deleteRow(row)
-
-	_audio_table_remove_slot(slot)
 
 	tt = _op('touch_table')
 	if tt is not None:
@@ -1217,7 +1024,6 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			names = _client_names()
 			client_name = names.get(slot, f'Slot {slot}')
 			t2.appendRow([slot, 1, client_name] + [0.0] * (len(SENSOR_COLS) - 3))
-		_audio_table_add_slot(slot)
 		print(f'[W2TD] Connected -> slot {slot} | {addr} | {len(slots)}/{MAX_CLIENTS} active')
 		op('/').store(f'w2td_last_seen_{slot}', time.time())
 		try:

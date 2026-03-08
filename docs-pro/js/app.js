@@ -352,11 +352,6 @@ const W2TD_VERSION = '1.0.0';
     if (typeof WebRTCModule !== 'undefined' && WebRTCModule.setOnLog) {
       WebRTCModule.setOnLog((msg) => addLog('WebRTC ' + msg, 'info'));
     }
-    // Pro: Initialize AudioModule and unlock on first user interaction
-    if (typeof AudioModule !== 'undefined') {
-      document.addEventListener('touchstart', () => AudioModule.unlock(), { once: true });
-      document.addEventListener('click', () => AudioModule.unlock(), { once: true });
-    }
     renderSensorList();
     SensorModule.setDebugCallback((msg) => updateDebug(msg));
 
@@ -517,11 +512,6 @@ const W2TD_VERSION = '1.0.0';
         if (status === 'connected') {
           WSClient.send({ type: 'hello' });
           addLog('Hello sent to TD', 'info');
-          // Set audio base URL to TD server (audio files are served from TD, not Cloudflare)
-          if (typeof AudioModule !== 'undefined') {
-            const httpBase = (window.location.protocol === 'https:' ? 'https://' : 'http://') + addr.replace(/^(wss?|https?):\/\//, '');
-            AudioModule.setBaseUrl(httpBase + '/audio/');
-          }
           if (SensorModule.isEnabled() && WSClient.isConnected()) {
             _startDataBroadcast();
           }
@@ -605,24 +595,6 @@ const W2TD_VERSION = '1.0.0';
           }, duration);
         }
       },
-      // Pro: Audio playback trigger
-      onPlaySound: (filename, startTime) => {
-        if (typeof AudioModule === 'undefined') return; // Pro feature check
-        const options = {};
-        if (startTime !== undefined && startTime > 0) {
-          options.startTime = startTime / 1000; // convert ms to seconds
-        }
-        AudioModule.play(filename, options).then(success => {
-          if (success) {
-            addLog(`Audio: ${filename}`, 'info');
-          } else {
-            const err = AudioModule.getLastError ? AudioModule.getLastError() : 'unknown';
-            addLog(`Audio failed: ${filename} (${err})`, 'warn');
-          }
-        }).catch(e => {
-          addLog(`Audio error: ${filename} (${e.message || e})`, 'error');
-        });
-      },
       // Pro: Flashlight control
       onFlashlight: (state) => {
         addLog(`Flashlight signal received: state=${state}`, 'info');
@@ -688,7 +660,7 @@ const W2TD_VERSION = '1.0.0';
   }
 
   async function _maybeStartWebRTC() {
-    if (!WSClient.isConnected() || !micEnabled || !SensorModule.isEnabled() ||
+    if (!WSClient.isConnected() || !SensorModule.isEnabled() ||
       WebRTCModule.isPCActive() || !broadcasting) return;
     if (_isTunnelConnection()) {
       // Warning removed since TURN server is now built-in

@@ -5,7 +5,7 @@ Called from DAT Execute DAT on webrtc_table change.
 Nodes under W2TD/webrtc_audio_container (relative path).
 """
 
-W2TD_BASE = 'W2TD'
+W2TD_BASE = 'W2TD_Pro'
 W2TD_AUDIO = f'{W2TD_BASE}/webrtc_audio_container'
 
 
@@ -176,8 +176,53 @@ def _set_audio_chop_params(chop, conn_id):
 	return False
 
 
+def _get_audio_bus():
+	"""Find w2td_audio_bus CHOP (input audio bus for TX routing)."""
+	c = _w2td_audio()
+	if c:
+		bus = c.op('w2td_audio_bus')
+		if bus:
+			return bus
+	# Search in parent W2TD base
+	for proj in ('project1', 'project'):
+		bus = op(f'{proj}/{W2TD_BASE}/w2td_audio_bus')
+		if bus:
+			return bus
+	return op('w2td_audio_bus')
+
+
+def _set_audio_out_params(chop, conn_id):
+	"""Set WebRTC parameters for Audio Stream Out CHOP (TX: TD -> mobile)."""
+	webrtc = _get_webrtc()
+	if webrtc is None:
+		return
+	# WebRTC DAT
+	for par_name in ('webrtc', 'Webrtc'):
+		if hasattr(chop.par, par_name):
+			try:
+				setattr(chop.par, par_name, webrtc)
+				break
+			except Exception:
+				pass
+	# WebRTC Connection (conn_id)
+	for par_name in ('webrtcconnection', 'Webrtcconnection', 'connection', 'Connection'):
+		if hasattr(chop.par, par_name):
+			try:
+				setattr(chop.par, par_name, conn_id)
+				break
+			except Exception as e:
+				print(f'[W2TD WebRTC Sync TX] Error Set {par_name} failed: {e}')
+	# Active/Play = 1
+	for par_name in ('active', 'Active', 'play', 'Play'):
+		if hasattr(chop.par, par_name):
+			try:
+				setattr(chop.par, par_name, 1)
+			except Exception:
+				pass
+
+
 def sync():
-	"""Sync with webrtc_table: create/remove Audio Stream In CHOPs, update Merge inputs."""
+	"""Sync with webrtc_table: create/remove Audio Stream In CHOPs (RX) and Audio Stream Out CHOPs (TX)."""
 	container = _get_container()
 	merge_chop = _get_merge()
 	if container is None:
@@ -286,9 +331,125 @@ def sync():
 						pass
 
 	if rows:
-		print(f'[W2TD WebRTC Sync] {len(rows)} audio chops synced')
+		print(f'[W2TD WebRTC Sync RX] {len(rows)} audio stream in chops synced')
 	else:
-		print('[W2TD WebRTC Sync] No connections - all audio chops removed')
+		print('[W2TD WebRTC Sync RX] No connections - all audio stream in chops removed')
+
+	# ── TX: Audio Stream Out (TD -> Mobile) ─────────────────────────────────
+	# Only runs if w2td_audio_bus CHOP exists (optional feature)
+	audio_bus = _get_audio_bus()
+	if audio_bus is None:
+		return
+
+	w2td_audio_c = _w2td_audio()
+	if w2td_audio_c is None:
+		return
+
+	# Build target slot set from connected rows
+	active_slots = set()
+	slot_to_conn = {}
+	for slot, conn_id, _ in rows:
+		active_slots.add(slot)
+		slot_to_conn[slot] = conn_id
+
+	# Find existing TX nodes (select_slot* and webrtc_audio_out_*)
+	existing_selects = {}
+	existing_outs = {}
+	for child in w2td_audio_c.children:
+		if child.name.startswith('select_slot') and child.name[11:].isdigit():
+			existing_selects[int(child.name[11:])] = child
+		elif child.name.startswith('webrtc_audio_out_') and child.name[17:].isdigit():
+			existing_outs[int(child.name[17:])] = child
+
+	# Remove stale TX nodes for disconnected slots
+	stale_slots = (set(existing_selects.keys()) | set(existing_outs.keys())) - active_slots
+	for slot in stale_slots:
+		sel = existing_selects.get(slot)
+		out = existing_outs.get(slot)
+		if sel:
+			try:
+				sel.destroy()
+				print(f'[W2TD WebRTC Sync TX] Destroyed select_slot{slot}')
+			except Exception as e:
+				print(f'[W2TD WebRTC Sync TX] Error Destroy select_slot{slot}: {e}')
+		if out:
+			try:
+				out.destroy()
+				print(f'[W2TD WebRTC Sync TX] Destroyed webrtc_audio_out_{slot}')
+			except Exception as e:
+				print(f'[W2TD WebRTC Sync TX] Error Destroy webrtc_audio_out_{slot}: {e}')
+
+	# Create/update TX nodes for active slots
+	TX_BASE_X = 400
+	TX_OFFSET_Y = 150
+	tx_count = 0
+	for idx, slot in enumerate(sorted(active_slots)):
+		conn_id = slot_to_conn[slot]
+		select_name = f'select_slot{slot}'
+		out_name = f'webrtc_audio_out_{slot}'
+
+		# Select CHOP: select channel slotN from w2td_audio_bus
+		sel = existing_selects.get(slot) or w2td_audio_c.op(select_name)
+		if sel is None:
+			try:
+				sel = w2td_audio_c.create('selectCHOP', select_name)
+				print(f'[W2TD WebRTC Sync TX] Created {select_name}')
+			except Exception as e:
+				print(f'[W2TD WebRTC Sync TX] Error Create {select_name}: {e}')
+				continue
+		# Set select CHOP input to audio_bus
+		try:
+			sel.setInputs([audio_bus])
+		except Exception:
+			try:
+				sel.inputConnectors[0].connect(audio_bus)
+			except Exception:
+				pass
+		# Set channel name to select
+		chan_name = f'slot{slot}'
+		for par_name in ('channames', 'Channames', 'channame', 'Channame'):
+			if hasattr(sel.par, par_name):
+				try:
+					setattr(sel.par, par_name, chan_name)
+					break
+				except Exception:
+					pass
+		try:
+			sel.nodeX = TX_BASE_X
+			sel.nodeY = -idx * TX_OFFSET_Y
+		except Exception:
+			pass
+
+		# Audio Stream Out CHOP
+		out = existing_outs.get(slot) or w2td_audio_c.op(out_name)
+		if out is None:
+			try:
+				out = w2td_audio_c.create('audiostreamoutCHOP', out_name)
+				print(f'[W2TD WebRTC Sync TX] Created {out_name}')
+			except Exception as e:
+				print(f'[W2TD WebRTC Sync TX] Error Create {out_name}: {e}')
+				continue
+		# Connect select -> audio out
+		try:
+			out.setInputs([sel])
+		except Exception:
+			try:
+				out.inputConnectors[0].connect(sel)
+			except Exception:
+				pass
+		try:
+			out.nodeX = TX_BASE_X + 300
+			out.nodeY = -idx * TX_OFFSET_Y
+		except Exception:
+			pass
+		# Set WebRTC connection params
+		_set_audio_out_params(out, conn_id)
+		tx_count += 1
+
+	if tx_count:
+		print(f'[W2TD WebRTC Sync TX] {tx_count} audio stream out chops synced')
+	elif active_slots:
+		print('[W2TD WebRTC Sync TX] Warning: active slots but no TX chops created')
 
 
 def onTableChange(dat, prevDAT, info):
