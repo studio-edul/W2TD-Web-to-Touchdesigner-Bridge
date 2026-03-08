@@ -249,6 +249,23 @@ const WebRTCModule = (() => {
     console.log('[W2TD WebRTC] Mic disconnected (stream kept)');
   }
 
+  /** Renegotiate: create new offer on existing micPc to pick up TD's new audio tracks. */
+  async function renegotiate() {
+    if (!micPc || micPc.connectionState === 'closed') {
+      _log('Renegotiate: no active PC');
+      return;
+    }
+    try {
+      const offer = await micPc.createOffer();
+      await micPc.setLocalDescription(offer);
+      const sent = WSClient.send({ type: 'webrtc_reoffer', sdp: offer.sdp });
+      _log(sent ? 'Renegotiation offer sent to TD' : 'Renegotiation offer FAILED — WS not connected');
+    } catch (e) {
+      console.error('[W2TD WebRTC] renegotiate failed:', e);
+      _log('Renegotiate failed: ' + (e.message || e));
+    }
+  }
+
   async function handleAnswer(sdp) {
     if (!micPc) return;
     try {
@@ -581,7 +598,7 @@ const WebRTCModule = (() => {
 
   return {
     // Mic
-    acquireMic, start, stop, disconnect,
+    acquireMic, start, stop, disconnect, renegotiate,
     handleAnswer, handleIce,
     onStateChange,
     isMicActive: () => micActive,

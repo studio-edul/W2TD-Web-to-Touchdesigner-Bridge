@@ -76,6 +76,23 @@ def _get_webrtc():
 	return op('webrtc_dat')
 
 
+def _get_web_server():
+	"""Find Web Server DAT for sending WebSocket messages."""
+	c = _w2td_audio()
+	if c:
+		# Go up to W2TD base
+		base = c.parent()
+		if base:
+			ws = base.op('web_server_dat')
+			if ws:
+				return ws
+	for proj in ('project1', 'project'):
+		ws = op(f'{proj}/{W2TD_BASE}/web_server_dat')
+		if ws:
+			return ws
+	return op('web_server_dat')
+
+
 def _get_table():
 	c = _w2td_audio()
 	if c:
@@ -196,6 +213,18 @@ def _set_audio_out_params(chop, conn_id):
 	webrtc = _get_webrtc()
 	if webrtc is None:
 		return
+	# Protocol/Mode → WebRTC (default is RTSP, must change)
+	for par_name in ('protocol', 'Protocol', 'mode', 'Mode'):
+		if hasattr(chop.par, par_name):
+			try:
+				setattr(chop.par, par_name, 'webrtc')
+				break
+			except Exception:
+				try:
+					setattr(chop.par, par_name, 'WebRTC')
+					break
+				except Exception:
+					pass
 	# WebRTC DAT
 	for par_name in ('webrtc', 'Webrtc'):
 		if hasattr(chop.par, par_name):
@@ -380,7 +409,7 @@ def sync():
 				print(f'[W2TD WebRTC Sync TX] Error Destroy webrtc_audio_out_{slot}: {e}')
 
 	# Create/update TX nodes for active slots
-	TX_BASE_X = 400
+	TX_BASE_X = 1000
 	TX_OFFSET_Y = 150
 	tx_count = 0
 	for idx, slot in enumerate(sorted(active_slots)):
@@ -448,6 +477,19 @@ def sync():
 
 	if tx_count:
 		print(f'[W2TD WebRTC Sync TX] {tx_count} audio stream out chops synced')
+		# Send renegotiate signal to each active slot so browser creates new offer
+		# with TD's audio tracks included in the SDP negotiation
+		import json
+		ws = _get_web_server()
+		if ws:
+			for slot in sorted(active_slots):
+				addr = op('/').fetch(f'w2td_webrtc_addr_{slot_to_conn[slot]}', None)
+				if addr:
+					try:
+						ws.webSocketSendText(addr, json.dumps({'type': 'webrtc_renegotiate'}))
+						print(f'[W2TD WebRTC Sync TX] Sent renegotiate to slot {slot}')
+					except Exception as e:
+						print(f'[W2TD WebRTC Sync TX] Error sending renegotiate to slot {slot}: {e}')
 	elif active_slots:
 		print('[W2TD WebRTC Sync TX] Warning: active slots but no TX chops created')
 
