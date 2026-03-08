@@ -916,6 +916,20 @@ def send_heartbeat(webServerDAT, slot=None):
 def onHTTPRequest(webServerDAT, request, response):
 	"""Serve cam_receiver.html locally; serve audio files from audio/ directory; redirect all other requests to GitHub Pages."""
 	uri = request.get('uri', '/')
+	method = request.get('method', 'GET').upper()
+
+	# Handle CORS preflight OPTIONS request
+	if method == 'OPTIONS':
+		response['statusCode'] = 204
+		response['statusReason'] = 'No Content'
+		response['headers'] = {
+			'Access-Control-Allow-Origin': '*',
+			'Access-Control-Allow-Methods': 'GET, OPTIONS',
+			'Access-Control-Allow-Headers': '*',
+			'Access-Control-Max-Age': '86400',
+		}
+		response['data'] = ''
+		return response
 
 	# Serve cam_receiver.html for Web Render TOP (served from Text DAT - no external file needed)
 	if uri.startswith('/cam_receiver.html'):
