@@ -12,7 +12,7 @@ Setup in TD:
 """
 NODE_OFFSET_Y = 100
 # Square side per Resolution config: Non-Commercial(960), FHD(1920)
-_CAM_TOP_DIM_MAP = {'non-commercial': 960, 'fhd': 1920}
+_CAM_TOP_DIM_MAP = {'non-commercial': 1280, 'fhd': 1920}
 
 
 def _find_config():
@@ -66,7 +66,7 @@ def _read_config_values():
 					pass
 	except Exception:
 		pass
-	dim = _CAM_TOP_DIM_MAP.get(res_key, 960)
+	dim = _CAM_TOP_DIM_MAP.get(res_key, 1280)
 	return res_key, dim, screenmode
 
 
@@ -391,7 +391,7 @@ def sync(table_dat=None):
 			pass
 
 	# Clean up slot mappings for disconnected slots
-	for s in range(1, 21):
+	for s in range(1, op('/').fetch('w2td_max_clients', 20) + 1):
 		if s not in slot_list:
 			op('/').store(f'w2td_web_render_slot_{s}', None)
 			op('/').store(f'w2td_cam_res_logged_{s}', False)

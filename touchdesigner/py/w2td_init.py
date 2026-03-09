@@ -62,6 +62,35 @@ SENSOR_COLS = [
 MAX_CLIENTS = 20
 
 def _init_tables():
+	global MAX_CLIENTS
+	cfg = _read_config()
+	val = cfg.get('Maxclients') or cfg.get('maxclients') or cfg.get('max_clients')
+	if val:
+		try:
+			MAX_CLIENTS = max(1, int(val))
+		except ValueError:
+			pass
+
+	# Store MAX_CLIENTS globally so other modules can access it
+	op('/').store('w2td_max_clients', MAX_CLIENTS)
+
+	# Reset persistent slot state so new connections start from slot 1
+	op('/').store('w2td_client_slots', {})
+	op('/').store('w2td_free_slots', list(range(1, MAX_CLIENTS + 1)))
+	op('/').store('w2td_touch_count', {})
+	op('/').store('w2td_client_names', {})
+	op('/').store('w2td_pending_cam_offers', {})
+	op('/').store('w2td_pending_cam_ice', {})
+	for s in range(1, MAX_CLIENTS + 1):
+		op('/').store(f'w2td_last_seen_{s}', 0)
+		op('/').store(f'w2td_last_ack_{s}', 0)
+		op('/').store(f'w2td_webrtc_slot_to_uuid_{s}', None)
+		op('/').store(f'w2td_cam_receiver_addr_{s}', None)
+		op('/').store(f'w2td_web_render_slot_{s}', None)
+		op('/').store(f'w2td_cam_res_logged_{s}', False)
+		op('/').store(f'w2td_screen_{s}', {})
+	print(f'[W2TD] Slot state reset (max {MAX_CLIENTS} slots)')
+
 	t = _op('sensor_table')
 	if t is not None:
 		t.clear()
@@ -282,6 +311,8 @@ def generate():
 	op('/').store('w2td_url', url)
 
 	host = url.replace('https://', '').replace('http://', '').strip()
+	# Store short tunnel ID (without .trycloudflare.com) for cleaner display
+	short_host = host.replace('.trycloudflare.com', '') if host.endswith('.trycloudflare.com') else host
 	GITHUB_PAGES_URL = 'https://w2td.studio-edul.com/'
 	qr_url = GITHUB_PAGES_URL + '?td=' + host
 	
@@ -301,8 +332,8 @@ def generate():
 			
 	if parent_comp:
 		try:
-			setattr(parent_comp.par, url_par_name, host)
-			print(f'[W2TD] Target COMP found: {parent_comp.path}, {url_par_name} set to {host}')
+			setattr(parent_comp.par, url_par_name, short_host)
+			print(f'[W2TD] Target COMP found: {parent_comp.path}, {url_par_name} set to {short_host}')
 		except Exception as e:
 			print(f'[W2TD Error] W2TD.par.{url_par_name} set failed on {parent_comp.path}: {e}')
 	else:

@@ -1,6 +1,6 @@
 # W2TD (Web-to-TouchDesigner Bridge) 개발 문서
 
-> 최종 업데이트: 2026-03-07 (Custom TURN 서버 설정 추가 및 개선)
+> 최종 업데이트: 2026-03-09 (WebRTC 오디오 다운링크 추가, 해상도 업데이트)
 > 목적: 추후 세션에서 파일 위치·구현 방식을 빠르게 파악하기 위한 참고 문서
 
 ---
@@ -11,10 +11,15 @@
 
 ```
 Mobile Browser (GitHub Pages HTTPS)
-  └─ WebSocket (wss://)
-       └─ cloudflared 터널 (https://xxxx.trycloudflare.com)
-            └─ TD Web Server DAT (port 9980, TLS OFF)
-                 └─ callbacks.py → sensor_table / touch_table
+  ├─ WebSocket (wss://)
+  │    └─ cloudflared 터널 (https://xxxx.trycloudflare.com)
+  │         └─ TD Web Server DAT (port 9980, TLS OFF)
+  │              └─ callbacks.py → sensor_table / touch_table
+  │
+  └─ WebRTC (P2P)
+       ├─ 마이크 업링크: 모바일 → micPc → TD WebRTC DAT → Audio Stream In CHOP
+       ├─ 오디오 다운링크: TD Audio Stream Out CHOP → micPc → 모바일 <audio> 재생
+       └─ 카메라: 모바일 → camPc → Web Render TOP (cam_receiver.html)
 ```
 
 ---
@@ -98,32 +103,61 @@ op('w2td_setup').module.install()
 
 ```
 Integrated-Web-to-TouchDesigner-Bridge/
-├── docs/                          ← GitHub Pages 배포 (HTTPS)
-│   ├── index.html                 ← HTML 뼈대 + 스크립트 로드 순서
-│   ├── css/
-│   │   └── style.css              ← 다크 테마, 모바일 최적화 CSS
+├── docs/                          ← GitHub Pages 배포 (HTTPS) — Non-Commercial 버전
+│   ├── index.html
+│   ├── css/style.css
 │   └── js/
 │       ├── websocket.js           ← WebSocket 연결 관리
 │       ├── sensors.js             ← 센서 감지·권한·데이터 수집
 │       ├── touch.js               ← 멀티터치 추적·정규화
 │       ├── visualization.js       ← Canvas 스파크라인 그래프 + 터치 시각화
-│       ├── webrtc.js              ← WebRTC 피어 연결·마이크 스트림
+│       ├── webrtc.js              ← WebRTC 피어 연결·마이크·오디오 수신
 │       └── app.js                 ← 전체 조율 컨트롤러 (메인 앱)
 │
-├── touchdesigner/
-│   ├── py/
-│   │   ├── callbacks.py           ← TD Web Server DAT 콜백 (메인)
-│   │   ├── w2td_init.py            ← TD Execute DAT onStart: cloudflared 터널 + QR 코드
-│   │   ├── w2td_setup.py           ← 최초 1회 pip 패키지 설치
-│   │   ├── webrtc_callbacks.py    ← TD WebRTC DAT 콜백 (마이크 시그널링)
-│   │   ├── config_watch.py        ← w2td_config 변경 시 자동 브로드캐스트
-│   │   ├── cam_render_sync.py     ← Web Render TOP 동기화 (sensor_table 기반)
-│   │   └── webrtc_table_sync.py   ← Audio Stream In CHOP 동기화
-│   ├── cam_receiver.html          ← Web Render TOP용 카메라 수신 페이지 (TD 로컬 서빙)
-│   └── position_estimator.py      ← 상대 위치 추정 (선택사항, numpy 필요)
+├── docs-pro/                      ← Pro 버전 웹 파일
+│   ├── index.html
+│   ├── css/style.css
+│   └── js/
+│       ├── websocket.js           ← WebSocket (haptic, bg_color, flashlight 콜백 추가)
+│       ├── sensors.js
+│       ├── touch.js
+│       ├── visualization.js
+│       ├── webrtc.js              ← WebRTC + handleOffer (TD-initiated 오디오 다운링크)
+│       ├── audio.js               ← (레거시 — 현재 미사용, WebRTC로 대체)
+│       └── app.js                 ← Pro 기능 포함 (배경색, 플래시라이트 등)
 │
-├── DEV_DOCS.md                    ← 이 파일
-└── MEMORY.md                      ← Claude 자동 기억 파일
+├── touchdesigner/
+│   └── py/
+│       ├── callbacks.py
+│       ├── w2td_init.py
+│       ├── w2td_setup.py
+│       ├── webrtc_callbacks.py
+│       ├── config_watch.py
+│       ├── cam_render_sync.py
+│       └── webrtc_table_sync.py
+│
+├── touchdesigner-pro/
+│   └── py/
+│       ├── callbacks.py           ← Pro 콜백 (webrtc_reanswer 핸들러, 오디오 트랙 자동선택)
+│       ├── w2td_init.py
+│       ├── webrtc_callbacks.py    ← WebRTC DAT 콜백 (onOffer 포함 — TD-initiated offer 전송)
+│       ├── config_watch.py        ← w2td_config 변경 감지 (해상도 1280/1920 매핑)
+│       ├── cam_render_sync.py     ← Web Render TOP 동기화 (해상도 1280/1920 매핑)
+│       ├── webrtc_table_sync.py   ← Audio Stream In/Out CHOP 동기화 + TD-initiated createOffer
+│       ├── haptic_chop_exec.py
+│       ├── background_chop_exec.py
+│       ├── flashlight_chop_exec.py
+│       ├── update_execs.py
+│       └── w2td_zombie_checker.py
+│
+├── development/
+│   ├── DEV_DOCS.md                ← 이 파일
+│   ├── WEBRTC_PLAN.md
+│   ├── webrtc-slot-audio-streaming-guide.md  ← WebRTC 오디오 다운링크 구현 가이드
+│   └── ...
+│
+├── README.md                      ← 영문 README
+└── README_KR.md                   ← 한국어 README
 ```
 
 ### 배포/적용 규칙
@@ -181,7 +215,7 @@ TD의 `w2td_config` Table DAT에서 값을 읽어 연결 시 모바일로 push.
 | `Turnpassword` | (없음) | TURN 비밀번호 |
 | `ice_transport_policy` | (없음) | `relay` = TURN만 사용 (터널/다른 네트워크 시 강제) |
 | `max_clients` | 20 | 최대 접속 수 |
-| `Resolution` | Non-Commercial | 카메라 해상도: `Non-Commercial`(540×960), `FHD`(1920×1080), `4K`(3840×2160) |
+| `Resolution` | Non-Commercial | 카메라 해상도: `Non-Commercial`(720×1280), `FHD`(1080×1920) |
 | `Screenmode` | Portrait | 카메라 방향: `Portrait`(세로), `Landscape`(가로) |
 
 ---
@@ -257,12 +291,20 @@ TD WebSocket 연결 관리. IIFE 패턴.
 **메시지 라우팅** (onmessage 내부)
 
 ```
-msg.type === 'ack'            → onStatusChange('connected')
-msg.type === 'config'         → onConfig(msg)
-msg.type === 'webrtc_answer'  → onWebRTCSignal(msg)
-msg.type === 'webrtc_ice'     → onWebRTCSignal(msg)
-msg.type === 'webrtc_state'   → onWebRTCSignal(msg)
-msg.type === 'rejected'       → onStatusChange('rejected'), 재연결 중단
+msg.type === 'ack'                → onStatusChange('connected')
+msg.type === 'config'             → onConfig(msg)
+msg.type === 'webrtc_answer'      → onWebRTCSignal(msg)
+msg.type === 'webrtc_offer'       → onWebRTCSignal(msg)  ← TD-initiated 오디오 다운링크
+msg.type === 'webrtc_ice'         → onWebRTCSignal(msg)
+msg.type === 'webrtc_state'       → onWebRTCSignal(msg)
+msg.type === 'webrtc_renegotiate' → onWebRTCSignal(msg)
+msg.type === 'webrtc_answer_cam'  → onWebRTCSignal(msg)
+msg.type === 'webrtc_ice_cam'     → onWebRTCSignal(msg)
+msg.type === 'cam_receiver_ready' → onWebRTCSignal(msg)
+msg.type === 'haptic'             → onHaptic(msg)
+msg.type === 'bg_color'           → onBgColor(msg)  (Pro)
+msg.type === 'flashlight'         → onFlashlight(msg)  (Pro)
+msg.type === 'rejected'           → onStatusChange('rejected'), 재연결 중단
 ```
 
 ---
@@ -349,7 +391,7 @@ Canvas 2D 렌더링. 두 가지 기능:
 WebRTC 피어 연결 관리. 시그널링은 기존 WebSocket 재활용.
 
 **카메라 해상도/화면모드**: config의 `camera_resolution`, `camera_screenmode`로 제어.
-- Resolution: `Non-Commercial`(540×960), `FHD`(1920×1080), `4K`(3840×2160)
+- Resolution: `Non-Commercial`(720×1280), `FHD`(1080×1920)
 - Screenmode: `Portrait`(세로), `Landscape`(가로) — Portrait일 때 height > width
 
 **ICE 서버**: Google STUN × 2 + openrelay.metered.ca TURN (무료)
@@ -361,13 +403,15 @@ WebRTC 피어 연결 관리. 시그널링은 기존 WebSocket 재활용.
 | `start({camera, mic})` | getUserMedia → RTCPeerConnection → offer 전송. 실패 시 `false` 반환 |
 | `stop()` | 스트림 해제 + PC 닫기 |
 | `handleAnswer(sdp)` | TD에서 온 answer 처리 |
+| `handleOffer(sdp)` | TD-initiated offer 처리 (오디오 다운링크 재협상) → answer 자동 전송 |
 | `handleIce({candidate, sdpMLineIndex, sdpMid})` | TD에서 온 ICE candidate 처리 |
+| `renegotiate()` | 기존 PC에서 createOffer 재실행 (브라우저-initiated, 현재 미사용) |
 | `onStateChange(fn)` | state 변화 콜백 등록. state: `connecting|connected|failed|closed` |
 | `isMicActive()` | 마이크 스트림 활성 여부 |
-| `isCameraActive()` | 카메라 스트림 활성 여부 |
+| `isPCActive()` | RTCPeerConnection 존재 여부 (마이크 OFF여도 PC 활성 가능) |
 | `getLastError()` | getUserMedia 실패 시 에러명 (e.g. `NotAllowedError`) |
 
-**시그널링 흐름 (마이크 활성화)**
+**시그널링 흐름 (마이크 업링크)**
 
 ```
 모바일 click Microphone
@@ -379,6 +423,21 @@ WebRTC 피어 연결 관리. 시그널링은 기존 WebSocket 재활용.
   → 모바일: handleAnswer → setRemoteDescription
   → ICE 교환 (webrtc_ice 양방향)
   → WebRTC P2P 연결 완료
+```
+
+**시그널링 흐름 (TD → 모바일 오디오 다운링크)**
+
+```
+WebRTC 연결 완료 후 webrtc_table 갱신
+  → webrtc_table_sync.py sync() 호출
+  → Select CHOP + Audio Stream Out CHOP 자동 생성
+  → TD: webrtcDAT.createOffer(conn_id)    ← delayFrames=3
+  → TD: webrtc_callbacks.onOffer → webSocketSendText({ type:'webrtc_offer', sdp })
+  → 모바일: handleOffer → setRemoteDescription + createAnswer
+  → 모바일: WSClient.send({ type:'webrtc_reanswer', sdp })
+  → TD: callbacks.py webrtc_reanswer 핸들러 → setRemoteDescription
+  → TD: _auto_select_tx_track() → Audio Stream Out CHOP WebRTC Track 자동 선택
+  → 모바일: ontrack 이벤트 → <audio> 엘리먼트 생성 → 재생
 ```
 
 ---
@@ -458,6 +517,7 @@ TD의 Web Server DAT에 등록되는 메인 처리 파일.
 | `client_name` | 기기명 수신 → sensor_table `name` + webrtc_table `name` 업데이트 |
 | `screen_info` | 화면 해상도 수신 → sensor_table (css/physical/screen/dpr) + `w2td_screen_{slot}` 저장 |
 | `webrtc_offer` | `webrtc_dat.openConnection` + `setRemoteDescription` + `createAnswer` + webrtc_table 행 추가 |
+| `webrtc_reanswer` | TD-initiated offer에 대한 answer → `setRemoteDescription` + Audio Stream Out CHOP WebRTC Track 자동 선택 |
 | `webrtc_ice` | `webrtc_dat.addIceCandidate` |
 | `webrtc_offer_cam` | 카메라 offer → cam_receiver로 relay (`cam_offer`) |
 | `webrtc_ice_cam` | 카메라 ICE → cam_receiver로 relay (`cam_ice`) |
@@ -608,6 +668,7 @@ op('w2td_setup').module.install()
 
 | 함수 | 역할 |
 |---|---|
+| `onOffer` | TD-initiated offer → setLocalDescription + WebSocket으로 offer 전송 (오디오 다운링크 재협상) |
 | `onAnswer` | setLocalDescription + WebSocket으로 answer 전송 |
 | `onIceCandidate` | ICE candidate를 WebSocket으로 모바일에 전달 |
 | `onConnectionStateChange` | 상태 변화 → webrtc_table `state` 컬럼 업데이트. failed/closed 시 모바일에 알림. connected 시 `webrtc_audio_1` 자동 연결 |
@@ -679,6 +740,7 @@ subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'certifi', 'qrcod
 { "type": "client_name", "name": "iPhone 15 Pro" }
 { "type": "screen_info", "width": 390, "height": 844, "physicalWidth": 1179, "physicalHeight": 2556, "screenWidth": 390, "screenHeight": 844, "devicePixelRatio": 3.0 }
 { "type": "webrtc_offer", "sdp": "..." }
+{ "type": "webrtc_reanswer", "sdp": "..." }
 { "type": "webrtc_ice", "candidate": "...", "sdpMLineIndex": 0, "sdpMid": "0" }
 { "type": "webrtc_offer_cam", "sdp": "...", "camType": "rear" }
 { "type": "webrtc_ice_cam", "candidate": "...", "sdpMLineIndex": 0, "sdpMid": "0", "camType": "rear" }
@@ -697,6 +759,7 @@ subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'certifi', 'qrcod
   "audio_echo_cancellation": 0, "audio_noise_suppression": 0, "audio_auto_gain": 0,
   "camera_resolution": "Non-Commercial", "camera_screenmode": "Portrait" }
 { "type": "webrtc_answer", "sdp": "..." }
+{ "type": "webrtc_offer", "sdp": "..." }
 { "type": "webrtc_ice", "candidate": "...", "sdpMLineIndex": 0, "sdpMid": "0" }
 { "type": "webrtc_answer_cam", "sdp": "...", "camType": "rear" }
 { "type": "webrtc_ice_cam", "candidate": "...", "sdpMLineIndex": 0, "sdpMid": "0", "camType": "rear" }
@@ -704,6 +767,8 @@ subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'certifi', 'qrcod
 { "type": "data_ack" }
 { "type": "haptic", "pattern": [200, 100, 200] }
 { "type": "haptic", "state": 1 }
+{ "type": "bg_color", "color": "#FF0000", "duration": 100 }
+{ "type": "flashlight", "state": 1 }
 { "type": "pong" }
 ```
 
@@ -854,6 +919,33 @@ TD callbacks.py:
 ### 센서 목록에 새 항목 추가하기
 
 `app.js` `renderSensorList()` 내부에서 `els.sensorList.appendChild(li)` 패턴 따라 추가. CSS 클래스: `available selected/deselected` 또는 `unavailable`.
+
+---
+
+## 14-1. WebRTC 오디오 다운링크 (TD → 모바일) 추가하기
+
+TD에서 모바일로 실시간 오디오를 스트리밍하는 기능. `w2td_audio_bus` CHOP의 슬롯별 채널을 개별 모바일 기기에 전송.
+
+**필요 TD 노드:**
+
+| 노드 이름 | 타입 | 용도 |
+|---|---|---|
+| `w2td_audio_bus` | Constant CHOP | 채널: `slot1`, `slot2`, ... — 슬롯별 오디오 신호 입력 |
+| `webrtc_audio_container` | Base COMP | RX/TX CHOP 자동 생성 컨테이너 (webrtc_table_sync.py가 관리) |
+
+**자동 생성되는 노드 (webrtc_table_sync.py):**
+
+| 노드 | 타입 | 설명 |
+|---|---|---|
+| `select_slot{N}` | Select CHOP | `w2td_audio_bus`에서 `slotN` 채널만 선택 |
+| `webrtc_audio_out_{N}` | Audio Stream Out CHOP | WebRTC 모드, 해당 conn_id에 연결 |
+
+**핵심 개념:**
+- Select CHOP은 `w2td_audio_bus`의 모든 채널 중 해당 슬롯 채널만 골라서 전달 → 각 클라이언트가 자신의 채널만 수신
+- Audio Stream Out CHOP은 기본 RTSP 모드 → 반드시 `webrtc` 모드로 설정
+- TD가 새 트랙(Audio Stream Out)을 추가하면 TD가 `createOffer` 호출해야 함 (브라우저는 TD의 새 트랙을 모름)
+- `createOffer` 전에 `delayFrames=3`으로 CHOP이 cook될 시간 확보
+- `webrtc_reanswer` 수신 후 `delayFrames=2`로 WebRTC Track 메뉴 갱신 대기 → 자동 선택
 
 ---
 
@@ -1029,7 +1121,35 @@ micEnabled=false → 탭 → ENABLE 경로  (start + getUserMedia)
 - 슬롯별로 추정기 자동 생성
 - 위치 리셋: `op('/').fetch('w2td_relative_position_estimators', {}).get(1).reset_position()`
 
-### 19-2. `touchdesigner/py/config_watch.py`
+### 19-2. `touchdesigner/py/webrtc_table_sync.py` — WebRTC CHOP 동기화
+
+`webrtc_table` 변경 시 Audio Stream In/Out CHOP을 자동 생성·삭제·연결하는 스크립트.
+
+**설정:**
+1. DAT Execute DAT 생성
+2. "DATs" 파라미터를 `webrtc_table`로 설정
+3. "Table Change" 체크박스 활성화
+4. `webrtc_table_sync.py` 내용 연결
+
+**RX (수신) 기능:**
+- `webrtc_table`의 슬롯별로 Audio Stream In CHOP 자동 생성 (`webrtc_audio_container` 내)
+- WebRTC DAT + connection 파라미터 자동 설정
+- 연결 끊긴 슬롯의 CHOP 자동 삭제
+
+**TX (송신) 기능 — 오디오 다운링크:**
+- `w2td_audio_bus` CHOP이 존재하면 활성화 (없으면 TX 건너뜀)
+- 슬롯별 Select CHOP 생성: `w2td_audio_bus`에서 해당 슬롯 채널만 선택 (`slot1`, `slot2`, ...)
+- 슬롯별 Audio Stream Out CHOP 생성: WebRTC 모드, 해당 connection에 연결
+- Select CHOP → Audio Stream Out CHOP 자동 와이어링
+- 새로 생성된 Audio Stream Out CHOP에 대해 TD-initiated `createOffer` 호출 (delayFrames=3)
+- 연결 끊긴 슬롯의 TX 노드 자동 삭제
+
+**TD에서 오디오 다운링크 사용법:**
+1. `w2td_audio_bus` Constant CHOP 생성 (채널명: `slot1`, `slot2`, ...)
+2. 오디오 신호를 해당 채널에 연결
+3. 모바일이 WebRTC로 연결되면 자동으로 TX 노드 생성 + 오디오 스트리밍 시작
+
+### 19-3. `touchdesigner/py/config_watch.py`
 
 `w2td_config` Table DAT 변경 시 자동으로 config를 브로드캐스트합니다.
 

@@ -301,14 +301,14 @@ def _handle_cam_receiver_msg(webServerDAT, addr, msg):
 				top = op(path)
 				if top:
 					try:
-						_dim_map = {'non-commercial': 960, 'fhd': 1920}
+						_dim_map = {'non-commercial': 1280, 'fhd': 1920}
 						cfg = _read_config()
 						res_key = 'non-commercial'
 						for _k, _v in cfg.items():
 							if _k.lower() == 'resolution':
 								res_key = _v.strip().lower()
 								break
-						sq = _dim_map.get(res_key, 960)
+						sq = _dim_map.get(res_key, 1280)
 						top.par.outputresolution = 'custom'
 						top.par.resolutionw = sq
 						top.par.resolutionh = sq

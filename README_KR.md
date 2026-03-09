@@ -8,7 +8,9 @@
 [모바일 브라우저] ──WebSocket (WSS)──> [Cloudflare 터널] ──> [TouchDesigner Web Server DAT]
   GitHub Pages (HTTPS)                                         포트 9980 (TLS OFF)
 
-[모바일 카메라/마이크] ──WebRTC (P2P)──> [TouchDesigner WebRTC DAT / Web Render TOP]
+[모바일 마이크]    ──WebRTC (P2P)──> [TD WebRTC DAT] ──> Audio Stream In CHOP
+[TD 오디오 출력]   ──WebRTC (P2P)──> [모바일 브라우저] ──> <audio> 재생
+[모바일 카메라]    ──WebRTC (P2P)──> [TD Web Render TOP] (cam_receiver.html)
 ```
 
 모바일에서 인증서 설정이나 별도 서버 없이 바로 연결됩니다.
@@ -135,7 +137,8 @@ pip install qrcode pillow pycloudflared
 - `w2td_init.py`가 Cloudflare 터널 시작 → 공개 주소 `wss://xxxx.trycloudflare.com`
 - QR 코드는 `https://studio-edul.github.io/Integrated-Web-to-TouchDesigner-Bridge/?td=xxxx.trycloudflare.com` 인코딩
 - 모바일이 GitHub Pages에 직접 접속 → Cloudflare 터널 경유 WebSocket 연결
-- 마이크: WebRTC offer/answer → `webrtc_dat` → Audio Stream In CHOP
+- 마이크 업링크: WebRTC offer/answer → `webrtc_dat` → Audio Stream In CHOP
+- 오디오 다운링크: TD Audio Stream Out CHOP → WebRTC 재협상 → 모바일 `<audio>` 재생
 - 카메라: WebRTC 릴레이 → `web_render_top` (cam_receiver.html)
 
 ### callbacks.py 리로드 후 상태 유지
@@ -156,6 +159,8 @@ pip install qrcode pillow pycloudflared
 
 { "type": "trigger", "value": 1 }   // 버튼 누르는 중(1) / 뗌(0)
 
+{ "type": "webrtc_reanswer", "sdp": "..." }  // TD-initiated offer에 대한 answer (오디오 다운링크)
+
 { "type": "ping" }                   // 하트비트 (5초마다)
 ```
 
@@ -168,6 +173,8 @@ pip install qrcode pillow pycloudflared
 
 { "type": "haptic", "pattern": [200, 100, 200] }   // 진동 패턴
 { "type": "haptic", "state": 1 }                   // 지속 진동 on/off
+
+{ "type": "webrtc_offer", "sdp": "..." }      // TD-initiated offer (오디오 다운링크 재협상)
 
 { "type": "data_ack" }    // 데이터 수신 확인
 { "type": "pong" }        // 하트비트 응답
@@ -199,7 +206,8 @@ op('web_server_dat').module.broadcast_haptic_from_chop(op('web_server_dat'))
 - GPS (위도/경도)
 - **트리거 버튼** — hold 기반 (누르는 동안 1, 뗄 때 0)
 - **햅틱 피드백** — 패턴 또는 지속 진동, TD CHOP으로 제어
-- **마이크** — WebRTC → Audio Stream In CHOP
+- **마이크** — WebRTC → Audio Stream In CHOP (업링크)
+- **오디오 다운링크** — TD Audio Stream Out CHOP → WebRTC → 모바일 스피커 (슬롯별 라우팅, `w2td_audio_bus`)
 - **카메라** — WebRTC → Web Render TOP (후면/전면, 기기당 상호 배타)
 - **WebSocket 하트비트** — 연결 유지 + 자동 재연결
 - **Data Ack** — TD 수신 확인 시각 피드백
@@ -217,26 +225,40 @@ op('web_server_dat').module.broadcast_haptic_from_chop(op('web_server_dat'))
 ## 프로젝트 구조
 
 ```
-docs/                    ← GitHub Pages (웹 앱)
+docs/                        ← GitHub Pages (웹 앱, Non-Commercial)
   index.html
   js/
-    app.js               ← 앱 메인 컨트롤러
-    sensors.js           ← 센서 감지, 권한
-    websocket.js         ← WebSocket 클라이언트, 하트비트, 재연결
-    webrtc.js            ← WebRTC (마이크 + 카메라)
-    touch.js             ← 터치 이벤트 처리
-    visualization.js     ← Canvas 스파크라인 렌더러
+    app.js                   ← 앱 메인 컨트롤러
+    sensors.js               ← 센서 감지, 권한
+    websocket.js             ← WebSocket 클라이언트, 하트비트, 재연결
+    webrtc.js                ← WebRTC (마이크 + 카메라 + 오디오 다운링크)
+    touch.js                 ← 터치 이벤트 처리
+    visualization.js         ← Canvas 스파크라인 렌더러
 
-touchdesigner/
-  callbacks.py           ← Web Server DAT 콜백 (모든 WebSocket 로직)
-  w2td_init.py           ← Execute DAT (Cloudflare 터널, QR, 테이블 초기화)
-  webrtc_callbacks.py    ← WebRTC DAT 콜백
-  config_watch.py        ← w2td_config 변경 감지 자동 브로드캐스트
-  haptic_chop_exec.py    ← CHOP 기반 햅틱 Execute DAT 헬퍼
-  cam_receiver.html      ← 로컬 서빙; Web Render TOP에서 카메라 수신
+docs-pro/                    ← Pro 버전 웹 앱
+  js/
+    app.js                   ← Pro 기능 (배경색, 플래시라이트 등)
+    webrtc.js                ← + handleOffer (TD-initiated 오디오 다운링크)
+    websocket.js             ← + haptic, bg_color, flashlight 콜백
+    ...
+
+touchdesigner/py/            ← Non-Commercial TD 스크립트
+  callbacks.py               ← Web Server DAT 콜백
+  w2td_init.py               ← Execute DAT (Cloudflare 터널, QR, 테이블 초기화)
+  webrtc_callbacks.py        ← WebRTC DAT 콜백
+  webrtc_table_sync.py       ← Audio Stream In/Out CHOP 동기화 + TD createOffer
+  config_watch.py            ← w2td_config 변경 감지 자동 브로드캐스트
+  cam_render_sync.py         ← Web Render TOP 동기화
+  cam_receiver.html          ← 카메라 수신 (Web Render TOP)
+
+touchdesigner-pro/py/        ← Pro 버전 TD 스크립트
+  callbacks.py               ← + webrtc_reanswer 핸들러, 오디오 트랙 자동 선택
+  webrtc_callbacks.py        ← + onOffer (TD-initiated offer 전송)
+  webrtc_table_sync.py       ← + TX 라우팅 (Select CHOP → Audio Stream Out)
+  ...
 ```
 
-> **워크플로우:** `docs/` 파일만 GitHub에 push합니다. Python 파일은 TD에서 직접 적용 (파일 수정 시 DAT 자동 업데이트).
+> **워크플로우:** `docs/`, `docs-pro/` 파일만 GitHub에 push합니다. Python 파일은 TD에서 직접 적용.
 
 ---
 

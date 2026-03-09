@@ -8,7 +8,9 @@ Stream mobile browser sensors, audio, and camera to TouchDesigner in real time v
 [Mobile Browser] ──WebSocket (WSS)──> [Cloudflare Tunnel] ──> [TouchDesigner Web Server DAT]
   GitHub Pages (HTTPS)                                            Port 9980 (TLS OFF)
 
-[Mobile Camera/Mic] ──WebRTC (P2P)──> [TouchDesigner WebRTC DAT / Web Render TOP]
+[Mobile Mic]    ──WebRTC (P2P)──> [TD WebRTC DAT] ──> Audio Stream In CHOP
+[TD Audio Out]  ──WebRTC (P2P)──> [Mobile Browser] ──> <audio> playback
+[Mobile Camera] ──WebRTC (P2P)──> [TD Web Render TOP] (cam_receiver.html)
 ```
 
 No custom server or certificate setup required on mobile.
@@ -58,7 +60,7 @@ Create a Table DAT named `w2td_config` to override defaults without editing code
 | `Turnserver` | _(optional)_ | Custom TURN server URL (e.g., `turn:global.relay.metered.ca:80`) |
 | `Turnusername` | _(optional)_ | TURN username |
 | `Turnpassword` | _(optional)_ | TURN password |
-| `Resolution` | `Non-Commercial` | Camera: `Non-Commercial` (960×960), `FHD` (1920×1920) |
+| `Resolution` | `Non-Commercial` | Camera: `Non-Commercial` (1280×1280), `FHD` (1920×1920) |
 | `Screenmode` | `Portrait` | Camera: `Portrait` (세로), `Landscape` (가로) |
 
 #### w2td_init.py (Execute DAT)
@@ -137,7 +139,8 @@ Copy `touchdesigner/py/callbacks.py` into the Web Server DAT's Callbacks Script 
 - `w2td_init.py` starts a Cloudflare tunnel → public `wss://xxxx.trycloudflare.com`
 - QR code encodes `https://studio-edul.github.io/Integrated-Web-to-TouchDesigner-Bridge/?td=xxxx.trycloudflare.com`
 - Mobile opens GitHub Pages directly — WebSocket connects via Cloudflare tunnel
-- Mic audio: WebRTC offer/answer via WebSocket → `webrtc_dat` → Audio Stream In CHOP
+- Mic audio (uplink): WebRTC offer/answer via WebSocket → `webrtc_dat` → Audio Stream In CHOP
+- Audio downlink: TD Audio Stream Out CHOP → WebRTC renegotiation → mobile `<audio>` playback
 - Camera: WebRTC relay via WebSocket → `web_render_top` (cam_receiver.html)
 
 ### Persistent state
@@ -158,6 +161,8 @@ Client slot assignments are stored via `op('/').store/fetch` and survive script 
 
 { "type": "trigger", "value": 1 }   // button held (1) or released (0)
 
+{ "type": "webrtc_reanswer", "sdp": "..." }  // answer to TD-initiated offer (audio downlink)
+
 { "type": "ping" }                   // heartbeat (every 5s)
 ```
 
@@ -170,6 +175,8 @@ Client slot assignments are stored via `op('/').store/fetch` and survive script 
 
 { "type": "haptic", "pattern": [200, 100, 200] }   // vibration pattern
 { "type": "haptic", "state": 1 }                   // continuous vibration on/off
+
+{ "type": "webrtc_offer", "sdp": "..." }      // TD-initiated offer (audio downlink renegotiation)
 
 { "type": "data_ack" }    // confirms sensor/touch data received
 { "type": "pong" }        // heartbeat response
@@ -201,7 +208,8 @@ op('web_server_dat').module.broadcast_haptic_from_chop(op('web_server_dat'))
 - GPS (latitude / longitude)
 - **Trigger button** — hold-based (1 while held, 0 on release)
 - **Haptic feedback** — pattern-based or continuous, driven by TD CHOP
-- **Microphone** — WebRTC → Audio Stream In CHOP
+- **Microphone** — WebRTC → Audio Stream In CHOP (uplink)
+- **Audio downlink** — TD Audio Stream Out CHOP → WebRTC → mobile speaker (per-slot routing via `w2td_audio_bus`)
 - **Camera** — WebRTC → Web Render TOP (rear/front, mutually exclusive per device)
 - **WebSocket Heartbeat** — auto-reconnect on connection loss
 - **Data Ack** — visual confirmation of TD reception
@@ -219,29 +227,40 @@ op('web_server_dat').module.broadcast_haptic_from_chop(op('web_server_dat'))
 ## Project Structure
 
 ```
-docs/                    ← GitHub Pages (web app)
+docs/                        ← GitHub Pages (web app, Non-Commercial)
   index.html
   js/
-    app.js               ← Main app controller
-    sensors.js           ← Sensor detection, permissions
-    websocket.js         ← WebSocket client, heartbeat, reconnect
-    webrtc.js            ← WebRTC (mic + camera)
-    touch.js             ← Touch event handling
-    visualization.js     ← Canvas sparkline renderer
+    app.js                   ← Main app controller
+    sensors.js               ← Sensor detection, permissions
+    websocket.js             ← WebSocket client, heartbeat, reconnect
+    webrtc.js                ← WebRTC (mic + camera + audio downlink)
+    touch.js                 ← Touch event handling
+    visualization.js         ← Canvas sparkline renderer
 
-touchdesigner/
-  py/
-    callbacks.py         ← Web Server DAT callbacks (all WebSocket logic)
-    w2td_init.py         ← Execute DAT (Cloudflare tunnel, QR, table init)
-    webrtc_callbacks.py  ← WebRTC DAT callbacks
-    config_watch.py      ← DAT Execute (auto-broadcast on w2td_config change)
-    webrtc_table_sync.py ← DAT Execute (Audio CHOP sync from webrtc_table)
-    cam_render_sync.py   ← DAT Execute (Web Render TOP sync from sensor_table)
-    haptic_chop_exec.py  ← Execute DAT helper for CHOP-driven haptic
-  cam_receiver.html      ← Served locally; loaded in Web Render TOP for camera
+docs-pro/                    ← Pro version web app
+  js/
+    app.js                   ← Pro features (bg color, flashlight, etc.)
+    webrtc.js                ← + handleOffer (TD-initiated audio downlink)
+    websocket.js             ← + haptic, bg_color, flashlight callbacks
+    ...
+
+touchdesigner/py/            ← Non-Commercial TD scripts
+  callbacks.py               ← Web Server DAT callbacks
+  w2td_init.py               ← Execute DAT (Cloudflare tunnel, QR, table init)
+  webrtc_callbacks.py        ← WebRTC DAT callbacks
+  webrtc_table_sync.py       ← Audio Stream In/Out CHOP sync + TD createOffer
+  config_watch.py            ← Auto-broadcast on w2td_config change
+  cam_render_sync.py         ← Web Render TOP sync
+  cam_receiver.html          ← Camera receiver (Web Render TOP)
+
+touchdesigner-pro/py/        ← Pro version TD scripts
+  callbacks.py               ← + webrtc_reanswer handler, auto track select
+  webrtc_callbacks.py        ← + onOffer (TD-initiated offer sending)
+  webrtc_table_sync.py       ← + TX routing (Select CHOP → Audio Stream Out)
+  ...
 ```
 
-> **Workflow:** Only `docs/` files are pushed to GitHub. Python files are applied directly in TD.
+> **Workflow:** Only `docs/` and `docs-pro/` files are pushed to GitHub. Python files are applied directly in TD.
 
 ---
 
