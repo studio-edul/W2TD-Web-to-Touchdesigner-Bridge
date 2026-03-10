@@ -60,6 +60,45 @@ const WebRTCModule = (() => {
     console.log('[W2TD WebRTC]', msg);
   }
 
+  /**
+   * Enhance Opus codec parameters in SDP for better audio quality.
+   * Sets higher bitrate, enables forward error correction (FEC),
+   * and disables discontinuous transmission (DTX) to reduce crackling.
+   */
+  function _enhanceOpusSdp(sdp) {
+    if (!sdp) return sdp;
+    // Find the Opus payload type from rtpmap line
+    const opusMatch = sdp.match(/a=rtpmap:(\d+)\s+opus\/48000/i);
+    if (!opusMatch) return sdp;
+    const pt = opusMatch[1];
+    // Look for existing fmtp line for this payload type
+    const fmtpRegex = new RegExp(`a=fmtp:${pt}\\s+(.*)`, 'i');
+    const fmtpMatch = sdp.match(fmtpRegex);
+    const opusParams = {
+      'maxaveragebitrate': '64000',   // 64kbps (default ~32kbps)
+      'useinbandfec': '1',            // Forward Error Correction
+      'usedtx': '0',                  // Disable discontinuous TX (prevents silent gaps)
+    };
+    if (fmtpMatch) {
+      // Parse existing params and merge
+      const existing = fmtpMatch[1];
+      const parts = existing.split(';').map(s => s.trim());
+      const paramMap = {};
+      parts.forEach(p => {
+        const [k, v] = p.split('=');
+        if (k) paramMap[k.trim()] = v ? v.trim() : '';
+      });
+      Object.assign(paramMap, opusParams);
+      const newFmtp = `a=fmtp:${pt} ` + Object.entries(paramMap).map(([k, v]) => `${k}=${v}`).join(';');
+      sdp = sdp.replace(fmtpRegex, newFmtp);
+    } else {
+      // No fmtp line exists — add one after the rtpmap line
+      const newFmtp = `a=fmtp:${pt} ` + Object.entries(opusParams).map(([k, v]) => `${k}=${v}`).join(';');
+      sdp = sdp.replace(opusMatch[0], opusMatch[0] + '\r\n' + newFmtp);
+    }
+    return sdp;
+  }
+
   function _logCamResolution(stream, label) {
     const track = stream && stream.getVideoTracks()[0];
     if (!track) return;
@@ -171,6 +210,15 @@ const WebRTCModule = (() => {
         }
         audioEl.srcObject = stream;
         audioEl.play().catch(e => console.warn('[W2TD WebRTC] TD audio play failed:', e));
+        // Set jitter buffer hint on audio receiver for smoother playback
+        try {
+          const receivers = micPc.getReceivers();
+          const audioRecv = receivers.find(r => r.track && r.track.kind === 'audio');
+          if (audioRecv && 'playoutDelayHint' in audioRecv) {
+            audioRecv.playoutDelayHint = 0.15; // 150ms buffer to absorb jitter
+            _log('Audio receiver playoutDelayHint set to 150ms');
+          }
+        } catch (e) { /* playoutDelayHint not supported */ }
       } else if (track.kind === 'video') {
         // Video downlink from TD → background <video> element
         let videoEl = document.getElementById('webrtc-td-stream');
@@ -222,8 +270,9 @@ const WebRTCModule = (() => {
 
     try {
       const offer = await micPc.createOffer();
-      await micPc.setLocalDescription(offer);
-      const sent = WSClient.send({ type: 'webrtc_offer', sdp: offer.sdp });
+      const enhancedOffer = _enhanceOpusSdp(offer.sdp);
+      await micPc.setLocalDescription({ type: 'offer', sdp: enhancedOffer });
+      const sent = WSClient.send({ type: 'webrtc_offer', sdp: enhancedOffer });
       _log(sent ? 'Mic offer sent to TD' : 'Mic offer FAILED — WebSocket not connected');
     } catch (e) {
       console.error('[W2TD WebRTC] mic createOffer failed:', e);
@@ -290,9 +339,11 @@ const WebRTCModule = (() => {
     try {
       await micPc.setRemoteDescription({ type: 'offer', sdp });
       const answer = await micPc.createAnswer();
-      await micPc.setLocalDescription(answer);
-      const sent = WSClient.send({ type: 'webrtc_reanswer', sdp: answer.sdp });
-      _log(sent ? 'TD offer handled, answer sent' : 'TD offer handled but answer FAILED — WS not connected');
+      // Enhance Opus parameters for better audio quality before setting local description
+      const enhancedSdp = _enhanceOpusSdp(answer.sdp);
+      await micPc.setLocalDescription({ type: 'answer', sdp: enhancedSdp });
+      const sent = WSClient.send({ type: 'webrtc_reanswer', sdp: enhancedSdp });
+      _log(sent ? 'TD offer handled, answer sent (Opus enhanced)' : 'TD offer handled but answer FAILED — WS not connected');
     } catch (e) {
       console.error('[W2TD WebRTC] handleOffer failed:', e);
       _log('handleOffer failed: ' + (e.message || e));

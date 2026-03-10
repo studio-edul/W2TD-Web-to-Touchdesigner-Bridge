@@ -241,6 +241,14 @@ def _set_audio_out_params(chop, conn_id):
 				break
 			except Exception as e:
 				print(f'[W2TD WebRTC Sync TX] Error Set {par_name} failed: {e}')
+	# Sample Rate = 48000 (WebRTC Opus native rate — reduces resampling artifacts)
+	for par_name in ('rate', 'Rate', 'samplerate', 'Samplerate'):
+		if hasattr(chop.par, par_name):
+			try:
+				setattr(chop.par, par_name, 48000)
+				break
+			except Exception:
+				pass
 	# Active/Play = 1
 	for par_name in ('active', 'Active', 'play', 'Play'):
 		if hasattr(chop.par, par_name):

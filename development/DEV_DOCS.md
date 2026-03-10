@@ -1,6 +1,6 @@
 # W2TD (Web-to-TouchDesigner Bridge) 개발 문서
 
-> 최종 업데이트: 2026-03-09 (WebRTC 오디오 다운링크 추가, 해상도 업데이트)
+> 최종 업데이트: 2026-03-10 (addTrack() 수정, cam_receiver 해상도 오버레이, 무료 버전 인프라 동기화)
 > 목적: 추후 세션에서 파일 위치·구현 방식을 빠르게 파악하기 위한 참고 문서
 
 ---
@@ -431,6 +431,7 @@ WebRTC 피어 연결 관리. 시그널링은 기존 WebSocket 재활용.
 WebRTC 연결 완료 후 webrtc_table 갱신
   → webrtc_table_sync.py sync() 호출
   → Select CHOP + Audio Stream Out CHOP 자동 생성
+  → TD: webrtcDAT.addTrack(conn_id, 'audio_out_{slot}', 'audio')
   → TD: webrtcDAT.createOffer(conn_id)    ← delayFrames=3
   → TD: webrtc_callbacks.onOffer → webSocketSendText({ type:'webrtc_offer', sdp })
   → 모바일: handleOffer → setRemoteDescription + createAnswer
@@ -668,10 +669,10 @@ op('w2td_setup').module.install()
 
 | 함수 | 역할 |
 |---|---|
-| `onOffer` | TD-initiated offer → setLocalDescription + WebSocket으로 offer 전송 (오디오 다운링크 재협상) |
+| `onOffer` | TD-initiated offer (addTrack 후) → setLocalDescription + WebSocket으로 offer 전송 |
 | `onAnswer` | setLocalDescription + WebSocket으로 answer 전송 |
 | `onIceCandidate` | ICE candidate를 WebSocket으로 모바일에 전달 |
-| `onConnectionStateChange` | 상태 변화 → webrtc_table `state` 컬럼 업데이트. failed/closed 시 모바일에 알림. connected 시 `webrtc_audio_1` 자동 연결 |
+| `onConnectionStateChange` | 상태 변화 → webrtc_table `state` 컬럼 업데이트. failed/closed 시 모바일에 알림. connected 시 `webrtc_audio_1` 자동 연결 + TX track 자동 선택 |
 | `onIceConnectionStateChange` | ICE 상태 변화 로그 |
 
 **헬퍼 함수**
@@ -943,9 +944,9 @@ TD에서 모바일로 실시간 오디오를 스트리밍하는 기능. `w2td_au
 **핵심 개념:**
 - Select CHOP은 `w2td_audio_bus`의 모든 채널 중 해당 슬롯 채널만 골라서 전달 → 각 클라이언트가 자신의 채널만 수신
 - Audio Stream Out CHOP은 기본 RTSP 모드 → 반드시 `webrtc` 모드로 설정
-- TD가 새 트랙(Audio Stream Out)을 추가하면 TD가 `createOffer` 호출해야 함 (브라우저는 TD의 새 트랙을 모름)
-- `createOffer` 전에 `delayFrames=3`으로 CHOP이 cook될 시간 확보
-- `webrtc_reanswer` 수신 후 `delayFrames=2`로 WebRTC Track 메뉴 갱신 대기 → 자동 선택
+- **`webrtcDAT.addTrack(conn_id, 'audio_out_{slot}', 'audio')` 호출 필수** — 이 없이는 webrtctrack 메뉴가 비어있음
+- `addTrack()` + `createOffer()` 순서로 호출 (`delayFrames=3`으로 CHOP cook 대기)
+- `webrtc_reanswer` 수신 후 retry 메커니즘 (delayFrames=5, 최대 15회)으로 `webrtctrack = 'audio_out_{slot}'` 자동 선택
 
 ---
 
@@ -1141,7 +1142,7 @@ micEnabled=false → 탭 → ENABLE 경로  (start + getUserMedia)
 - 슬롯별 Select CHOP 생성: `w2td_audio_bus`에서 해당 슬롯 채널만 선택 (`slot1`, `slot2`, ...)
 - 슬롯별 Audio Stream Out CHOP 생성: WebRTC 모드, 해당 connection에 연결
 - Select CHOP → Audio Stream Out CHOP 자동 와이어링
-- 새로 생성된 Audio Stream Out CHOP에 대해 TD-initiated `createOffer` 호출 (delayFrames=3)
+- 새로 생성된 Audio Stream Out CHOP에 대해 `addTrack(conn_id, 'audio_out_{slot}', 'audio')` + `createOffer` 호출 (delayFrames=3)
 - 연결 끊긴 슬롯의 TX 노드 자동 삭제
 
 **TD에서 오디오 다운링크 사용법:**
