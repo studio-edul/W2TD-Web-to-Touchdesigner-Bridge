@@ -110,7 +110,7 @@ def _send_to_client(connectionId, data):
 
 
 def onOffer(webrtcDAT, connectionId, localSdp):
-	"""Called when TD creates a local offer (TD->browser direction, not used in browser->TD flow)."""
+	"""Called when TD creates a local offer (TD->browser direction, for renegotiation after addTrack)."""
 	webrtcDAT.setLocalDescription(connectionId, 'offer', localSdp, stereo=False)
 	_send_to_client(connectionId, {'type': 'webrtc_offer', 'sdp': localSdp})
 
@@ -214,6 +214,34 @@ def _defer_wt_update(webrtcDAT, connectionId, state, slot):
 				print(f'[W2TD WebRTC Error] webrtc_table_sync failed: {e}')
 		if state == 'connected':
 			_auto_select_audio_chop(webrtcDAT, connectionId)
+			# Also auto-select TX track on Audio Stream Out CHOP (retry mechanism)
+			_conn_id = connectionId
+			_wrtcDAT = webrtcDAT
+			_tx_attempt = [0]
+			def _auto_select_tx():
+				_tx_attempt[0] += 1
+				for s in range(1, op('/').fetch('w2td_max_clients', 20) + 1):
+					stored = op('/').fetch(f'w2td_webrtc_slot_to_uuid_{s}', None)
+					if stored is not None and str(stored) == str(_conn_id):
+						out_chop = _op_audio_chop(f'webrtc_audio_out_{s}')
+						if out_chop is None:
+							break
+						track_name = f'audio_out_{s}'
+						for par_name in ('webrtctrack', 'Webrtctrack', 'track', 'Track'):
+							if hasattr(out_chop.par, par_name):
+								p = getattr(out_chop.par, par_name)
+								menus = getattr(p, 'menuNames', []) or []
+								if track_name in menus:
+									setattr(out_chop.par, par_name, track_name)
+									print(f'[W2TD WebRTC] Auto-selected TX track "{track_name}" on webrtc_audio_out_{s} (connected, attempt {_tx_attempt[0]})')
+								elif menus:
+									setattr(out_chop.par, par_name, menus[0])
+									print(f'[W2TD WebRTC] Auto-selected TX track "{menus[0]}" on webrtc_audio_out_{s} (connected, attempt {_tx_attempt[0]})')
+								elif _tx_attempt[0] < 15:
+									run(_auto_select_tx, delayFrames=5, fromOP=_wrtcDAT)
+								break
+						break
+			run(_auto_select_tx, delayFrames=5, fromOP=webrtcDAT)
 
 	run(_do, delayFrames=1, fromOP=webrtcDAT)
 

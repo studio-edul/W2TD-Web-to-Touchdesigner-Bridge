@@ -494,10 +494,13 @@ def sync():
 						cid = _conn_map.get(s)
 						if cid:
 							try:
+								track_name = f'audio_out_{s}'
+								webrtc.addTrack(cid, track_name, 'audio')
+								print(f'[W2TD WebRTC Sync TX] addTrack("{track_name}", audio) for slot {s}')
 								webrtc.createOffer(cid)
 								print(f'[W2TD WebRTC Sync TX] TD createOffer for slot {s}, conn_id={cid}')
 							except Exception as ex:
-								print(f'[W2TD WebRTC Sync TX] createOffer error for slot {s}: {ex}')
+								print(f'[W2TD WebRTC Sync TX] addTrack/createOffer error for slot {s}: {ex}')
 				run(_trigger_offers, delayFrames=3, fromOP=webrtc)
 	elif active_slots:
 		print('[W2TD WebRTC Sync TX] Warning: active slots but no TX chops created')

@@ -16,9 +16,17 @@
     display: block;
   }
   #video-wrap video.hidden { display: none; }
+  #res-overlay {
+    position: fixed; top: 8px; left: 8px;
+    color: #0f0; font: bold 14px monospace;
+    background: rgba(0,0,0,0.6); padding: 4px 8px;
+    border-radius: 4px; z-index: 999;
+    pointer-events: none;
+  }
 </style>
 </head>
 <body>
+<div id="res-overlay">--</div>
 <div id="video-wrap">
   <video id="remote-video-rear" class="hidden" autoplay playsinline muted></video>
   <video id="remote-video-front" class="hidden" autoplay playsinline muted></video>
@@ -72,6 +80,21 @@
 
   const peers = {};
   let ws = null;
+  const resOverlay = document.getElementById('res-overlay');
+  let _lastResW = 0, _lastResH = 0;
+
+  // Poll active video resolution every second and update overlay + notify TD on change
+  setInterval(() => {
+    const v = !videoRear.classList.contains('hidden') ? videoRear
+            : !videoFront.classList.contains('hidden') ? videoFront : null;
+    if (!v || !v.videoWidth || !v.videoHeight) return;
+    const w = v.videoWidth, h = v.videoHeight;
+    resOverlay.textContent = w + 'x' + h;
+    if (w !== _lastResW || h !== _lastResH) {
+      _lastResW = w; _lastResH = h;
+      send({ type: 'cam_resolution', width: w, height: h, slot: mySlot });
+    }
+  }, 1000);
 
   function peerKey(slot, camType) {
     return slot + '_' + (camType || 'rear');

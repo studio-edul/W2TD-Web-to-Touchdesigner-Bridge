@@ -1182,20 +1182,30 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			print(f'[W2TD WebRTC] Reanswer from slot {slot}, conn_id={conn_id} — audio track negotiated')
 			# Auto-select WebRTC Track on Audio Stream Out CHOP after renegotiation
 			_slot = slot
+			_wrtc = wrtc
+			_attempt = [0]
 			def _auto_select_tx_track():
+				_attempt[0] += 1
 				out_chop = _op(f'webrtc_audio_container/webrtc_audio_out_{_slot}')
 				if out_chop is None:
 					return
+				track_name = f'audio_out_{_slot}'
 				for par_name in ('webrtctrack', 'Webrtctrack', 'track', 'Track'):
 					if hasattr(out_chop.par, par_name):
 						p = getattr(out_chop.par, par_name)
-						if hasattr(p, 'menuNames') and p.menuNames:
-							setattr(out_chop.par, par_name, p.menuNames[0])
-							print(f'[W2TD WebRTC] Auto-selected track "{p.menuNames[0]}" on webrtc_audio_out_{_slot}')
+						menus = getattr(p, 'menuNames', []) or []
+						if track_name in menus:
+							setattr(out_chop.par, par_name, track_name)
+							print(f'[W2TD WebRTC] Auto-selected track "{track_name}" on webrtc_audio_out_{_slot} (attempt {_attempt[0]})')
+						elif menus:
+							setattr(out_chop.par, par_name, menus[0])
+							print(f'[W2TD WebRTC] Auto-selected track "{menus[0]}" on webrtc_audio_out_{_slot} (attempt {_attempt[0]})')
+						elif _attempt[0] < 15:
+							run(_auto_select_tx_track, delayFrames=5, fromOP=_wrtc)
 						else:
-							print(f'[W2TD WebRTC] No tracks available yet on webrtc_audio_out_{_slot}')
+							print(f'[W2TD WebRTC] No tracks on webrtc_audio_out_{_slot} after {_attempt[0]} attempts')
 						break
-			run(_auto_select_tx_track, delayFrames=2, fromOP=wrtc)
+			run(_auto_select_tx_track, delayFrames=5, fromOP=wrtc)
 		except Exception as e:
 			print(f'[W2TD WebRTC Error] Reanswer handling error: {e}')
 

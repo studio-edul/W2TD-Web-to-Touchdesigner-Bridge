@@ -140,7 +140,7 @@ Copy `touchdesigner/py/callbacks.py` into the Web Server DAT's Callbacks Script 
 - QR code encodes `https://studio-edul.github.io/Integrated-Web-to-TouchDesigner-Bridge/?td=xxxx.trycloudflare.com`
 - Mobile opens GitHub Pages directly — WebSocket connects via Cloudflare tunnel
 - Mic audio (uplink): WebRTC offer/answer via WebSocket → `webrtc_dat` → Audio Stream In CHOP
-- Audio downlink: TD Audio Stream Out CHOP → WebRTC renegotiation → mobile `<audio>` playback
+- Audio downlink: TD `addTrack()` → `createOffer()` renegotiation → Audio Stream Out CHOP → mobile `<audio>` playback
 - Camera: WebRTC relay via WebSocket → `web_render_top` (cam_receiver.html)
 
 ### Persistent state
@@ -251,7 +251,7 @@ touchdesigner/py/            ← Non-Commercial TD scripts
   webrtc_table_sync.py       ← Audio Stream In/Out CHOP sync + TD createOffer
   config_watch.py            ← Auto-broadcast on w2td_config change
   cam_render_sync.py         ← Web Render TOP sync
-  cam_receiver.html          ← Camera receiver (Web Render TOP)
+  cam_receiver.html          ← Camera receiver (Web Render TOP, resolution overlay)
 
 touchdesigner-pro/py/        ← Pro version TD scripts
   callbacks.py               ← + webrtc_reanswer handler, auto track select

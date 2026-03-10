@@ -138,7 +138,7 @@ pip install qrcode pillow pycloudflared
 - QR 코드는 `https://studio-edul.github.io/Integrated-Web-to-TouchDesigner-Bridge/?td=xxxx.trycloudflare.com` 인코딩
 - 모바일이 GitHub Pages에 직접 접속 → Cloudflare 터널 경유 WebSocket 연결
 - 마이크 업링크: WebRTC offer/answer → `webrtc_dat` → Audio Stream In CHOP
-- 오디오 다운링크: TD Audio Stream Out CHOP → WebRTC 재협상 → 모바일 `<audio>` 재생
+- 오디오 다운링크: TD `addTrack()` → `createOffer()` 재협상 → Audio Stream Out CHOP → 모바일 `<audio>` 재생
 - 카메라: WebRTC 릴레이 → `web_render_top` (cam_receiver.html)
 
 ### callbacks.py 리로드 후 상태 유지
@@ -249,7 +249,7 @@ touchdesigner/py/            ← Non-Commercial TD 스크립트
   webrtc_table_sync.py       ← Audio Stream In/Out CHOP 동기화 + TD createOffer
   config_watch.py            ← w2td_config 변경 감지 자동 브로드캐스트
   cam_render_sync.py         ← Web Render TOP 동기화
-  cam_receiver.html          ← 카메라 수신 (Web Render TOP)
+  cam_receiver.html          ← 카메라 수신 (Web Render TOP, 해상도 오버레이)
 
 touchdesigner-pro/py/        ← Pro 버전 TD 스크립트
   callbacks.py               ← + webrtc_reanswer 핸들러, 오디오 트랙 자동 선택
