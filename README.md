@@ -9,7 +9,8 @@ Stream mobile browser sensors, audio, and camera to TouchDesigner in real time v
   GitHub Pages (HTTPS)                                            Port 9980 (TLS OFF)
 
 [Mobile Mic]    ──WebRTC (P2P)──> [TD WebRTC DAT] ──> Audio Stream In CHOP
-[TD Audio Out]  ──WebRTC (P2P)──> [Mobile Browser] ──> <audio> playback
+[TD Audio Out]  ──WebRTC (P2P)──> [Mobile Browser] ──> <audio> playback   (w2td_audio_bus)
+[TD Video Out]  ──WebRTC (P2P)──> [Mobile Browser] ──> <video> display     (w2td_video_bus)
 [Mobile Camera] ──WebRTC (P2P)──> [TD Web Render TOP] (cam_receiver.html)
 ```
 
@@ -198,6 +199,30 @@ op('web_server_dat').module.send_haptic_to_all(op('web_server_dat'), pattern=[20
 op('web_server_dat').module.broadcast_haptic_from_chop(op('web_server_dat'))
 ```
 
+## TD Background Color API (Pro)
+
+```python
+# Send color to a specific slot
+op('web_server_dat').module.send_bg_color_to_client(op('web_server_dat'), slot=1, color='#ff0000', duration=0)
+
+# Send same color to all devices
+op('web_server_dat').module.send_bg_color_to_all(op('web_server_dat'), color='#ff0000', duration=100)
+```
+
+**CHOP-driven per-slot control (`background_chop_exec.py`):**
+- Create a CHOP Execute DAT, set CHOPs: `w2td_background w2td_bg_color_bus`
+- `w2td_background` — r/g/b channels (single sample) → broadcasts to all devices
+- `w2td_bg_color_bus` — r/g/b channels, N samples where sample index = slot−1 → per-device control
+  - Tip: feed a 1×N color texture through TOP to CHOP directly
+
+## TD Video Downlink (Pro)
+
+Create a TOP named `w2td_video_bus` anywhere in your project.
+When a mobile device connects via WebRTC, `webrtc_table_sync.py` automatically creates a `video_stream_out_{slot}` Video Stream Out TOP and starts streaming.
+
+- dev_mode=1: "TD Stream" button appears on mobile → tap to view fullscreen monitor
+- dev_mode=0: video plays as fullscreen background behind the touch pad
+
 ---
 
 ## Features
@@ -210,7 +235,9 @@ op('web_server_dat').module.broadcast_haptic_from_chop(op('web_server_dat'))
 - **Haptic feedback** — pattern-based or continuous, driven by TD CHOP
 - **Microphone** — WebRTC → Audio Stream In CHOP (uplink)
 - **Audio downlink** — TD Audio Stream Out CHOP → WebRTC → mobile speaker (per-slot routing via `w2td_audio_bus`)
+- **Video downlink** — TD Video Stream Out TOP → WebRTC → mobile `<video>` (source: `w2td_video_bus` TOP; dev_mode=1: monitor overlay, dev_mode=0: fullscreen background)
 - **Camera** — WebRTC → Web Render TOP (rear/front, mutually exclusive per device)
+- **Background color** — per-device control via `w2td_bg_color_bus` CHOP (r/g/b channels, sample index = slot−1) or broadcast via `w2td_background`
 - **WebSocket Heartbeat** — auto-reconnect on connection loss
 - **Data Ack** — visual confirmation of TD reception
 - **Device name** — user-defined or auto-detected from User-Agent

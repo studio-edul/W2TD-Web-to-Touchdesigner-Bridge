@@ -1,6 +1,6 @@
 # W2TD (Web-to-TouchDesigner Bridge) 개발 문서
 
-> 최종 업데이트: 2026-03-10 (addTrack() 수정, cam_receiver 해상도 오버레이, 무료 버전 인프라 동기화)
+> 최종 업데이트: 2026-03-16 (TD→모바일 비디오 다운링크, bg_color 슬롯별 샘플 기반 제어, TD Stream 모니터 UI)
 > 목적: 추후 세션에서 파일 위치·구현 방식을 빠르게 파악하기 위한 참고 문서
 
 ---
@@ -19,6 +19,7 @@ Mobile Browser (GitHub Pages HTTPS)
   └─ WebRTC (P2P)
        ├─ 마이크 업링크: 모바일 → micPc → TD WebRTC DAT → Audio Stream In CHOP
        ├─ 오디오 다운링크: TD Audio Stream Out CHOP → micPc → 모바일 <audio> 재생
+       ├─ 비디오 다운링크: TD Video Stream Out TOP → micPc → 모바일 <video> 재생
        └─ 카메라: 모바일 → camPc → Web Render TOP (cam_receiver.html)
 ```
 
@@ -244,6 +245,11 @@ websocket.js → sensors.js → touch.js → visualization.js → webrtc.js → 
 | `user-start-overlay` | iOS 권한 요청용 TAP TO START 오버레이 |
 | `w2td-loading` | QR 접속 후 config 대기 로딩 화면 |
 | `webrtc-preview` | 카메라 미리보기 video (현재 미사용) |
+| `td-stream-monitor` | TD 비디오 스트림 모니터 오버레이 (dev_mode=1, Pro) |
+| `btn-td-stream` | TD 스트림 모니터 진입 버튼 (비디오 수신 시 자동 표시, dev_mode=1) |
+| `btn-exit-td-stream` | TD 스트림 모니터 나가기 버튼 |
+| `camera-monitor` | 풀스크린 카메라 미리보기 오버레이 (Pro) |
+| `webrtc-td-stream` | TD에서 수신한 video 엘리먼트 (JS로 동적 생성) |
 
 ---
 
@@ -403,10 +409,12 @@ WebRTC 피어 연결 관리. 시그널링은 기존 WebSocket 재활용.
 | `start({camera, mic})` | getUserMedia → RTCPeerConnection → offer 전송. 실패 시 `false` 반환 |
 | `stop()` | 스트림 해제 + PC 닫기 |
 | `handleAnswer(sdp)` | TD에서 온 answer 처리 |
-| `handleOffer(sdp)` | TD-initiated offer 처리 (오디오 다운링크 재협상) → answer 자동 전송 |
+| `handleOffer(sdp)` | TD-initiated offer 처리 (오디오/비디오 다운링크 재협상) → answer 자동 전송 |
 | `handleIce({candidate, sdpMLineIndex, sdpMid})` | TD에서 온 ICE candidate 처리 |
 | `renegotiate()` | 기존 PC에서 createOffer 재실행 (브라우저-initiated, 현재 미사용) |
 | `onStateChange(fn)` | state 변화 콜백 등록. state: `connecting|connected|failed|closed` |
+| `setOnTdVideoTrack(fn)` | TD에서 video track 수신 시 콜백 등록. `fn(videoEl, track)` 형태 |
+| `isTdVideoActive()` | TD video track 수신 중 여부 (`#webrtc-td-stream` 확인) |
 | `isMicActive()` | 마이크 스트림 활성 여부 |
 | `isPCActive()` | RTCPeerConnection 존재 여부 (마이크 OFF여도 PC 활성 가능) |
 | `getLastError()` | getUserMedia 실패 시 에러명 (e.g. `NotAllowedError`) |
@@ -425,20 +433,27 @@ WebRTC 피어 연결 관리. 시그널링은 기존 WebSocket 재활용.
   → WebRTC P2P 연결 완료
 ```
 
-**시그널링 흐름 (TD → 모바일 오디오 다운링크)**
+**시그널링 흐름 (TD → 모바일 오디오/비디오 다운링크)**
 
 ```
 WebRTC 연결 완료 후 webrtc_table 갱신
   → webrtc_table_sync.py sync() 호출
   → Select CHOP + Audio Stream Out CHOP 자동 생성
-  → TD: webrtcDAT.addTrack(conn_id, 'audio_out_{slot}', 'audio')
+  → (w2td_video_bus TOP 존재 시) Video Stream Out TOP 자동 생성
+  → TD: webrtcDAT.addTrack(conn_id, 'audio_out_{slot}', 'audio')  ← 오디오 있을 때
+  → TD: webrtcDAT.addTrack(conn_id, 'video_out_{slot}', 'video')  ← 비디오 있을 때
   → TD: webrtcDAT.createOffer(conn_id)    ← delayFrames=3
   → TD: webrtc_callbacks.onOffer → webSocketSendText({ type:'webrtc_offer', sdp })
   → 모바일: handleOffer → setRemoteDescription + createAnswer
   → 모바일: WSClient.send({ type:'webrtc_reanswer', sdp })
   → TD: callbacks.py webrtc_reanswer 핸들러 → setRemoteDescription
   → TD: _auto_select_tx_track() → Audio Stream Out CHOP WebRTC Track 자동 선택
-  → 모바일: ontrack 이벤트 → <audio> 엘리먼트 생성 → 재생
+  → TD: _auto_select_video_track() → Video Stream Out TOP WebRTC Track 자동 선택
+  → 모바일 ontrack:
+       audio track → <audio> 엘리먼트 생성 → 재생
+       video track → <video id="webrtc-td-stream"> 생성 → setOnTdVideoTrack 콜백 호출
+         dev_mode=1: "TD Stream" 버튼 표시, td-stream-monitor 오버레이에 비디오 배치
+         dev_mode=0: 풀스크린 fixed 배경으로 표시 (z-index:501, touch-pad 뒤 배경)
 ```
 
 ---
@@ -460,6 +475,7 @@ WebRTC 연결 완료 후 webrtc_table 갱신
 | `micEnabled` | config/클릭으로 설정된 마이크 활성 의도 |
 | `cameraResolutionFromConfig` | 카메라 해상도 (Non-Commercial/FHD/4K) |
 | `cameraScreenmodeFromConfig` | 카메라 화면모드 (Portrait/Landscape) |
+| `tdStreamMonitorActive` | TD 스트림 모니터 오버레이 표시 중 여부 |
 
 **주요 함수**
 
@@ -475,6 +491,8 @@ WebRTC 연결 완료 후 webrtc_table 갱신
 | `handleFrontCameraToggle()` | 전면 카메라 토글. 후면 활성 시 상호배타로 후면 중지 후 전면 활성화 |
 | `handleEnableSensors()` | 센서 권한 요청 + 수집 시작/중지 |
 | `enterTouchPad()` / `exitTouchPad()` | 터치패드 전환 |
+| `enterTdStreamMonitor()` / `exitTdStreamMonitor()` | TD 비디오 스트림 모니터 오버레이 전환 (dev_mode=1) |
+| `enterCameraMonitor()` / `exitCameraMonitor()` | 카메라 미리보기 오버레이 전환 |
 | `startBroadcast()` / `stopBroadcast()` | setInterval로 센서 데이터 주기 전송 |
 | `sendTrigger()` | `{ type:'trigger' }` 단발 전송 |
 | `_showTouchPadDirectly()` | dev_mode=0 진입 시 — iOS 첫 탭으로 센서 권한 요청 처리 |
@@ -950,6 +968,48 @@ TD에서 모바일로 실시간 오디오를 스트리밍하는 기능. `w2td_au
 
 ---
 
+## 14-2. 배경색 제어 (bg_color) — background_chop_exec.py
+
+TD에서 모바일 기기 배경색을 제어하는 CHOP Execute DAT 스크립트.
+
+**설정:**
+1. CHOP Execute DAT 생성
+2. "CHOPs" 파라미터: `w2td_background w2td_bg_color_bus` (공백 구분)
+3. "Value Change" 활성화
+4. `background_chop_exec.py` 내용 붙여넣기
+
+**Mode 1 — 전체 브로드캐스트 (`w2td_background`):**
+
+| 속성 | 값 |
+|---|---|
+| CHOP 이름 | `w2td_background` |
+| 채널 | `r`, `g`, `b` (0~1 범위, 샘플 1개) |
+| 효과 | 모든 연결된 기기에 동일 색상 전송 |
+
+**Mode 2 — 슬롯별 개별 제어 (`w2td_bg_color_bus`):**
+
+| 속성 | 값 |
+|---|---|
+| CHOP 이름 | `w2td_bg_color_bus` |
+| 채널 | `r`, `g`, `b` (0~1 범위, N 샘플) |
+| 샘플 매핑 | 샘플 인덱스 0 = 슬롯 1, 샘플 인덱스 1 = 슬롯 2, ... |
+| 효과 | 각 슬롯에 해당 샘플 색상만 전송 |
+
+**TOP to CHOP 워크플로우 (권장):**
+- 1×N 픽셀 컬러 텍스처를 TOP to CHOP으로 변환하면 바로 `w2td_bg_color_bus` 형식이 됨
+- 픽셀 (0,0) → 슬롯 1, 픽셀 (0,1) → 슬롯 2, ...
+
+**웹 메시지:**
+- `{ "type": "bg_color", "color": "#ff0000", "duration": 0 }`
+- `duration > 0` 이면 해당 ms 후 자동으로 원래 배경색으로 복원 (플래시/스트로브 효과)
+
+**레이어 우선순위:**
+- `bg_color`는 `document.body.style.backgroundColor`와 `#touch-pad` 배경에 적용
+- TD 비디오 다운링크(`#webrtc-td-stream`)는 z-index:501로 배경색 위에 렌더링됨
+- 즉 비디오가 활성화되어 있으면 배경색이 비디오에 가려짐
+
+---
+
 ## 15. 알려진 제한사항
 
 | 항목 | 내용 |
@@ -1142,13 +1202,33 @@ micEnabled=false → 탭 → ENABLE 경로  (start + getUserMedia)
 - 슬롯별 Select CHOP 생성: `w2td_audio_bus`에서 해당 슬롯 채널만 선택 (`slot1`, `slot2`, ...)
 - 슬롯별 Audio Stream Out CHOP 생성: WebRTC 모드, 해당 connection에 연결
 - Select CHOP → Audio Stream Out CHOP 자동 와이어링
-- 새로 생성된 Audio Stream Out CHOP에 대해 `addTrack(conn_id, 'audio_out_{slot}', 'audio')` + `createOffer` 호출 (delayFrames=3)
 - 연결 끊긴 슬롯의 TX 노드 자동 삭제
+
+**TX (송신) 기능 — 비디오 다운링크 (Pro):**
+- `w2td_video_bus` TOP이 존재하면 활성화 (없으면 비디오 TX 건너뜀)
+- 슬롯별 `video_stream_out_{slot}` Video Stream Out TOP 자동 생성 (`webrtc_audio_container` 내)
+- Source TOP: `w2td_video_bus`, WebRTC 모드, 해당 connection에 연결
+- 오디오·비디오 모두 있는 경우 단일 `createOffer`에서 두 트랙 동시 협상
+- `addTrack(conn_id, 'video_out_{slot}', 'video')` → `createOffer(conn_id)` (delayFrames=3)
+- `webrtc_reanswer` 수신 후 retry (delayFrames=5, 최대 15회)로 Video Stream Out TOP WebRTC Track 자동 선택
+- 연결 끊긴 슬롯의 비디오 TOP 자동 삭제
+
+**새로운 단일 createOffer 흐름 (오디오+비디오 동시):**
+1. audio_bus 있으면 → `addTrack(audio)`
+2. video_bus 있으면 → `addTrack(video)`
+3. 단 한 번 `createOffer(conn_id)` 호출 (delayFrames=3)
 
 **TD에서 오디오 다운링크 사용법:**
 1. `w2td_audio_bus` Constant CHOP 생성 (채널명: `slot1`, `slot2`, ...)
 2. 오디오 신호를 해당 채널에 연결
 3. 모바일이 WebRTC로 연결되면 자동으로 TX 노드 생성 + 오디오 스트리밍 시작
+
+**TD에서 비디오 다운링크 사용법:**
+1. `w2td_video_bus` TOP 생성 (임의 TOP 가능 — Constant TOP, Movie File In TOP 등)
+2. TD 영상을 `w2td_video_bus`에 연결
+3. 모바일이 WebRTC로 연결되면 자동으로 Video Stream Out TOP 생성 + 영상 스트리밍 시작
+4. dev_mode=1: 모바일에 "TD Stream" 버튼 표시 → 탭하면 전체화면으로 영상 확인 가능
+5. dev_mode=0: 영상이 풀스크린 배경으로 자동 표시 (touch-pad 뒤, z-index:501)
 
 ### 19-3. `touchdesigner/py/config_watch.py`
 
