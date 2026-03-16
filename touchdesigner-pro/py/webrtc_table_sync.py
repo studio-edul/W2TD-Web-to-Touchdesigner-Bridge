@@ -533,26 +533,19 @@ def sync():
 				existing_video_outs[int(child.name[17:])] = child
 			elif child.name.startswith('select_video_slot') and child.name[17:].isdigit():
 				pass  # scanned below
-	# Scan parent-level video input TOPs and container-level select video TOPs
-	existing_video_inputs = {}   # slot -> video_slot{N} TOP at W2TD_Pro's parent level
+	# Scan container-level select video TOPs
 	existing_video_selects = {}  # slot -> select_video_slot{N} selectTOP in container
-	base = _w2td_base()
-	base_parent = base.parent() if base else None
-	if base_parent is not None:
-		for child in base_parent.children:
-			if child.name.startswith('video_slot') and child.name[10:].isdigit():
-				existing_video_inputs[int(child.name[10:])] = child
 	if _video_c_scan is not None:
 		for child in _video_c_scan.children:
 			if child.name.startswith('select_video_slot') and child.name[17:].isdigit():
 				existing_video_selects[int(child.name[17:])] = child
 
 	# Remove stale TX nodes for disconnected slots or disabled flags
-	stale_slots = (set(existing_selects.keys()) | set(existing_outs.keys()) | set(existing_video_outs.keys()) | set(existing_video_inputs.keys()) | set(existing_video_selects.keys())) - active_slots
+	stale_slots = (set(existing_selects.keys()) | set(existing_outs.keys()) | set(existing_video_outs.keys()) | set(existing_video_selects.keys())) - active_slots
 	if not _audio_tx_flag:
 		stale_slots |= set(existing_selects.keys()) | set(existing_outs.keys())
 	if not _video_tx_flag:
-		stale_slots |= set(existing_video_outs.keys()) | set(existing_video_inputs.keys()) | set(existing_video_selects.keys())
+		stale_slots |= set(existing_video_outs.keys()) | set(existing_video_selects.keys())
 	for slot in stale_slots:
 		sel = existing_selects.get(slot)
 		out = existing_outs.get(slot)
@@ -582,16 +575,8 @@ def sync():
 				print(f'[W2TD WebRTC Sync TX] Destroyed select_video_slot{slot}')
 			except Exception as e:
 				print(f'[W2TD WebRTC Sync TX] Error Destroy select_video_slot{slot}: {e}')
-		vin_stale = existing_video_inputs.get(slot)
-		if vin_stale:
-			try:
-				vin_stale.destroy()
-				print(f'[W2TD WebRTC Sync TX] Destroyed video_slot{slot}')
-			except Exception as e:
-				print(f'[W2TD WebRTC Sync TX] Error Destroy video_slot{slot}: {e}')
 
-	# Per-slot video inputs: video_slot{N} created at W2TD_Pro's parent level (per active slot).
-	# Each slot gets: video_slot{N} (parent level) → select_video_slot{N} (../../video_slot{N}) → video_stream_out_{N}
+	# Each slot gets: video_slot{N} (manually placed at parent level) → select_video_slot{N} (../../video_slot{N}) → video_stream_out_{N}
 
 	# Create/update TX nodes for active slots
 	TX_BASE_X = 1200
@@ -667,17 +652,7 @@ def sync():
 
 		# ── Video TX ──────────────────────────────────────────────────────
 		if w2td_video_c is not None:
-			# 1. Create video_slot{N} inTOP at W2TD_Pro's parent level
-			vin = existing_video_inputs.get(slot) or (base_parent.op(f'video_slot{slot}') if base_parent else None)
-			if vin is None and base_parent is not None:
-				try:
-					vin = base_parent.create('inTOP', f'video_slot{slot}')
-					vin.nodeX = 0
-					vin.nodeY = -idx * 200
-					print(f'[W2TD WebRTC Sync TX] Created video_slot{slot} at parent level')
-				except Exception as e:
-					print(f'[W2TD WebRTC Sync TX] Error creating video_slot{slot}: {e}')
-			# 2. Create select_video_slot{N} selectTOP inside container (references ../../video_slot{N})
+			# Create select_video_slot{N} selectTOP inside container (references ../../video_slot{N})
 			vsel = existing_video_selects.get(slot) or w2td_video_c.op(f'select_video_slot{slot}')
 			if vsel is None:
 				try:
