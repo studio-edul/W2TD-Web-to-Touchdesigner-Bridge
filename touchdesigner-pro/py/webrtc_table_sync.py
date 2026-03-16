@@ -58,11 +58,7 @@ def _w2td_video_tx():
 		c = root.children[0].op(W2TD_VIDEO_TX)
 		if c:
 			return c
-	c = op(W2TD_VIDEO_TX)
-	if c:
-		return c
-	# Fall back to audio container for backward compatibility
-	return _w2td_audio()
+	return op(W2TD_VIDEO_TX)
 
 
 def _get_container():
@@ -238,19 +234,6 @@ def _get_audio_bus():
 			return bus
 	return op('w2td_audio_bus')
 
-
-def _get_video_bus():
-	"""Find w2td_video_bus TOP (input video source for TX routing)."""
-	c = _w2td_audio()
-	if c:
-		bus = c.op('w2td_video_bus')
-		if bus:
-			return bus
-	for proj in ('project1', 'project'):
-		bus = op(f'{proj}/{W2TD_BASE}/w2td_video_bus')
-		if bus:
-			return bus
-	return op('w2td_video_bus')
 
 
 def _set_audio_out_params(chop, conn_id):
@@ -464,14 +447,13 @@ def sync():
 	# Video TX only runs if w2td_video_bus TOP exists.
 	# Skip entirely if neither exists.
 	audio_bus = _get_audio_bus()
-	video_bus = _get_video_bus()
-	if audio_bus is None and video_bus is None:
+	w2td_video_c = _w2td_video_tx()  # None if webrtc_video_tx_container does not exist
+	if audio_bus is None and w2td_video_c is None:
 		return
 
 	w2td_audio_c = _w2td_audio()
 	if w2td_audio_c is None:
 		return
-	w2td_video_c = _w2td_video_tx()  # may be same as audio container if webrtc_video_tx_container absent
 
 	# Build target slot set from connected rows
 	active_slots = set()
@@ -490,7 +472,7 @@ def sync():
 		elif child.name.startswith('webrtc_audio_out_') and child.name[17:].isdigit():
 			existing_outs[int(child.name[17:])] = child
 	if w2td_video_c is not None:
-		for child in w2td_video_c.children:
+		for child in (w2td_video_c.children if w2td_video_c else []):
 			if child.name.startswith('video_stream_out_') and child.name[17:].isdigit():
 				existing_video_outs[int(child.name[17:])] = child
 
@@ -519,16 +501,11 @@ def sync():
 			except Exception as e:
 				print(f'[W2TD WebRTC Sync TX] Error Destroy video_stream_out_{slot}: {e}')
 
-	# ── Video TX: Top In setup (dedicated container only) ───────────────────
-	# If webrtc_video_tx_container exists as a separate container, wire w2td_video_bus
-	# into it via a Top In (in1) node so the data flow is visible inside the network.
-	# If falling back to webrtc_audio_container, connect video_bus directly (legacy).
-	_video_source = video_bus  # default: direct wire
-	if video_bus is not None and w2td_video_c is not None and w2td_video_c is not w2td_audio_c:
-		try:
-			w2td_video_c.setInputs([video_bus])
-		except Exception:
-			pass
+	# ── Video TX: Top In setup ───────────────────────────────────────────────
+	# webrtc_video_tx_container receives its video via a Top In (in1) node.
+	# The user wires their video source directly into the container's input.
+	_video_source = None
+	if w2td_video_c is not None:
 		in_top = w2td_video_c.op('in1')
 		if in_top is None:
 			try:
@@ -539,8 +516,7 @@ def sync():
 			except Exception as e:
 				print(f'[W2TD WebRTC Sync TX] Error creating in1: {e}')
 				in_top = None
-		if in_top is not None:
-			_video_source = in_top
+		_video_source = in_top
 
 	# Create/update TX nodes for active slots
 	TX_BASE_X = 1200
@@ -615,7 +591,7 @@ def sync():
 						newly_created_slots.append(slot)
 
 		# ── Video TX ──────────────────────────────────────────────────────
-		if video_bus is not None and w2td_video_c is not None:
+		if w2td_video_c is not None and _video_source is not None:
 			vout = existing_video_outs.get(slot) or w2td_video_c.op(video_out_name)
 			is_new_video = vout is None
 			if is_new_video:
@@ -654,7 +630,7 @@ def sync():
 				_slots_to_offer = list(newly_created_slots)
 				_conn_map = dict(slot_to_conn)
 				_has_audio = audio_bus is not None
-				_has_video = video_bus is not None
+				_has_video = w2td_video_c is not None
 				def _trigger_offers():
 					for s in _slots_to_offer:
 						cid = _conn_map.get(s)
