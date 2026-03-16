@@ -203,7 +203,7 @@ def sync(table_dat=None):
 
 	op('/').store('w2td_cam_render_container_err', False)
 	res_key, sq, screenmode = _read_config_values()
-	rotate_deg = -90 if screenmode == 'landscape' else 0
+	rotate_deg = 90 if screenmode == 'landscape' else 0
 	slots = _read_connected_slots(table_dat)
 	base_url = _get_cam_base_url()
 	port = _get_cam_port()
