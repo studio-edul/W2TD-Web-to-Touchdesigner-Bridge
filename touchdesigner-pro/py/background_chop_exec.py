@@ -9,11 +9,9 @@
 #
 # Mode 2 — Per-slot (individual clients):
 #   CHOP name: w2td_bg_color_bus
-#   Channels: r, g, b (0-1 range, N samples)
-#   Sample index maps to slot: sample 0 = slot 1, sample 1 = slot 2, ...
+#   Channels: slot1_r, slot1_g, slot1_b, slot2_r, slot2_g, slot2_b, ... (0-1 range)
+#   Channel name maps to slot: slot{N}_r/g/b → slot N
 #   Effect: sends color only to the specific mobile slot
-#
-#   Tip: Use a TOP to CHOP to convert a color texture (1xN pixels) to this CHOP.
 #
 # Setup in TD:
 #   1. Create a CHOP Execute DAT
@@ -73,7 +71,7 @@ def onValueChange(channel, sampleIndex, val, prev):
 		_handle_broadcast(chop)
 
 	elif chop_name == 'w2td_bg_color_bus':
-		_handle_per_slot(chop, channel.name, sampleIndex)
+		_handle_per_slot(chop, channel.name)
 
 
 def _handle_broadcast(chop):
@@ -97,16 +95,18 @@ def _handle_broadcast(chop):
 	mod.send_bg_color_to_all(web, hex_color, 0)
 
 
-def _handle_per_slot(chop, chan_name, sample_index):
-	"""Send color to individual slot (w2td_bg_color_bus CHOP, r/g/b channels, sample index = slot - 1)."""
+def _handle_per_slot(chop, chan_name):
+	"""Send color to individual slot (w2td_bg_color_bus CHOP, slot{N}_r/g/b channel names)."""
 	global _prev_slot_colors
-	if chan_name not in ('r', 'g', 'b'):
+	import re
+	m = re.match(r'^slot(\d+)_(r|g|b)$', chan_name)
+	if not m:
 		return
-	slot = sample_index + 1
+	slot = int(m.group(1))
 	try:
-		r = max(0, min(255, int(round(chop['r'][sample_index] * 255))))
-		g = max(0, min(255, int(round(chop['g'][sample_index] * 255))))
-		b = max(0, min(255, int(round(chop['b'][sample_index] * 255))))
+		r = max(0, min(255, int(round(chop[f'slot{slot}_r'].eval() * 255))))
+		g = max(0, min(255, int(round(chop[f'slot{slot}_g'].eval() * 255))))
+		b = max(0, min(255, int(round(chop[f'slot{slot}_b'].eval() * 255))))
 	except Exception:
 		return
 	hex_color = f'#{r:02x}{g:02x}{b:02x}'
