@@ -519,6 +519,29 @@ def sync():
 			except Exception as e:
 				print(f'[W2TD WebRTC Sync TX] Error Destroy video_stream_out_{slot}: {e}')
 
+	# ── Video TX: Top In setup (dedicated container only) ───────────────────
+	# If webrtc_video_tx_container exists as a separate container, wire w2td_video_bus
+	# into it via a Top In (in1) node so the data flow is visible inside the network.
+	# If falling back to webrtc_audio_container, connect video_bus directly (legacy).
+	_video_source = video_bus  # default: direct wire
+	if video_bus is not None and w2td_video_c is not None and w2td_video_c is not w2td_audio_c:
+		try:
+			w2td_video_c.setInputs([video_bus])
+		except Exception:
+			pass
+		in_top = w2td_video_c.op('in1')
+		if in_top is None:
+			try:
+				in_top = w2td_video_c.create('topinTOP', 'in1')
+				in_top.nodeX = 0
+				in_top.nodeY = 0
+				print('[W2TD WebRTC Sync TX] Created Top In (in1) in webrtc_video_tx_container')
+			except Exception as e:
+				print(f'[W2TD WebRTC Sync TX] Error creating in1: {e}')
+				in_top = None
+		if in_top is not None:
+			_video_source = in_top
+
 	# Create/update TX nodes for active slots
 	TX_BASE_X = 1200
 	TX_OFFSET_Y = 150
@@ -604,10 +627,10 @@ def sync():
 					vout = None
 			if vout is not None:
 				try:
-					vout.setInputs([video_bus])
+					vout.setInputs([_video_source])
 				except Exception:
 					try:
-						vout.inputConnectors[0].connect(video_bus)
+						vout.inputConnectors[0].connect(_video_source)
 					except Exception:
 						pass
 				try:
