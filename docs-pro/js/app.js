@@ -73,6 +73,10 @@ const W2TD_VERSION = '1.0.0';
     els.cameraMonitor = $('camera-monitor');
     els.btnExitCameraMonitor = $('btn-exit-camera-monitor');
     els.camResStatus = $('cam-res-status');
+    els.btnTdStream = $('btn-td-stream');
+    els.tdStreamMonitor = $('td-stream-monitor');
+    els.btnExitTdStream = $('btn-exit-td-stream');
+    els.tdStreamVideoArea = els.tdStreamMonitor ? els.tdStreamMonitor.querySelector('.td-stream-video-area') : null;
   }
 
   function _detectDeviceName() {
@@ -394,6 +398,58 @@ const W2TD_VERSION = '1.0.0';
     els.btnExitTouch.addEventListener('click', exitTouchPad);
     if (els.btnCameraMonitor) els.btnCameraMonitor.addEventListener('click', enterCameraMonitor);
     if (els.btnExitCameraMonitor) els.btnExitCameraMonitor.addEventListener('click', exitCameraMonitor);
+    if (els.btnTdStream) els.btnTdStream.addEventListener('click', enterTdStreamMonitor);
+    if (els.btnExitTdStream) els.btnExitTdStream.addEventListener('click', exitTdStreamMonitor);
+
+    // TD video downlink callback — routes display based on devMode
+    WebRTCModule.setOnTdVideoTrack((videoEl, track) => {
+      if (devMode) {
+        // dev_mode=1: show TD Stream button and put video in monitor overlay
+        videoEl.style.position = '';
+        videoEl.style.zIndex = '';
+        videoEl.style.pointerEvents = '';
+        videoEl.style.objectFit = 'contain';
+        videoEl.style.width = '100%';
+        videoEl.style.height = '100%';
+        if (els.tdStreamVideoArea && !els.tdStreamVideoArea.contains(videoEl)) {
+          els.tdStreamVideoArea.appendChild(videoEl);
+        }
+        if (els.btnTdStream) {
+          els.btnTdStream.classList.remove('hidden');
+          els.btnTdStream.classList.add('td-stream-active');
+        }
+        addLog('TD video stream received — tap "TD Stream" to view', 'info');
+      } else {
+        // dev_mode=0: show as full-screen background behind touch-pad
+        videoEl.style.position = 'fixed';
+        videoEl.style.top = '0';
+        videoEl.style.left = '0';
+        videoEl.style.width = '100%';
+        videoEl.style.height = '100%';
+        videoEl.style.objectFit = 'cover';
+        videoEl.style.zIndex = '501';
+        videoEl.style.pointerEvents = 'none';
+        if (!document.body.contains(videoEl)) document.body.appendChild(videoEl);
+        const tp = document.getElementById('touch-pad');
+        if (tp) tp.style.backgroundColor = 'transparent';
+        document.body.style.backgroundColor = 'transparent';
+      }
+      track.onended = () => {
+        videoEl.srcObject = null;
+        if (devMode) {
+          if (els.btnTdStream) {
+            els.btnTdStream.classList.add('hidden');
+            els.btnTdStream.classList.remove('td-stream-active');
+          }
+          exitTdStreamMonitor();
+        } else {
+          videoEl.style.display = 'none';
+          document.body.style.backgroundColor = '';
+          const tp2 = document.getElementById('touch-pad');
+          if (tp2) tp2.style.backgroundColor = '';
+        }
+      };
+    });
     if (els.btnToggleTouchPoints) {
       els.btnToggleTouchPoints.addEventListener('click', toggleTouchPoints);
     }
@@ -926,6 +982,27 @@ const W2TD_VERSION = '1.0.0';
     _disableTouchLock();
     startVizTouch();
     haptic();
+  }
+
+  function enterTdStreamMonitor() {
+    if (!WebRTCModule.isTdVideoActive()) {
+      showToast('No TD video stream active');
+      haptic();
+      return;
+    }
+    haptic();
+    els.mainUI.classList.add('hidden');
+    els.tdStreamMonitor.classList.remove('hidden');
+  }
+
+  function exitTdStreamMonitor() {
+    if (!els.tdStreamMonitor) return;
+    els.tdStreamMonitor.classList.add('hidden');
+    if (els.mainUI && !devMode) {
+      // dev_mode=0: shouldn't reach here normally
+    } else if (els.mainUI) {
+      els.mainUI.classList.remove('hidden');
+    }
   }
 
   function enterCameraMonitor() {

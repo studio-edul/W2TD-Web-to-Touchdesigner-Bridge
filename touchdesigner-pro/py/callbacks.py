@@ -1207,6 +1207,30 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 							print(f'[W2TD WebRTC] No tracks on webrtc_audio_out_{_slot} after {_attempt[0]} attempts')
 						break
 			run(_auto_select_tx_track, delayFrames=5, fromOP=wrtc)
+			# Auto-select WebRTC Track on Video Stream Out TOP after renegotiation (if exists)
+			_video_attempt = [0]
+			def _auto_select_video_track():
+				_video_attempt[0] += 1
+				video_top = _op(f'webrtc_audio_container/video_stream_out_{_slot}')
+				if video_top is None:
+					return  # No video TX for this connection — skip silently
+				track_name = f'video_out_{_slot}'
+				for par_name in ('webrtctrack', 'Webrtctrack', 'track', 'Track'):
+					if hasattr(video_top.par, par_name):
+						p = getattr(video_top.par, par_name)
+						menus = getattr(p, 'menuNames', []) or []
+						if track_name in menus:
+							setattr(video_top.par, par_name, track_name)
+							print(f'[W2TD WebRTC] Auto-selected video track "{track_name}" on video_stream_out_{_slot} (attempt {_video_attempt[0]})')
+						elif menus:
+							setattr(video_top.par, par_name, menus[0])
+							print(f'[W2TD WebRTC] Auto-selected video track "{menus[0]}" on video_stream_out_{_slot} (attempt {_video_attempt[0]})')
+						elif _video_attempt[0] < 15:
+							run(_auto_select_video_track, delayFrames=5, fromOP=_wrtc)
+						else:
+							print(f'[W2TD WebRTC] No video tracks on video_stream_out_{_slot} after {_video_attempt[0]} attempts')
+						break
+			run(_auto_select_video_track, delayFrames=5, fromOP=wrtc)
 		except Exception as e:
 			print(f'[W2TD WebRTC Error] Reanswer handling error: {e}')
 

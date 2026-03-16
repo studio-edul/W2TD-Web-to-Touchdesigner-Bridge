@@ -81,6 +81,7 @@
       <div class="broadcast-buttons">
         <button id="btn-fullscreen-touch" class="btn btn-small">Touch Pad</button>
         <button id="btn-camera-monitor" class="btn btn-small">Video Monitor</button>
+        <button id="btn-td-stream" class="btn btn-small hidden">TD Stream</button>
         <button id="btn-enable-sensors" class="btn btn-small">Enable Sensors</button>
       </div>
     </div>
@@ -105,6 +106,14 @@
   <!-- Loading screen: shown while waiting for config on first QR-scan connection -->
   <div id="w2td-loading" class="hidden"></div>
 
+  <!-- TD video stream monitor (dev_mode=1: enter via TD Stream button) -->
+  <div id="td-stream-monitor" class="td-stream-monitor hidden">
+    <div class="td-stream-video-area">
+      <!-- #webrtc-td-stream video element is moved here dynamically -->
+    </div>
+    <button id="btn-exit-td-stream" class="btn btn-small btn-exit-td-stream">Exit</button>
+  </div>
+
   <!-- Full-screen camera monitor (enter via Video Monitor button) -->
   <div id="camera-monitor" class="camera-monitor hidden">
     <div class="camera-monitor-video-area">
@@ -126,13 +135,13 @@
     </div>
   </div>
 
-  <script src="js/websocket.js?v=20260305"></script>
-  <script src="js/sensors.js?v=20260305"></script>
-  <script src="js/touch.js?v=20260305"></script>
-  <script src="js/visualization.js?v=20260305"></script>
-  <script src="js/webrtc.js?v=20260305"></script>
-  <script src="js/audio.js?v=20260305"></script>
-  <script src="js/app.js?v=20260305"></script>
+  <script src="js/websocket.js?v=20260316"></script>
+  <script src="js/sensors.js?v=20260316"></script>
+  <script src="js/touch.js?v=20260316"></script>
+  <script src="js/visualization.js?v=20260316"></script>
+  <script src="js/webrtc.js?v=20260316"></script>
+  <script src="js/audio.js?v=20260316"></script>
+  <script src="js/app.js?v=20260316"></script>
 </body>
 
 </html>

@@ -37,6 +37,7 @@ const WebRTCModule = (() => {
   let _audioCtx = null;
   let _analyser = null;
   let _onLog = null;
+  let _onTdVideoTrack = null; // callback(videoEl, track) when TD sends video downlink
 
   // ── Orientation lock ───────────────────────────────────────────────────────
   let _orientationLocked = false;
@@ -220,25 +221,19 @@ const WebRTCModule = (() => {
           }
         } catch (e) { /* playoutDelayHint not supported */ }
       } else if (track.kind === 'video') {
-        // Video downlink from TD → background <video> element
+        // Video downlink from TD → delegate display to app.js via callback
         let videoEl = document.getElementById('webrtc-td-stream');
         if (!videoEl) {
           videoEl = document.createElement('video');
           videoEl.id = 'webrtc-td-stream';
           videoEl.autoplay = true;
           videoEl.playsInline = true;
-          videoEl.style.position = 'fixed';
-          videoEl.style.top = '0';
-          videoEl.style.left = '0';
-          videoEl.style.width = '100%';
-          videoEl.style.height = '100%';
-          videoEl.style.objectFit = 'cover';
-          videoEl.style.zIndex = '-1';
-          videoEl.style.pointerEvents = 'none';
-          document.body.appendChild(videoEl);
+          videoEl.muted = false;
         }
         videoEl.srcObject = stream;
         videoEl.play().catch(e => console.warn('[W2TD WebRTC] TD video play failed:', e));
+        _log('TD video track received');
+        if (_onTdVideoTrack) _onTdVideoTrack(videoEl, track);
       }
     };
 
@@ -695,5 +690,10 @@ const WebRTCModule = (() => {
     getLastError: () => _lastError,
     // Pro
     toggleFlashlight,
+    setOnTdVideoTrack: (fn) => { _onTdVideoTrack = fn; },
+    isTdVideoActive: () => {
+      const v = document.getElementById('webrtc-td-stream');
+      return !!(v && v.srcObject);
+    },
   };
 })();
