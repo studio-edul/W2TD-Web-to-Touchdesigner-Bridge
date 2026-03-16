@@ -4,21 +4,22 @@
 #
 # Mode 1 — Broadcast (all clients):
 #   CHOP name: w2td_background
-#   Channels: r, g, b (0-1 range)
+#   Channels: r, g, b (0-1 range, single sample)
 #   Effect: sends same color to ALL connected mobile clients
 #
 # Mode 2 — Per-slot (individual clients):
 #   CHOP name: w2td_bg_color_bus
-#   Channels: slot1_r, slot1_g, slot1_b, slot2_r, slot2_g, slot2_b, ...
+#   Channels: r, g, b (0-1 range, N samples)
+#   Sample index maps to slot: sample 0 = slot 1, sample 1 = slot 2, ...
 #   Effect: sends color only to the specific mobile slot
+#
+#   Tip: Use a TOP to CHOP to convert a color texture (1xN pixels) to this CHOP.
 #
 # Setup in TD:
 #   1. Create a CHOP Execute DAT
 #   2. CHOPs parameter: w2td_background w2td_bg_color_bus  (space-separated)
 #   3. Value Change parameter: On
 #   4. Paste this script
-
-import re
 
 _prev_color = None          # for w2td_background broadcast dedup
 _prev_slot_colors = {}      # for w2td_bg_color_bus per-slot dedup: {slot: hex_color}
@@ -72,7 +73,7 @@ def onValueChange(channel, sampleIndex, val, prev):
 		_handle_broadcast(chop)
 
 	elif chop_name == 'w2td_bg_color_bus':
-		_handle_per_slot(chop, channel.name)
+		_handle_per_slot(chop, channel.name, sampleIndex)
 
 
 def _handle_broadcast(chop):
@@ -96,18 +97,16 @@ def _handle_broadcast(chop):
 	mod.send_bg_color_to_all(web, hex_color, 0)
 
 
-def _handle_per_slot(chop, chan_name):
-	"""Send color to individual slot (w2td_bg_color_bus CHOP, channels slot{N}_r/g/b)."""
+def _handle_per_slot(chop, chan_name, sample_index):
+	"""Send color to individual slot (w2td_bg_color_bus CHOP, r/g/b channels, sample index = slot - 1)."""
 	global _prev_slot_colors
-	m = re.match(r'^slot(\d+)_(r|g|b)$', chan_name)
-	if not m:
+	if chan_name not in ('r', 'g', 'b'):
 		return
-	slot = int(m.group(1))
-	# Read all 3 channels for this slot
+	slot = sample_index + 1
 	try:
-		r = max(0, min(255, int(round(chop[f'slot{slot}_r'].eval() * 255))))
-		g = max(0, min(255, int(round(chop[f'slot{slot}_g'].eval() * 255))))
-		b = max(0, min(255, int(round(chop[f'slot{slot}_b'].eval() * 255))))
+		r = max(0, min(255, int(round(chop['r'][sample_index] * 255))))
+		g = max(0, min(255, int(round(chop['g'][sample_index] * 255))))
+		b = max(0, min(255, int(round(chop['b'][sample_index] * 255))))
 	except Exception:
 		return
 	hex_color = f'#{r:02x}{g:02x}{b:02x}'
