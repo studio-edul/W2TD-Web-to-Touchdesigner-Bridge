@@ -268,7 +268,7 @@ const W2TD_VERSION = '1.0.0';
       // (sensors may already be active from user mode)
       if (SensorModule.isEnabled()) {
         els.btnEnableSensors.textContent = SensorModule.isSimulating()
-          ? 'Deactivate (Simulating)' : 'Deactivate Sensors';
+          ? 'Stop (Simulating)' : 'Stop';
         els.btnEnableSensors.classList.add('btn-active');
         startVizLoop();
       }
@@ -754,7 +754,7 @@ const W2TD_VERSION = '1.0.0';
       SensorModule.stopListening();
       if (WebRTCModule.isMicActive()) await WebRTCModule.stop();
       if (WebRTCModule.isCamPCActive()) WebRTCModule.stopCamera();
-      els.btnEnableSensors.textContent = 'Enable Sensors';
+      els.btnEnableSensors.textContent = 'Start';
       els.btnEnableSensors.classList.remove('btn-active');
       updateDebug('Sensors deactivated');
       renderSensorList();
@@ -831,9 +831,9 @@ const W2TD_VERSION = '1.0.0';
     }
 
     if (SensorModule.isSimulating()) {
-      els.btnEnableSensors.textContent = 'Deactivate (Simulating)';
+      els.btnEnableSensors.textContent = 'Stop (Simulating)';
     } else {
-      els.btnEnableSensors.textContent = 'Deactivate Sensors';
+      els.btnEnableSensors.textContent = 'Stop';
     }
     els.btnEnableSensors.classList.add('btn-active');
 

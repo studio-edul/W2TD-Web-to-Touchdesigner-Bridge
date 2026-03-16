@@ -1,4 +1,4 @@
-"""
+﻿"""
 W2TD webrtc_table -> Audio Stream In CHOP sync
 ==============================================
 Called from DAT Execute DAT on webrtc_table change.
@@ -47,6 +47,11 @@ def _w2td_video_tx():
 				c = p.op('webrtc_video_tx_container')
 				if c:
 					return c
+		p2 = parent(2)
+		if p2 and p2.name in ('W2TD_Pro', 'W2TD'):
+			c = p2.op('webrtc_video_tx_container')
+			if c:
+				return c
 	except NameError:
 		pass
 	for proj in ('project1', 'project'):
@@ -509,7 +514,7 @@ def sync():
 		in_top = w2td_video_c.op('in1')
 		if in_top is None:
 			try:
-				in_top = w2td_video_c.create('topinTOP', 'in1')
+				in_top = w2td_video_c.create('inTOP', 'in1')
 				in_top.nodeX = 0
 				in_top.nodeY = 0
 				print('[W2TD WebRTC Sync TX] Created Top In (in1) in webrtc_video_tx_container')

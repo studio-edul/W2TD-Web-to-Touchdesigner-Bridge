@@ -165,13 +165,13 @@ const WebRTCModule = (() => {
     _micIceRecvCount = 0;
     if (micPc) { micPc.close(); micPc = null; }
 
-    if (!micStream) {
+    if (!micStream && mic) {
       try {
         micStream = await navigator.mediaDevices.getUserMedia({
-          audio: mic ? { echoCancellation, noiseSuppression, autoGainControl } : false,
+          audio: { echoCancellation, noiseSuppression, autoGainControl },
           video: false,
         });
-        micActive = mic && micStream.getAudioTracks().length > 0;
+        micActive = micStream.getAudioTracks().length > 0;
         _log('getUserMedia (mic) OK — mic:' + micActive);
       } catch (e) {
         _lastError = e.name || 'unknown';
@@ -190,7 +190,8 @@ const WebRTCModule = (() => {
       micStream.getTracks().forEach(track => micPc.addTrack(track, micStream));
     } else {
       micPc.addTransceiver('audio', { direction: 'recvonly' });
-      _log('No mic — added recvonly audio transceiver for TD downlink');
+      micPc.addTransceiver('video', { direction: 'recvonly' });
+      _log('No mic — added recvonly audio+video transceivers for TD downlink');
     }
 
     // Listen for incoming tracks from TD (TD -> Mobile audio/video streaming)
