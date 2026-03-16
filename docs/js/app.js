@@ -1025,9 +1025,8 @@ const W2TD_VERSION = '1.0.0';
   });
 
   function haptic(duration = 30) {
-    if (hapticEnabled && navigator.vibrate) {
-      navigator.vibrate(duration);
-    }
+    // Temporarily disabled: local UI tap vibration feedback.
+    return;
   }
 
   // ── WebRTC ──────────────────────────────────────────────────────────────

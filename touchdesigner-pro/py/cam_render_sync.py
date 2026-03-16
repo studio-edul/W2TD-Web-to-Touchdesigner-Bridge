@@ -232,20 +232,28 @@ def sync(table_dat=None):
 					op('/').store(f'w2td_cam_receiver_addr_{prev_slots[idx]}', None)
 			except (ValueError, TypeError):
 				pass
-			for companion in (f'transform_top_{idx_str}', f'crop_top_{idx_str}', f'touch_out_top_{idx_str}'):
+			for companion in (f'transform_top_{idx_str}', f'crop_top_{idx_str}'):
 				c = container.op(companion)
 				if c:
 					try:
 						c.destroy()
 					except Exception:
 						pass
+			# Also destroy video_received_slot{slot} null TOP (slot number, not index)
+			try:
+				if 0 <= idx < len(prev_slots):
+					null_c = container.op(f'video_received_slot{prev_slots[idx]}')
+					if null_c:
+						null_c.destroy()
+			except Exception:
+				pass
 			try:
 				existing[name].destroy()
 				print(f'[Cam Render Sync] Destroyed {name}')
 			except Exception as e:
 				print(f'[Cam Render Sync] Error destroying {name}: {e}')
 
-	# Create/update nodes: web_render_top -> transform_top -> crop_top -> layout1
+	# Create/update nodes: web_render_top -> transform_top -> crop_top -> null_top (video_received_slot{N}) -> layout1
 	for i, name in enumerate(target_names):
 		idx = i + 1
 
@@ -355,36 +363,42 @@ def sync(table_dat=None):
 			except Exception as e:
 				print(f'[Cam Render Sync] Error connecting {t_name} -> {c_name}: {e}')
 
-		# --- touch_out_top ---
-		o_name = f'touch_out_top_{idx}'
-		o_top = container.op(o_name)
-		if o_top is None:
+		# --- null_top (video_received_slot{N}) ---
+		n_name = f'video_received_slot{slot}'
+		n_top = container.op(n_name)
+		if n_top is None:
 			try:
-				o_top = container.create('touchoutTOP', o_name)
-				print(f'[Cam Render Sync] Created {o_name}')
+				n_top = container.create('nullTOP', n_name)
+				print(f'[Cam Render Sync] Created {n_name}')
 			except Exception as e:
-				print(f'[Cam Render Sync] Error creating {o_name}: {e}')
-				o_top = None
-		if o_top:
+				print(f'[Cam Render Sync] Error creating {n_name}: {e}')
+				n_top = None
+		if n_top:
 			try:
-				o_top.nodeX = top.nodeX + 450
-				o_top.nodeY = -i * NODE_OFFSET_Y
+				n_top.nodeX = top.nodeX + 450
+				n_top.nodeY = -i * NODE_OFFSET_Y
 			except Exception:
 				pass
 			try:
-				o_top.par.port = 9000 + idx
-			except Exception as e:
-				print(f'[Cam Render Sync] Error setting {o_name} port: {e}')
-			try:
 				if c_top:
-					c_top.outputConnectors[0].connect(o_top.inputConnectors[0])
+					c_top.outputConnectors[0].connect(n_top.inputConnectors[0])
 			except Exception as e:
-				print(f'[Cam Render Sync] Error connecting {c_name} -> {o_name}: {e}')
+				print(f'[Cam Render Sync] Error connecting {c_name} -> {n_name}: {e}')
 
-		# Connect crop_top -> layout1 (touch_out_top is a side output only, not in the layout chain)
-		layout_src = c_top or t_top or top
+		# Create layout1 if it doesn't exist (created on first mobile connection)
+		layout1 = container.op('layout1')
+		if layout1 is None:
+			try:
+				layout1 = container.create('layoutTOP', 'layout1')
+				layout1.nodeX = top.nodeX + 600
+				layout1.nodeY = 0
+				print('[Cam Render Sync] Created layout1')
+			except Exception as e:
+				print(f'[Cam Render Sync] Error creating layout1: {e}')
+				layout1 = None
+		# Connect null_top -> layout1
+		layout_src = n_top or c_top or t_top or top
 		try:
-			layout1 = _find_layout1(container)
 			if layout1 and i < len(layout1.inputConnectors):
 				layout_src.outputConnectors[0].connect(layout1.inputConnectors[i])
 		except Exception:
@@ -403,7 +417,7 @@ def sync(table_dat=None):
 			op('/').store('w2td_cam_render_last_slots', tuple(slots))
 		# Set layout1 resolution based on cropped output size
 		try:
-			layout1 = _find_layout1(container)
+			layout1 = container.op('layout1')
 			if layout1:
 				n = len(slots)
 				crop_side = sq * 7 // 32
