@@ -453,6 +453,13 @@ def sync(table_dat=None):
 			pass
 	else:
 		op('/').store('w2td_cam_render_last_slots', ())
+		layout1 = container.op('layout1')
+		if layout1:
+			try:
+				layout1.destroy()
+				print('[Cam Render Sync] Destroyed layout1 (no connections)')
+			except Exception as e:
+				print(f'[Cam Render Sync] Error destroying layout1: {e}')
 
 
 def onTableChange(dat, prevDAT, info):
