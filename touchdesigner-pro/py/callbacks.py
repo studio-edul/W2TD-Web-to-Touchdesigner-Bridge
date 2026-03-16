@@ -1211,7 +1211,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			_video_attempt = [0]
 			def _auto_select_video_track():
 				_video_attempt[0] += 1
-				video_top = _op(f'webrtc_audio_container/video_stream_out_{_slot}')
+				video_top = _op(f'webrtc_video_tx_container/video_stream_out_{_slot}') or _op(f'webrtc_audio_container/video_stream_out_{_slot}')
 				if video_top is None:
 					return  # No video TX for this connection — skip silently
 				track_name = f'video_out_{_slot}'

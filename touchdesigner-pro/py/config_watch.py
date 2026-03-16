@@ -11,7 +11,7 @@
 
 import json
 
-W2TD_BASE = 'W2TD'
+W2TD_BASE = 'W2TD_Pro'
 
 
 def _w2td_base():
@@ -30,7 +30,7 @@ def _w2td_base():
 		w = root.children[0].op(W2TD_BASE)
 		if w:
 			return w
-	return op(W2TD_BASE)
+	return op(W2TD_BASE) or op('W2TD')
 
 
 def _op(path_suffix, fallback_name=None):

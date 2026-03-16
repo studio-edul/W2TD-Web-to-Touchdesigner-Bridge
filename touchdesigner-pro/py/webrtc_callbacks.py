@@ -2,12 +2,12 @@
 W2TD WebRTC DAT Callbacks
 ========================
 Set this file as the "Callbacks DAT" parameter of the WebRTC DAT named 'webrtc_dat'.
-Nodes are under W2TD/webrtc_audio_container (relative path).
+Nodes are under W2TD_Pro/webrtc_audio_container (relative path).
 """
 
 import json
 
-W2TD_BASE = 'W2TD'
+W2TD_BASE = 'W2TD_Pro'
 W2TD_AUDIO = f'{W2TD_BASE}/webrtc_audio_container'
 
 
@@ -27,7 +27,7 @@ def _w2td_base():
 		w = root.children[0].op(W2TD_BASE)
 		if w:
 			return w
-	return op(W2TD_BASE)
+	return op(W2TD_BASE) or op('W2TD')
 
 
 def _op_web():
@@ -95,7 +95,7 @@ def _send_to_client(connectionId, data):
 	"""Send a JSON message back to the mobile client via Web Server DAT."""
 	ws = _op_web()
 	if ws is None:
-		print('[W2TD WebRTC Error] Web Server DAT not found - create web_server_dat under W2TD')
+		print('[W2TD WebRTC Error] Web Server DAT not found - create web_server_dat under W2TD_Pro')
 		return
 
 	addr = op('/').fetch(f'w2td_webrtc_addr_{connectionId}', None)

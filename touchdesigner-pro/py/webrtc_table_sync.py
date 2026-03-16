@@ -2,11 +2,13 @@
 W2TD webrtc_table -> Audio Stream In CHOP sync
 ==============================================
 Called from DAT Execute DAT on webrtc_table change.
-Nodes under W2TD/webrtc_audio_container (relative path).
+Nodes under W2TD_Pro/webrtc_audio_container (audio TX/RX) and
+W2TD_Pro/webrtc_video_tx_container (video TX, falls back to audio container).
 """
 
 W2TD_BASE = 'W2TD_Pro'
 W2TD_AUDIO = f'{W2TD_BASE}/webrtc_audio_container'
+W2TD_VIDEO_TX = f'{W2TD_BASE}/webrtc_video_tx_container'
 
 
 def _w2td_audio():
@@ -16,7 +18,7 @@ def _w2td_audio():
 		if p:
 			if p.name == 'webrtc_audio_container':
 				return p
-			if p.name == 'W2TD':
+			if p.name in ('W2TD_Pro', 'W2TD'):
 				c = p.op('webrtc_audio_container')
 				if c:
 					return c
@@ -32,6 +34,35 @@ def _w2td_audio():
 		if c:
 			return c
 	return op(W2TD_AUDIO)
+
+
+def _w2td_video_tx():
+	"""Return webrtc_video_tx_container if it exists, else fall back to webrtc_audio_container."""
+	try:
+		p = parent(1)
+		if p:
+			if p.name == 'webrtc_video_tx_container':
+				return p
+			if p.name in ('W2TD_Pro', 'W2TD'):
+				c = p.op('webrtc_video_tx_container')
+				if c:
+					return c
+	except NameError:
+		pass
+	for proj in ('project1', 'project'):
+		c = op(f'{proj}/{W2TD_VIDEO_TX}')
+		if c:
+			return c
+	root = op('/')
+	if root and root.children:
+		c = root.children[0].op(W2TD_VIDEO_TX)
+		if c:
+			return c
+	c = op(W2TD_VIDEO_TX)
+	if c:
+		return c
+	# Fall back to audio container for backward compatibility
+	return _w2td_audio()
 
 
 def _get_container():
@@ -440,6 +471,7 @@ def sync():
 	w2td_audio_c = _w2td_audio()
 	if w2td_audio_c is None:
 		return
+	w2td_video_c = _w2td_video_tx()  # may be same as audio container if webrtc_video_tx_container absent
 
 	# Build target slot set from connected rows
 	active_slots = set()
@@ -448,7 +480,7 @@ def sync():
 		active_slots.add(slot)
 		slot_to_conn[slot] = conn_id
 
-	# Find existing TX nodes (select_slot*, webrtc_audio_out_*, video_stream_out_*)
+	# Find existing TX nodes (select_slot*, webrtc_audio_out_* in audio container; video_stream_out_* in video TX container)
 	existing_selects = {}
 	existing_outs = {}
 	existing_video_outs = {}
@@ -457,8 +489,10 @@ def sync():
 			existing_selects[int(child.name[11:])] = child
 		elif child.name.startswith('webrtc_audio_out_') and child.name[17:].isdigit():
 			existing_outs[int(child.name[17:])] = child
-		elif child.name.startswith('video_stream_out_') and child.name[17:].isdigit():
-			existing_video_outs[int(child.name[17:])] = child
+	if w2td_video_c is not None:
+		for child in w2td_video_c.children:
+			if child.name.startswith('video_stream_out_') and child.name[17:].isdigit():
+				existing_video_outs[int(child.name[17:])] = child
 
 	# Remove stale TX nodes for disconnected slots
 	stale_slots = (set(existing_selects.keys()) | set(existing_outs.keys()) | set(existing_video_outs.keys())) - active_slots
@@ -558,12 +592,12 @@ def sync():
 						newly_created_slots.append(slot)
 
 		# ── Video TX ──────────────────────────────────────────────────────
-		if video_bus is not None:
-			vout = existing_video_outs.get(slot) or w2td_audio_c.op(video_out_name)
+		if video_bus is not None and w2td_video_c is not None:
+			vout = existing_video_outs.get(slot) or w2td_video_c.op(video_out_name)
 			is_new_video = vout is None
 			if is_new_video:
 				try:
-					vout = w2td_audio_c.create('videostreamoutTOP', video_out_name)
+					vout = w2td_video_c.create('videostreamoutTOP', video_out_name)
 					print(f'[W2TD WebRTC Sync TX] Created {video_out_name}')
 				except Exception as e:
 					print(f'[W2TD WebRTC Sync TX] Error Create {video_out_name}: {e}')
