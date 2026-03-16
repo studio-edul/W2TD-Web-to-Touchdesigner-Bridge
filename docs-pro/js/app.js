@@ -768,11 +768,12 @@ const W2TD_VERSION = '1.0.0';
       }
     }
 
-    // Always call requestPermissions: handles iOS motion/orientation popups
-    // and triggers geolocation popup on Android if GPS sensor is selected.
-    updateDebug('Requesting permissions...');
-    const perms = await SensorModule.requestPermissions();
-    updateDebug('Permissions: ' + JSON.stringify(perms));
+    const _sel = SensorModule.getSelected();
+    if (_sel.motion || _sel.orientation || _sel.geolocation) {
+      updateDebug('Requesting permissions...');
+      const perms = await SensorModule.requestPermissions();
+      updateDebug('Permissions: ' + JSON.stringify(perms));
+    }
 
     SensorModule.startListening();
 
@@ -1385,13 +1386,13 @@ const W2TD_VERSION = '1.0.0';
     };
 
     try {
-      // 1. Sensor permissions (DeviceMotion, DeviceOrientation)
-      if (SensorModule.needsPermissionRequest()) {
+      // 1. Sensor permissions (DeviceMotion, DeviceOrientation) — only if needed
+      const _sel = SensorModule.getSelected();
+      if ((_sel.motion || _sel.orientation || _sel.geolocation) && SensorModule.needsPermissionRequest()) {
         await SensorModule.requestPermissions();
         results.sensors = true;
         addLog('Sensor permissions granted', 'info');
       } else {
-        // Non-iOS: sensors work without explicit permission
         results.sensors = true;
       }
 
