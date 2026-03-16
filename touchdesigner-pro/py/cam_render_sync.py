@@ -393,6 +393,13 @@ def sync(table_dat=None):
 				layout1.nodeX = top.nodeX + 600
 				layout1.nodeY = 0
 				print('[Cam Render Sync] Created layout1')
+				# Connect layout1 -> out1
+				out1 = container.op('out1')
+				if out1:
+					try:
+						layout1.outputConnectors[0].connect(out1.inputConnectors[0])
+					except Exception as e:
+						print(f'[Cam Render Sync] Error connecting layout1 -> out1: {e}')
 			except Exception as e:
 				print(f'[Cam Render Sync] Error creating layout1: {e}')
 				layout1 = None
