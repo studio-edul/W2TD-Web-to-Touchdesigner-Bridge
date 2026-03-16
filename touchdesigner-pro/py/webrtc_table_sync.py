@@ -526,11 +526,14 @@ def sync():
 		elif child.name.startswith('webrtc_audio_out_') and child.name[17:].isdigit():
 			existing_outs[int(child.name[17:])] = child
 	# Always scan video container for existing nodes (needed for cleanup when flag turns 0)
+	existing_video_flips = {}
 	_video_c_scan = w2td_video_c or _w2td_video_tx()
 	if _video_c_scan is not None:
 		for child in _video_c_scan.children:
 			if child.name.startswith('video_stream_out_') and child.name[17:].isdigit():
 				existing_video_outs[int(child.name[17:])] = child
+			elif child.name.startswith('flip_top_') and child.name[9:].isdigit():
+				existing_video_flips[int(child.name[9:])] = child
 			elif child.name.startswith('select_video_slot') and child.name[17:].isdigit():
 				pass  # scanned below
 	# Scan container-level select video TOPs
@@ -541,11 +544,11 @@ def sync():
 				existing_video_selects[int(child.name[17:])] = child
 
 	# Remove stale TX nodes for disconnected slots or disabled flags
-	stale_slots = (set(existing_selects.keys()) | set(existing_outs.keys()) | set(existing_video_outs.keys()) | set(existing_video_selects.keys())) - active_slots
+	stale_slots = (set(existing_selects.keys()) | set(existing_outs.keys()) | set(existing_video_outs.keys()) | set(existing_video_selects.keys()) | set(existing_video_flips.keys())) - active_slots
 	if not _audio_tx_flag:
 		stale_slots |= set(existing_selects.keys()) | set(existing_outs.keys())
 	if not _video_tx_flag:
-		stale_slots |= set(existing_video_outs.keys()) | set(existing_video_selects.keys())
+		stale_slots |= set(existing_video_outs.keys()) | set(existing_video_selects.keys()) | set(existing_video_flips.keys())
 	for slot in stale_slots:
 		sel = existing_selects.get(slot)
 		out = existing_outs.get(slot)
@@ -575,8 +578,15 @@ def sync():
 				print(f'[W2TD WebRTC Sync TX] Destroyed select_video_slot{slot}')
 			except Exception as e:
 				print(f'[W2TD WebRTC Sync TX] Error Destroy select_video_slot{slot}: {e}')
+		vflip_stale = existing_video_flips.get(slot)
+		if vflip_stale:
+			try:
+				vflip_stale.destroy()
+				print(f'[W2TD WebRTC Sync TX] Destroyed flip_top_{slot}')
+			except Exception as e:
+				print(f'[W2TD WebRTC Sync TX] Error Destroy flip_top_{slot}: {e}')
 
-	# Each slot gets: video_slot{N} (manually placed at parent level) → select_video_slot{N} (../../video_slot{N}) → video_stream_out_{N}
+	# Each slot gets: video_slot{N} (manually placed at parent level) → select_video_slot{N} → flip_top_{N} → video_stream_out_{N}
 
 	# Create/update TX nodes for active slots
 	TX_BASE_X = 1200
@@ -674,7 +684,38 @@ def sync():
 					vsel.nodeY = -idx * TX_OFFSET_Y
 				except Exception:
 					pass
-			# 3. Create video_stream_out_{N} and wire to selectTOP
+			# 3. Create flip_top_{N} (flipX) between select and stream out
+			flip_name = f'flip_top_{slot}'
+			vflip = existing_video_flips.get(slot) or w2td_video_c.op(flip_name)
+			if vflip is None:
+				try:
+					vflip = w2td_video_c.create('flipTOP', flip_name)
+					print(f'[W2TD WebRTC Sync TX] Created {flip_name}')
+				except Exception as e:
+					print(f'[W2TD WebRTC Sync TX] Error Create {flip_name}: {e}')
+					vflip = None
+			if vflip is not None:
+				if vsel is not None:
+					try:
+						vflip.setInputs([vsel])
+					except Exception:
+						try:
+							vflip.inputConnectors[0].connect(vsel)
+						except Exception:
+							pass
+				for par_name in ('flipx', 'Flipx', 'flipX', 'FlipX'):
+					if hasattr(vflip.par, par_name):
+						try:
+							setattr(vflip.par, par_name, 1)
+							break
+						except Exception:
+							pass
+				try:
+					vflip.nodeX = 150
+					vflip.nodeY = -idx * TX_OFFSET_Y
+				except Exception:
+					pass
+			# 4. Create video_stream_out_{N} and wire to flip_top
 			vout = existing_video_outs.get(slot) or w2td_video_c.op(video_out_name)
 			is_new_video = vout is None
 			if is_new_video:
@@ -685,16 +726,17 @@ def sync():
 					print(f'[W2TD WebRTC Sync TX] Error Create {video_out_name}: {e}')
 					vout = None
 			if vout is not None:
-				if vsel is not None:
+				upstream = vflip if vflip is not None else vsel
+				if upstream is not None:
 					try:
-						vout.setInputs([vsel])
+						vout.setInputs([upstream])
 					except Exception:
 						try:
-							vout.inputConnectors[0].connect(vsel)
+							vout.inputConnectors[0].connect(upstream)
 						except Exception:
 							pass
 				try:
-					vout.nodeX = 150
+					vout.nodeX = 300
 					vout.nodeY = -idx * TX_OFFSET_Y
 				except Exception:
 					pass
