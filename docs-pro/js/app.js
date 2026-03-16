@@ -406,7 +406,7 @@ const W2TD_VERSION = '1.0.0';
       if (devMode) {
         // dev_mode=1: show TD Stream button and put video in monitor overlay
         videoEl.style.position = '';
-        videoEl.style.zIndex = '';
+        videoEl.style.zIndex = '0';
         videoEl.style.pointerEvents = '';
         videoEl.style.objectFit = 'contain';
         videoEl.style.width = '100%';
