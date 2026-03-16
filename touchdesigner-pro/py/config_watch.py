@@ -90,6 +90,11 @@ def _build_config_msg(cfg):
 		'audio_noise_suppression': _cfg_val(cfg, 'Noisesuppression', 'noisesuppression', 'audio_noise_suppression', default=0),
 		'audio_auto_gain': _cfg_val(cfg, 'Audiogain', 'audiogain', 'audio_auto_gain', default=0),
 		'show_dots': _cfg_val(cfg, 'Showdots', 'showdots', 'show_dots', default=1),
+		'backgroundcolor': _cfg_val(cfg, 'Backgroundcolor', 'backgroundcolor', 'background_color', default=1),
+		'flashlight': _cfg_val(cfg, 'Flashlight', 'flashlight', default=1),
+		'hapticfeedback': _cfg_val(cfg, 'Hapticfeedback', 'hapticfeedback', 'Haptic', 'haptic', default=1),
+		'audio_tx': _cfg_val(cfg, 'Audio', 'audio_tx', default=1),
+		'video_tx': _cfg_val(cfg, 'Video', 'video_tx', default=1),
 	}
 	ice_srv = (cfg.get('ice_servers') or cfg.get('Ice_servers') or '').strip()
 	if ice_srv:
@@ -189,6 +194,15 @@ def _do_broadcast():
 				print(f'[W2TD] web_render_top resolution -> {sq}x{sq}, transform rotate -> {rotate_deg} ({updated} TOPs)')
 	except Exception:
 		pass
+	# Trigger webrtc_table_sync to update TX nodes when Audio/Video flags change
+	try:
+		sync_dat = (_op('webrtc_table_sync')
+		            or _op('webrtc_audio_container/webrtc_table_sync')
+		            or _op('webrtc_auto_sync'))
+		if sync_dat and hasattr(sync_dat, 'module') and hasattr(sync_dat.module, 'sync'):
+			sync_dat.module.sync()
+	except Exception as e:
+		print(f'[W2TD Config Watch] sync trigger failed: {e}')
 
 
 def _debounced_broadcast():

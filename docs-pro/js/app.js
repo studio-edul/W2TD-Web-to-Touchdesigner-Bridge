@@ -12,6 +12,11 @@ const W2TD_VERSION = '1.0.0';
   let wakeLock = null;
   let touchPadActive = false;
   let hapticEnabled = true;
+  let bgColorEnabled = true;
+  let flashlightEnabled = true;
+  let hapticFeedbackEnabled = true;
+  let audioTxEnabled = true;
+  let videoTxEnabled = true;
   let devMode = true; // true = full UI, false = minimal/auto mode
   let vizInitialized = false;
   let cameraFrontEnabled = false;
@@ -142,6 +147,11 @@ const W2TD_VERSION = '1.0.0';
     if (cfg.haptic != null) {
       hapticEnabled = !!parseInt(cfg.haptic);
     }
+    if (cfg.hapticfeedback != null) hapticFeedbackEnabled = !!parseInt(cfg.hapticfeedback);
+    if (cfg.backgroundcolor != null) bgColorEnabled = !!parseInt(cfg.backgroundcolor);
+    if (cfg.flashlight != null) flashlightEnabled = !!parseInt(cfg.flashlight);
+    if (cfg.audio_tx != null) audioTxEnabled = !!parseInt(cfg.audio_tx);
+    if (cfg.video_tx != null) videoTxEnabled = !!parseInt(cfg.video_tx);
     let sensorChanged = false;
     ['motion', 'orientation', 'geolocation', 'touch'].forEach(key => {
       const v = cfg[`sensor_${key}`];
@@ -641,6 +651,7 @@ const W2TD_VERSION = '1.0.0';
       },
       // Pro: Background color sync (strobe/flash effect)
       onBgColor: (color, duration) => {
+        if (!bgColorEnabled) return;
         if (typeof AudioModule === 'undefined') return; // Pro feature check
         document.body.style.backgroundColor = color;
         // Apply to touch pad overlay as well (it covers body with its own background)
@@ -655,6 +666,7 @@ const W2TD_VERSION = '1.0.0';
       },
       // Pro: Flashlight control
       onFlashlight: (state) => {
+        if (!flashlightEnabled) return;
         addLog(`Flashlight signal received: state=${state}`, 'info');
         if (typeof WebRTCModule === 'undefined' || !WebRTCModule.toggleFlashlight) {
           addLog('Flashlight: WebRTCModule not available', 'warn');
@@ -728,6 +740,8 @@ const W2TD_VERSION = '1.0.0';
       echoCancellation: audioEchoCancellation,
       noiseSuppression: audioNoiseSuppression,
       autoGainControl: audioAutoGain,
+      audioTx: audioTxEnabled,
+      videoTx: videoTxEnabled,
     }));
     if (ok === false) {
       micEnabled = false;
@@ -1169,6 +1183,7 @@ const W2TD_VERSION = '1.0.0';
    * 2. State mode: {"type": "haptic", "state": 0 or 1} (CHOP-based)
    */
   function handleHapticFeedback(data) {
+    if (!hapticFeedbackEnabled) return;
     // Check Vibration API support
     if (!navigator.vibrate) {
       console.log('[W2TD] Vibration API not supported');
@@ -1257,7 +1272,7 @@ const W2TD_VERSION = '1.0.0';
 
   async function _startWebRTC() {
     if (!WSClient.isConnected()) return;
-    const ok = await WebRTCModule.start(_webrtcStartOpts({ mic: micEnabled }));
+    const ok = await WebRTCModule.start(_webrtcStartOpts({ mic: micEnabled, audioTx: audioTxEnabled, videoTx: videoTxEnabled }));
     if (ok === false && micEnabled) {
       const err = WebRTCModule.getLastError();
       let msg = 'Mic activation failed';

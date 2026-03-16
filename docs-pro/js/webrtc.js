@@ -160,6 +160,8 @@ const WebRTCModule = (() => {
     autoGainControl = false,
     iceServers = null,
     iceTransportPolicy = null,
+    audioTx = true,
+    videoTx = true,
   } = {}) {
     _lastError = null;
     _micIceRecvCount = 0;
@@ -189,9 +191,9 @@ const WebRTCModule = (() => {
     if (micStream && micStream.getAudioTracks().length > 0) {
       micStream.getTracks().forEach(track => micPc.addTrack(track, micStream));
     } else {
-      micPc.addTransceiver('audio', { direction: 'recvonly' });
-      micPc.addTransceiver('video', { direction: 'recvonly' });
-      _log('No mic — added recvonly audio+video transceivers for TD downlink');
+      if (audioTx) micPc.addTransceiver('audio', { direction: 'recvonly' });
+      if (videoTx) micPc.addTransceiver('video', { direction: 'recvonly' });
+      if (audioTx || videoTx) _log(`No mic — added recvonly transceivers: audio=${audioTx} video=${videoTx}`);
     }
 
     // Listen for incoming tracks from TD (TD -> Mobile audio/video streaming)

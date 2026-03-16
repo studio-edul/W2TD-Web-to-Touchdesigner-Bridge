@@ -225,6 +225,54 @@ def _set_audio_chop_params(chop, conn_id):
 	return False
 
 
+def _read_tx_flags():
+	"""Read Audio/Video TX feature flags from w2td_config. Returns (audio_tx, video_tx) as bool."""
+	base = _w2td_base()
+	cfg_dat = None
+	if base:
+		cfg_dat = base.op('w2td_config')
+	if cfg_dat is None:
+		cfg_dat = op('w2td_config')
+	if cfg_dat is None:
+		return True, True  # default: both enabled
+	audio_tx = True
+	video_tx = True
+	for r in range(1, cfg_dat.numRows):
+		try:
+			key = str(cfg_dat[r, 0]).strip().lower()
+			val = str(cfg_dat[r, 1]).strip()
+			if key == 'audio':
+				audio_tx = bool(int(float(val)))
+			elif key == 'video':
+				video_tx = bool(int(float(val)))
+		except Exception:
+			pass
+	return audio_tx, video_tx
+
+
+def _w2td_base():
+	"""Get W2TD_Pro base container."""
+	try:
+		p = parent(1)
+		if p and p.name in ('W2TD_Pro', 'W2TD'):
+			return p
+		p2 = parent(2)
+		if p2 and p2.name in ('W2TD_Pro', 'W2TD'):
+			return p2
+	except NameError:
+		pass
+	for proj in ('project1', 'project'):
+		w = op(f'{proj}/{W2TD_BASE}')
+		if w:
+			return w
+	root = op('/')
+	if root and root.children:
+		w = root.children[0].op(W2TD_BASE)
+		if w:
+			return w
+	return op(W2TD_BASE) or op('W2TD')
+
+
 def _get_audio_bus():
 	"""Find w2td_audio_bus CHOP (input audio bus for TX routing)."""
 	c = _w2td_audio()
@@ -448,12 +496,13 @@ def sync():
 		print('[W2TD WebRTC Sync RX] No connections - all audio stream in chops removed')
 
 	# ── TX: Audio Stream Out + Video Stream Out (TD -> Mobile) ──────────────
-	# Audio TX only runs if w2td_audio_bus CHOP exists (optional feature).
-	# Video TX only runs if w2td_video_bus TOP exists.
-	# Skip entirely if neither exists.
-	audio_bus = _get_audio_bus()
-	w2td_video_c = _w2td_video_tx()  # None if webrtc_video_tx_container does not exist
-	if audio_bus is None and w2td_video_c is None:
+	# Audio TX only runs if w2td_audio_bus CHOP exists AND Audio config flag is 1.
+	# Video TX only runs if webrtc_video_tx_container exists AND Video config flag is 1.
+	# Skip entirely if neither is active.
+	_audio_tx_flag, _video_tx_flag = _read_tx_flags()
+	audio_bus = _get_audio_bus() if _audio_tx_flag else None
+	w2td_video_c = _w2td_video_tx() if _video_tx_flag else None
+	if audio_bus is None and w2td_video_c is None and _audio_tx_flag and _video_tx_flag:
 		return
 
 	w2td_audio_c = _w2td_audio()
@@ -476,13 +525,19 @@ def sync():
 			existing_selects[int(child.name[11:])] = child
 		elif child.name.startswith('webrtc_audio_out_') and child.name[17:].isdigit():
 			existing_outs[int(child.name[17:])] = child
-	if w2td_video_c is not None:
-		for child in (w2td_video_c.children if w2td_video_c else []):
+	# Always scan video container for existing nodes (needed for cleanup when flag turns 0)
+	_video_c_scan = w2td_video_c or _w2td_video_tx()
+	if _video_c_scan is not None:
+		for child in _video_c_scan.children:
 			if child.name.startswith('video_stream_out_') and child.name[17:].isdigit():
 				existing_video_outs[int(child.name[17:])] = child
 
-	# Remove stale TX nodes for disconnected slots
+	# Remove stale TX nodes for disconnected slots or disabled flags
 	stale_slots = (set(existing_selects.keys()) | set(existing_outs.keys()) | set(existing_video_outs.keys())) - active_slots
+	if not _audio_tx_flag:
+		stale_slots |= set(existing_selects.keys()) | set(existing_outs.keys())
+	if not _video_tx_flag:
+		stale_slots |= set(existing_video_outs.keys())
 	for slot in stale_slots:
 		sel = existing_selects.get(slot)
 		out = existing_outs.get(slot)
