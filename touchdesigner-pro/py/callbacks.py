@@ -518,8 +518,6 @@ def _config_msg(cfg):
 		'show_dots':		  _config_val(cfg, 'Showdots', 'showdots', 'show_dots', default=1),
 		# Videoout: none=off, td=TD video stream, js=JS canvas sketch, color=bg color
 		'videoout':		   _config_val(cfg, 'Videoout', 'videoout', 'display_mode', default='none'),
-		# Audioout: 1=enabled, 0=disabled
-		'audioout':		   int(_config_val(cfg, 'Audioout', 'audioout', default=1)),
 		# Show top status bar while a JS sketch is rendering (0=hide, 1=show)
 		'canvas_topbar':	  _config_val(cfg, 'Canvastopbar', 'canvastopbar', 'canvas_topbar', default=1),
 	}
@@ -1278,31 +1276,29 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			_slot = slot
 			_wrtc = wrtc
 			_cfg = _read_config()
-			# Auto-select WebRTC Track on Audio Stream Out CHOP (only when audioout == 1)
-			if int(_cfg.get('audioout', 1)) == 1:
-				_attempt = [0]
-				def _auto_select_tx_track():
-					_attempt[0] += 1
-					out_chop = _op(f'webrtc_audio_container/webrtc_audio_out_{_slot}')
-					if out_chop is None:
-						return
-					track_name = f'audio_out_{_slot}'
-					for par_name in ('webrtctrack', 'Webrtctrack', 'track', 'Track'):
-						if hasattr(out_chop.par, par_name):
-							p = getattr(out_chop.par, par_name)
-							menus = getattr(p, 'menuNames', []) or []
-							if track_name in menus:
-								setattr(out_chop.par, par_name, track_name)
-								print(f'[W2TD WebRTC] Auto-selected track "{track_name}" on webrtc_audio_out_{_slot} (attempt {_attempt[0]})')
-							elif menus:
-								setattr(out_chop.par, par_name, menus[0])
-								print(f'[W2TD WebRTC] Auto-selected track "{menus[0]}" on webrtc_audio_out_{_slot} (attempt {_attempt[0]})')
-							elif _attempt[0] < 15:
-								run(_auto_select_tx_track, delayFrames=5, fromOP=_wrtc)
-							else:
-								print(f'[W2TD WebRTC] No tracks on webrtc_audio_out_{_slot} after {_attempt[0]} attempts')
-							break
-				run(_auto_select_tx_track, delayFrames=5, fromOP=wrtc)
+			_attempt = [0]
+			def _auto_select_tx_track():
+				_attempt[0] += 1
+				out_chop = _op(f'webrtc_audio_container/webrtc_audio_out_{_slot}')
+				if out_chop is None:
+					return
+				track_name = f'audio_out_{_slot}'
+				for par_name in ('webrtctrack', 'Webrtctrack', 'track', 'Track'):
+					if hasattr(out_chop.par, par_name):
+						p = getattr(out_chop.par, par_name)
+						menus = getattr(p, 'menuNames', []) or []
+						if track_name in menus:
+							setattr(out_chop.par, par_name, track_name)
+							print(f'[W2TD WebRTC] Auto-selected track "{track_name}" on webrtc_audio_out_{_slot} (attempt {_attempt[0]})')
+						elif menus:
+							setattr(out_chop.par, par_name, menus[0])
+							print(f'[W2TD WebRTC] Auto-selected track "{menus[0]}" on webrtc_audio_out_{_slot} (attempt {_attempt[0]})')
+						elif _attempt[0] < 15:
+							run(_auto_select_tx_track, delayFrames=5, fromOP=_wrtc)
+						else:
+							print(f'[W2TD WebRTC] No tracks on webrtc_audio_out_{_slot} after {_attempt[0]} attempts')
+						break
+			run(_auto_select_tx_track, delayFrames=5, fromOP=wrtc)
 			# Auto-select WebRTC Track on Video Stream Out TOP (only when videoout == 'td')
 			if _cfg.get('videoout') == 'td':
 				_video_attempt = [0]
