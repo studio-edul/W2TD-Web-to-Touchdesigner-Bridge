@@ -98,8 +98,8 @@ Columns: `key` | `value`. Changes are debounced and broadcast automatically by `
 | `Backgroundcolor` | `1` | _(Pro)_ Enable background-color push |
 | `Flashlight` | `1` | _(Pro)_ Enable flashlight control |
 | `Hapticfeedback` | `1` | _(Pro)_ Enable haptic from CHOP |
-| `Audio` | `1` | _(Pro)_ Enable per-slot audio downlink TX |
 | `Video` | `1` | _(Pro)_ Enable per-slot video downlink TX |
+| `Videoout` | `none` | _(Pro)_ Mobile display mode: `none` = off, `color` = background color control, `js` = live JS canvas sketch, `td` = TD video stream |
 
 #### w2td_init.py (Execute DAT)
 
@@ -257,18 +257,56 @@ op('web_server_dat').module.broadcast_haptic_from_chop(op('web_server_dat'))
 
 ## TD Background Color API (Pro)
 
+Requires `Videoout = color` in `w2td_config`. Color is applied as a full-screen background on the mobile.
+
 ```python
 # Send color to a specific slot
 op('web_server_dat').module.send_bg_color_to_client(op('web_server_dat'), slot=1, color='#ff0000', duration=0)
 
 # Send same color to all devices
 op('web_server_dat').module.send_bg_color_to_all(op('web_server_dat'), color='#ff0000', duration=100)
+# duration: 0 = persistent, >0 = revert to transparent after N ms
 ```
 
 **CHOP-driven control (`background_chop_exec.py`):**
 - Create a CHOP Execute DAT, set CHOPs: `w2td_background w2td_bg_color_bus`, Value Change: On
 - `w2td_background` — channels `r`, `g`, `b` (0-1, single sample) → broadcasts the same color to all clients
 - `w2td_bg_color_bus` — channels `slot1_r`, `slot1_g`, `slot1_b`, `slot2_r`, ... (0-1) → per-slot routing
+
+## TD Canvas Sketch API (Pro)
+
+Live-inject a JavaScript sketch into the mobile browser canvas. Requires `Videoout = js` in `w2td_config`.
+
+The sketch receives three arguments: `canvas` (HTMLCanvasElement), `requestFrame` (wrapped rAF), `getSensors()` (real-time sensor snapshot). Global libraries `gsap`, `THREE`, `p5` are available (loaded from CDN in index.html). Return a cleanup function to run on reload/stop.
+
+```python
+# Broadcast sketch to all connected mobiles
+op('web_server_dat').module.send_canvas_code_to_all(op('web_server_dat'), op('my_sketch_dat'))
+
+# Send to a specific slot
+op('web_server_dat').module.send_canvas_code_to_slot(op('web_server_dat'), 1, op('my_sketch_dat'))
+
+# Clear (stops sketch on all mobiles)
+op('web_server_dat').module.clear_canvas_code(op('web_server_dat'))
+```
+
+**Auto-send via DAT input (recommended):**
+
+Inside `W2TD_Pro`, add an `In DAT` named `js_code_in` and a `DAT Execute` pointing to `canvas_code_dat_exec.py`. Connect a Text DAT (your sketch file) to the COMP's DAT input connector. Any edit to the Text DAT is instantly broadcast to all connected mobiles.
+
+**`getSensors()` return keys:**
+
+| Key | Source | Notes |
+|-----|--------|-------|
+| `ax ay az` | Accelerometer | m/s², gravity included |
+| `ga gb gg` | Gyroscope | deg/s |
+| `oa ob og` | Orientation | alpha 0–360°, beta ±180°, gamma ±90° |
+| `lat lon` | GPS | degrees |
+| `touch_count` | Touch | integer |
+| `t0x t0y t0s` … | Touch points | x/y normalized 0–1, state 1=down |
+
+**Example sketch** — sensor test ball with inertia, holofoil, and heartbeat:
+`touchdesigner-examples/canvas_sketches/sensor_test.js`
 
 ## TD Flashlight API (Pro)
 
@@ -304,9 +342,10 @@ On the mobile side:
 - **Microphone** — WebRTC → Audio Stream In CHOP (uplink)
 - **Camera** — WebRTC → per-slot Web Render TOP (rear/front, mutually exclusive per device), with transform + crop + layout compositing
 - **Audio downlink** _(Pro)_ — TD Audio Stream Out CHOP → WebRTC → mobile speaker (per-slot routing via `w2td_audio_bus`)
-- **Video downlink** _(Pro)_ — TD Video Stream Out TOP → WebRTC → mobile `<video>` (source: `video_slot{N}` TOP; dev_mode=1: monitor overlay, dev_mode=0: fullscreen background)
+- **Video downlink** _(Pro)_ — TD Video Stream Out TOP → WebRTC → mobile `<video>` (source: `video_slot{N}` TOP; dev_mode=1: monitor overlay, dev_mode=0: fullscreen background). Requires `Videoout = td`.
+- **Background color** _(Pro)_ — broadcast via `w2td_background` (r/g/b) or per-slot via `w2td_bg_color_bus` (channels `slot{N}_r/g/b`). Requires `Videoout = color`.
+- **Live JS canvas sketch** _(Pro)_ — inject JavaScript into mobile canvas from a Text DAT. Sensor data (motion, orientation, touch) available inside the sketch via `getSensors()`. Auto-broadcast on edit via `canvas_code_dat_exec.py`. Requires `Videoout = js`.
 - **Haptic feedback** _(Pro)_ — pattern-based or continuous, driven by `w2td_haptic` CHOP or Python API
-- **Background color** _(Pro)_ — broadcast via `w2td_background` (r/g/b) or per-slot via `w2td_bg_color_bus` (channels `slot{N}_r/g/b`)
 - **Flashlight** _(Pro)_ — driven by `w2td_flashlight` CHOP (channels `slot{N}` or `all`)
 - **WebSocket Heartbeat** — auto-reconnect on connection loss
 - **Data Ack** — visual confirmation of TD reception (rate-limited 1 Hz)
@@ -336,9 +375,10 @@ docs/                        ← Free web app (hosted at w2td.studio-edul.com)
 
 docs-pro/                    ← Pro web app (hosted at w2td-pro.studio-edul.com)
   js/
-    app.js                   ← + bg color, flashlight, TD-stream monitor
+    app.js                   ← + bg color, flashlight, TD-stream monitor, Videoout mode gate
     webrtc.js                ← + handleOffer (TD-initiated audio/video downlink)
-    websocket.js             ← + haptic, bg_color, flashlight callbacks
+    websocket.js             ← + haptic, bg_color, flashlight, canvas_code callbacks
+    canvas_runner.js         ← CanvasRunner — executes injected JS sketch in #render-canvas
     audio.js                 ← (legacy — unused, replaced by WebRTC)
     ...
 
@@ -352,15 +392,20 @@ touchdesigner/py/            ← Free TD scripts (W2TD base COMP)
   w2td_zombie_checker.py     ← Cleans up stale slots
 
 touchdesigner-pro/py/        ← Pro TD scripts (W2TD_Pro base COMP)
-  callbacks.py               ← + webrtc_reoffer/reanswer handlers, auto track select
+  callbacks.py               ← + webrtc_reoffer/reanswer handlers, canvas_code/bg_color/flashlight API
   webrtc_callbacks.py        ← + onOffer (TD-initiated offer sending)
   webrtc_table_sync.py       ← + audio/video TX routing (Select → flip → Stream Out)
+  canvas_code_dat_exec.py    ← DAT Execute — watches js_code_in (In DAT) → auto-broadcast sketch
   background_chop_exec.py    ← w2td_background / w2td_bg_color_bus → bg_color msgs
   haptic_chop_exec.py        ← w2td_haptic → haptic state msgs
   flashlight_chop_exec.py    ← w2td_flashlight → flashlight msgs
   update_execs.py            ← Dev utility (touch Execute DAT files to reload)
   w2td_zombie_checker.py     ← Cleans up stale slots
   (config_watch, cam_render_sync, w2td_init same as free but with W2TD_Pro base)
+
+touchdesigner-examples/      ← Example projects
+  canvas_sketches/
+    sensor_test.js           ← Sensor test: inertia ball + holofoil + heartbeat (canvas_code sketch)
 ```
 
 > **Workflow:** Only `docs/` and `docs-pro/` are pushed to GitHub / hosted. Python files are applied directly in TD — TD reads them live from disk.

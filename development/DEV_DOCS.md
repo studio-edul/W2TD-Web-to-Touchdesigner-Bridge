@@ -1,6 +1,6 @@
 # W2TD (Web-to-TouchDesigner Bridge) 개발 문서
 
-> 최종 업데이트: 2026-04-17 (trigger 제거, w2td_setup → w2td_init.install_packages() 통합, 호스팅 도메인 변경, 컨테이너 구조 반영, bg_color_bus 채널 스킴 정정)
+> 최종 업데이트: 2026-04-28 (Videoout config 추가, canvas sketch 시스템 추가, audioout 제거, canvas_code_dat_exec.py 추가, canvas_runner.js 추가)
 > 목적: 추후 세션에서 파일 위치·구현 방식을 빠르게 파악하기 위한 참고 문서
 
 ---
@@ -147,16 +147,17 @@ Integrated-Web-to-TouchDesigner-Bridge/
 │       └── app.js                 ← 전체 조율 컨트롤러 (메인 앱)
 │
 ├── docs-pro/                      ← Pro 버전 웹 파일
-│   ├── index.html
+│   ├── index.html                 ← gsap, THREE, p5 CDN 로드 (canvas sketch용)
 │   ├── css/style.css
 │   └── js/
-│       ├── websocket.js           ← WebSocket (haptic, bg_color, flashlight 콜백 추가)
+│       ├── websocket.js           ← WebSocket (haptic, bg_color, flashlight, canvas_code 콜백 추가)
 │       ├── sensors.js
 │       ├── touch.js
 │       ├── visualization.js
 │       ├── webrtc.js              ← WebRTC + handleOffer (TD-initiated 오디오 다운링크)
+│       ├── canvas_runner.js       ← CanvasRunner — JS 스케치 실행 (new Function 패턴)
 │       ├── audio.js               ← (레거시 — 현재 미사용, WebRTC로 대체)
-│       └── app.js                 ← Pro 기능 포함 (배경색, 플래시라이트 등)
+│       └── app.js                 ← Pro 기능 포함 (Videoout 모드 게이트, 배경색, 플래시라이트, 스케치)
 │
 ├── touchdesigner/
 │   └── py/                        ← 프리 버전 (base COMP: W2TD)
@@ -170,17 +171,22 @@ Integrated-Web-to-TouchDesigner-Bridge/
 │
 ├── touchdesigner-pro/
 │   └── py/                        ← Pro 버전 (base COMP: W2TD_Pro)
-│       ├── callbacks.py           ← 프리 + 오디오/비디오 다운링크, bg_color, haptic, flashlight 핸들러
+│       ├── callbacks.py           ← 프리 + 오디오/비디오 다운링크, bg_color, haptic, flashlight, canvas_code 핸들러
 │       ├── w2td_init.py           ← 프리 + scipy 설치 포함
 │       ├── webrtc_callbacks.py    ← onOffer 포함 — TD-initiated offer 전송
-│       ├── config_watch.py        ← 프리 + 배경/플래시/오디오/비디오 TX 키 포함, 해상도/회전 자동 반영
+│       ├── config_watch.py        ← 프리 + 배경/플래시/비디오 TX 키 포함, 해상도/회전 자동 반영
 │       ├── cam_render_sync.py     ← web_render_top → transform_top → crop_top → layout1 자동 연결
 │       ├── webrtc_table_sync.py   ← Audio RX/TX + Video TX (flip_top) 자동 관리, 단일 createOffer
+│       ├── canvas_code_dat_exec.py ← DAT Execute — js_code_in 변경 감지 → send_canvas_code_to_all 호출
 │       ├── haptic_chop_exec.py    ← w2td_haptic CHOP → haptic 메시지 (slot{N}/all 채널)
 │       ├── background_chop_exec.py ← w2td_background (전체) / w2td_bg_color_bus (슬롯별 slot{N}_r/g/b) → bg_color
 │       ├── flashlight_chop_exec.py ← w2td_flashlight CHOP → flashlight 메시지
 │       ├── update_execs.py        ← 콜백 DAT들 재연결 유틸리티
 │       └── w2td_zombie_checker.py ← 주기적으로 좀비 연결 정리
+│
+├── touchdesigner-examples/
+│   └── canvas_sketches/
+│       └── sensor_test.js         ← 스케치 예제: 관성 공 + holofoil + 심장박동 (센서 확인용)
 │
 ├── development/
 │   ├── DEV_DOCS.md                ← 이 파일
@@ -246,8 +252,8 @@ TD의 `w2td_config` Table DAT에서 값을 읽어 연결 시 모바일로 push. 
 | `Backgroundcolor` | 1 | (Pro) bg_color 메시지 수신 활성화 |
 | `Flashlight` | 1 | (Pro) flashlight 메시지 수신 활성화 |
 | `Hapticfeedback` | 1 | (Pro) 햅틱 메시지 수신 활성화 |
-| `Audio` | 1 | (Pro) TD→모바일 오디오 다운링크 활성화 |
 | `Video` | 1 | (Pro) TD→모바일 비디오 다운링크 활성화 |
+| `Videoout` | `none` | (Pro) 모바일 디스플레이 모드. `none`=비활성, `color`=배경색 제어, `js`=JS 스케치, `td`=TD 비디오 스트림. 클라이언트 연결 시 config에 포함돼 전송됨. 이후 변경 시 재연결 필요. |
 | `Turnserver` | (없음) | 다른 네트워크용 TURN 서버 주소 (예: `turn:global.relay.metered.ca:80`) |
 | `Turnusername` | (없음) | TURN 사용자명 |
 | `Turnpassword` | (없음) | TURN 비밀번호 |
@@ -548,6 +554,69 @@ WebRTC 연결 완료 후 webrtc_table 갱신
 
 ---
 
+### 5-9. `docs-pro/js/app.js` — Videoout 모드 게이트
+
+Pro 버전의 app.js는 `Videoout` config 값에 따라 배경색·스케치·TD 비디오를 상호배타적으로 활성화한다.
+
+**`displayMode` 변수** (string | null)
+
+| 값 | 의미 |
+|---|---|
+| `null` | 미설정 (초기값) — 게이트 없이 모든 메시지 허용 |
+| `'none'` | 비활성화 |
+| `'color'` | 배경색 모드 — `onBgColor` 허용, 스케치/TD영상 중단 |
+| `'js'` | JS 스케치 모드 — `onCanvasCode` 허용, 배경색/TD영상 중단 |
+| `'td'` | TD 비디오 모드 — 수신 즉시 td-stream-monitor 자동 오픈 |
+
+`applyConfig(cfg)` 에서 `cfg.videoout` 값을 받아 `displayMode`에 저장하고 `_applyDisplayMode()` 호출.
+
+**`_applyDisplayMode()` 동작:**
+- `'color'` 이 아닐 때: body 배경색 초기화
+- `'js'` 이 아닐 때: `CanvasRunner.stop()` 호출 (스케치 중단)
+- `'js'` 일 때: `cachedCanvasCode`가 있으면 즉시 `CanvasRunner.load(code)` 재실행
+- `'td'` 이 아닐 때: td-stream-monitor 오버레이 닫기
+- `'td'` 일 때 + 이미 비디오 활성 → td-stream-monitor 자동 오픈
+
+---
+
+### 5-10. `docs-pro/js/canvas_runner.js` — `CanvasRunner`
+
+TD에서 내려온 JS 스케치를 `#render-canvas`에서 실행하는 샌드박스 런너.
+
+**실행 방식:**
+```javascript
+const fn = new Function('canvas', 'requestFrame', 'getSensors', code);
+const ret = fn(canvas, _requestFrame, getSensors);
+if (typeof ret === 'function') userCleanup = ret;  // cleanup 함수 등록
+```
+
+코드 문자열에서 `canvas`, `requestFrame`, `getSensors` 세 변수를 인자로 바로 사용할 수 있다.
+
+**`getSensors()` 반환 구조:**
+```javascript
+{
+  ax, ay, az,           // 가속도계 m/s²
+  ga, gb, gg,           // 자이로 deg/s
+  oa, ob, og,           // 오리엔테이션 (ob=beta, og=gamma)
+  lat, lon,             // GPS
+  touch_count,          // 터치 수
+  t0x, t0y, t0s,        // 첫 번째 터치 (x/y 0~1, state 1=down)
+  t1x, t1y, t1s, ...    // 추가 터치들
+}
+```
+
+**`requestFrame(cb)`:** rAF를 wrapping. stop() 호출 시 등록된 모든 프레임 취소.
+
+**라이브러리 접근:** `index.html`에서 전역으로 로드된 `gsap`, `THREE`, `p5` 모두 스케치 코드 내에서 직접 사용 가능. 단 `p5`는 instance 모드만 권장 (global 모드는 충돌).
+
+**`load(code)` 호출 시 동작:**
+1. `stop()` — 기존 rAF 전부 취소, userCleanup 실행, canvas 숨김
+2. `#render-canvas` 표시, 크기를 viewport × DPR로 설정
+3. `new Function(...)` 으로 스케치 실행
+4. 에러 발생 시 `WSClient.send({ type: 'canvas_error', message, stack })`으로 TD에 리포트
+
+---
+
 ## 6. TouchDesigner 파일 상세
 
 `W2TD_BASE` 상수는 프리/프로에 따라 다르다: 프리 `'W2TD'`, 프로 `'W2TD_Pro'`. `_w2td_base()` + `_op()` 헬퍼가 베이스 COMP 기준으로 상대 경로 조회.
@@ -580,7 +649,23 @@ TD의 Web Server DAT에 등록되는 메인 처리 파일.
 | `webrtc_ice` | `webrtc_dat.addIceCandidate` |
 | `webrtc_offer_cam` | 슬롯별 cam_receiver_addr로 `cam_offer` relay (슬롯마다 독립 cam_receiver) |
 | `webrtc_ice_cam` | 슬롯별 cam_receiver로 `cam_ice` relay |
+| `canvas_error` | 모바일 스케치 런타임 에러 → Textport 출력 |
 | `ping` | `pong` 응답 |
+
+**신규 연결 시 자동 재전송 (on connect):**
+
+`onWebSocketOpen` 이후 `Videoout` 값에 따라 추가 데이터 자동 전송:
+- `videoout == 'color'` → 저장된 배경색(`op('/').fetch('w2td_bg_color', '')`) 재전송
+- `videoout == 'js'` → `_replay_canvas_code()` 호출 → 슬롯별 캐시 우선, 없으면 전체 캐시 전송
+
+**canvas_code 관련 Python API (Pro callbacks.py):**
+
+| 함수 | 설명 |
+|---|---|
+| `send_canvas_code_to_all(ws, source)` | source: Text DAT op 또는 코드 문자열. `op('/').store('w2td_canvas_code', code)` 후 전체 broadcast |
+| `send_canvas_code_to_slot(ws, slot, source)` | 슬롯별 전송. `op('/').store(f'w2td_canvas_code_slot_{slot}', code)` 별도 캐시 |
+| `clear_canvas_code(ws, slot=None)` | 빈 코드 전송 → CanvasRunner.stop() 트리거. slot=None이면 전체 초기화 |
+| `_replay_canvas_code(ws, client_addr, slot)` | 슬롯별 캐시 우선 → 전체 캐시 순서로 재전송. 신규 연결 시 호출 |
 
 **cam_receiver → TD 메시지 처리**
 
@@ -669,6 +754,31 @@ onStart()
 | `web_server_dat` | Web Server DAT | TLS Off 기준 (`Port` 기본 9980) |
 | `webrtc_audio_container/webrtc_dat` | WebRTC DAT | TURN 설정 자동 적용 |
 | 베이스 COMP 자체 | COMP | Custom parameter `url` / `Url` — short host 표시 (선택) |
+
+---
+
+### 6-2-1. `touchdesigner-pro/py/canvas_code_dat_exec.py` — JS 스케치 자동 브로드캐스트
+
+W2TD_Pro COMP 내부에 배치하는 DAT Execute. 외부에서 연결한 Text DAT의 내용이 바뀌면 즉시 모든 모바일에 canvas_code를 전송한다.
+
+**TD 노드 구성:**
+```
+W2TD_Pro COMP 내부:
+  js_code_in (In DAT)          ← COMP 외부 DAT 입력 커넥터
+       ↓ (DAT Execute "DATs" 파라미터로 연결)
+  canvas_code_exec (DAT Execute) ← Callbacks DAT = canvas_code_dat_exec.py
+
+W2TD_Pro COMP 외부:
+  user_sketch (Text DAT) ─────→ W2TD_Pro COMP DAT 입력
+```
+
+**동작 흐름:**
+1. Text DAT 수정 → `js_code_in` 업데이트 → `onTableChange(dat)` 호출
+2. `dat.text`에서 코드 추출 → `op('../web_server_dat').module.send_canvas_code_to_all(ws, code)` 호출
+3. `send_canvas_code_to_all`은 코드를 `op('/').store('w2td_canvas_code', code)`에 캐시 후 전체 broadcast
+4. 모바일 `CanvasRunner.load(code)` 실행 → 스케치 즉시 교체
+
+빈 텍스트를 넣으면 `CanvasRunner.stop()` 트리거 (스케치 중단).
 
 ---
 
