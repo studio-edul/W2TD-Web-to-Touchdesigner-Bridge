@@ -19,6 +19,7 @@ const WSClient = (() => {
   let onDataAck = null; // callback() for data acknowledgment
   let onBgColor = null; // callback(color, duration) for Pro background color sync
   let onFlashlight = null; // callback(state) for Pro flashlight control
+  let onCanvasCode = null; // callback(code) for Pro canvas sketch injection
   
   // Heartbeat
   let heartbeatInterval = null;
@@ -43,6 +44,7 @@ const WSClient = (() => {
     onDataAck = callbacks.onDataAck || null;
     onBgColor = callbacks.onBgColor || null;
     onFlashlight = callbacks.onFlashlight || null;
+    onCanvasCode = callbacks.onCanvasCode || null;
     reconnectAttempts = 0; // reset in case previous session was rejected
 
     // Strip any existing protocol prefix, then re-add the correct one
@@ -114,6 +116,9 @@ const WSClient = (() => {
           // Pro: Flashlight control
           console.log('[WS] Flashlight signal received: state=' + msg.state);
           if (onFlashlight) onFlashlight(msg.state);
+        } else if (msg.type === 'canvas_code') {
+          // Pro: Live JS sketch injection (see canvas_runner.js)
+          if (onCanvasCode) onCanvasCode(msg.code || '');
         } else if (msg.type === 'rejected') {
           // Server full — cancel reconnect and surface the reason
           if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }

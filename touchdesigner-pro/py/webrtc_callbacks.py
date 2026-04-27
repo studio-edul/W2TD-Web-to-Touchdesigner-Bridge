@@ -196,6 +196,22 @@ def _slot_for_conn_id(conn_id):
 			return slot
 	return None
 
+
+def _audioout_enabled():
+	"""Return True if audioout config is 1 (enabled). Default: enabled."""
+	base = _w2td_base()
+	cfg_dat = base.op('w2td_config') if base else op('w2td_config')
+	if cfg_dat is None:
+		return True
+	try:
+		for r in range(cfg_dat.numRows):
+			key = str(cfg_dat[r, 0]).strip().lower()
+			if key in ('audioout',):
+				return int(str(cfg_dat[r, 1]).strip()) == 1
+	except Exception:
+		pass
+	return True
+
 def _defer_wt_update(webrtcDAT, connectionId, state, slot):
 	"""Defer webrtc_table updates to next frame to avoid cook dependency loops."""
 	def _do():
@@ -212,7 +228,7 @@ def _defer_wt_update(webrtcDAT, connectionId, state, slot):
 				sync_mod.module.sync()
 			except Exception as e:
 				print(f'[W2TD WebRTC Error] webrtc_table_sync failed: {e}')
-		if state == 'connected':
+		if state == 'connected' and _audioout_enabled():
 			_auto_select_audio_chop(webrtcDAT, connectionId)
 			# Also auto-select TX track on Audio Stream Out CHOP (retry mechanism)
 			_conn_id = connectionId

@@ -161,11 +161,164 @@ def _set_par(op_node, primary, value, fallbacks=()):
 	return False
 
 
+def _write_config(key, value):
+	"""Write a value to w2td_config. Falls back to COMP parameter if parameterDAT."""
+	cfg_dat = _op('w2td_config')
+	if cfg_dat is None:
+		return
+	try:
+		for r in range(1, cfg_dat.numRows):
+			if str(cfg_dat[r, 0]) == key:
+				cfg_dat[r, 1] = value
+				return
+		cfg_dat.appendRow([key, value])
+	except Exception:
+		base = _w2td_base()
+		if base is not None:
+			for par_name in (key, key.lower(), key.capitalize()):
+				if hasattr(base.par, par_name):
+					try:
+						setattr(base.par, par_name, value)
+						return
+					except Exception:
+						pass
+		print(f'[W2TD] Could not write {key} to w2td_config or COMP parameter')
+
+
+def _find_cloudflared():
+	"""Find cloudflared binary from system PATH or pycloudflared cache."""
+	import shutil
+
+	found = shutil.which('cloudflared')
+	if found:
+		return found
+
+	ext = '.exe' if platform.system() == 'Windows' else ''
+
+	try:
+		import pycloudflared
+		pkg_dir = os.path.dirname(pycloudflared.__file__)
+		for subdir in ('', 'bin'):
+			candidate = os.path.join(pkg_dir, subdir, f'cloudflared{ext}')
+			if os.path.isfile(candidate):
+				return candidate
+	except ImportError:
+		pass
+
+	home = os.path.expanduser('~')
+	if platform.system() == 'Windows':
+		appdata = os.environ.get('LOCALAPPDATA', home)
+		candidates = [
+			os.path.join(appdata, 'pycloudflared', f'cloudflared{ext}'),
+			os.path.join(home, '.pycloudflared', f'cloudflared{ext}'),
+		]
+	else:
+		candidates = [
+			os.path.join(home, '.pycloudflared', f'cloudflared{ext}'),
+			'/usr/local/bin/cloudflared',
+			'/opt/homebrew/bin/cloudflared',
+		]
+
+	for c in candidates:
+		if os.path.isfile(c):
+			return c
+
+	return None
+
+
+def _monitor_tunnel_output(proc, tunnel_name, qr_url):
+	"""Background thread: reads cloudflared output and logs connection status."""
+	import threading
+	def _read():
+		try:
+			for raw in proc.stdout:
+				line = raw.decode('utf-8', errors='ignore').strip()
+				low = line.lower()
+				if 'connection established' in low or 'registered tunnel connection' in low:
+					print(f'[W2TD] Tunnel "{tunnel_name}" connected — {qr_url}')
+				elif 'error' in low or 'failed' in low or 'unable' in low:
+					print(f'[W2TD Error] Tunnel: {line}')
+				if proc.poll() is not None:
+					break
+		except Exception:
+			pass
+	t = threading.Thread(target=_read, daemon=True)
+	t.start()
+
+
+def start_fixed_tunnel():
+	"""Start cloudflared named tunnel using Tunnelname + Url from w2td_config.
+	Requires: cloudflared authenticated + tunnel created beforehand.
+	Call manually: op('w2td_init').module.start_fixed_tunnel()
+	"""
+	cfg = _read_config()
+	qr_url = (cfg.get('Url') or '').strip()
+	tunnel_name = (cfg.get('Tunnelname') or cfg.get('tunnel_name') or '').strip()
+
+	if not tunnel_name:
+		print('[W2TD Error] Tunnelname not set in w2td_config.')
+		print('[W2TD Error] w2td_config에 key=Tunnelname, value=<터널 이름> 행을 추가하세요.')
+		return False
+
+	existing = op('/').fetch('w2td_tunnel_proc', None)
+	if existing is not None:
+		try:
+			if existing.poll() is None:
+				print(f'[W2TD] Tunnel already running (PID {existing.pid}) — {qr_url}')
+				return True
+		except Exception:
+			pass
+
+	cloudflared_bin = _find_cloudflared()
+	if not cloudflared_bin:
+		print('[W2TD Error] cloudflared binary not found.')
+		print('[W2TD Error] install_packages() 실행 후 TD를 재시작하거나 cloudflared를 수동 설치하세요.')
+		return False
+
+	kwargs = {}
+	if platform.system() == 'Windows':
+		kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+
+	try:
+		proc = subprocess.Popen(
+			[cloudflared_bin, 'tunnel', '--no-autoupdate', 'run', tunnel_name],
+			stdout=subprocess.PIPE,
+			stderr=subprocess.STDOUT,
+			**kwargs
+		)
+		op('/').store('w2td_tunnel_proc', proc)
+		print(f'[W2TD] cloudflared 프로세스 시작 (PID {proc.pid})')
+		print(f'[W2TD] 터널 "{tunnel_name}" 연결 중... 잠시 후 "connected" 로그가 뜨면 정상입니다.')
+		print(f'[W2TD] 고정 URL: {qr_url}')
+		_monitor_tunnel_output(proc, tunnel_name, qr_url)
+		return True
+	except Exception as e:
+		print(f'[W2TD Error] 터널 시작 실패: {e}')
+		return False
+
+
+def stop_tunnel():
+	"""Stop running cloudflared tunnel process.
+	Call manually: op('w2td_init').module.stop_tunnel()
+	"""
+	proc = op('/').fetch('w2td_tunnel_proc', None)
+	if proc is None:
+		print('[W2TD] 실행 중인 터널 프로세스 없음 — 건너뜁니다.')
+		return
+	try:
+		pid = proc.pid
+		proc.terminate()
+		op('/').store('w2td_tunnel_proc', None)
+		print(f'[W2TD] cloudflared 터널 종료 완료 (PID {pid})')
+	except Exception as e:
+		print(f'[W2TD Error] 터널 종료 실패: {e}')
+
+
 def install_packages():
 	"""Install required Python packages into TD's Python environment.
 	This function is called automatically on onCreate, or can be called manually.
 	"""
-	PACKAGES = ['qrcode[pil]', 'pycloudflared']
+	PACKAGES = ['qrcode[pil]', 'pycloudflared', 'scipy']
 	CERTIFI_PACKAGE = 'certifi'
 	
 	print('[W2TD Setup] Starting package installation...')
@@ -239,6 +392,16 @@ def onStart():
 	_init_webrtc_ice()
 	generate()
 
+
+def onExit():
+	print('[W2TD] 고정 URL 터널 세팅 시작...')
+	start_fixed_tunnel()
+
+
+def onFrameStart(frame):
+	import webbrowser
+	webbrowser.open('https://www.metered.ca')
+
 def _read_config():
 	"""Read settings from w2td_config Table DAT (key | value)."""
 	cfg = _op('w2td_config')
@@ -272,50 +435,65 @@ def generate():
 		print('[W2TD Error] qrcode not installed. Run op("w2td_setup").module.install() first.')
 		return
 
-	# 2. Cloudflare tunnel (for cross-network access) - required for mobile
-	url = None
+	# 2. Get QR URL — fixed mode (Fixedurl=1) or random Cloudflare tunnel (Fixedurl=0)
+	is_fixed = str(cfg.get('Fixedurl') or '0').strip() == '1'
+	qr_url = None
+	short_host = None
 	last_error = None
-	os.environ['TQDM_DISABLE'] = '1'
-	os.environ['PYCLOUDFLARED_LINES_TO_CHECK'] = '100'
-	try:
-		import time
-		from contextlib import redirect_stdout, redirect_stderr
-		from pycloudflared import try_cloudflare
-		print('[W2TD] Starting Cloudflare tunnel... (no signup required)')
-		for attempt in range(3):
-			try:
-				with open(os.devnull, 'w') as devnull:
-					with redirect_stdout(devnull), redirect_stderr(devnull):
-						result = try_cloudflare(port=port, verbose=False)
-				url = result.tunnel
-				break
-			except Exception as e:
-				last_error = e
-				if attempt < 2:
-					print(f'[W2TD Error] Tunnel attempt {attempt + 1} failed: {e}')
-					time.sleep(2)
-				else:
-					raise
-		if url:
-			print(f'[W2TD] Cloudflare URL: {url}')
-	except ImportError:
-		last_error = 'pycloudflared not installed'
-		print('[W2TD Error] pycloudflared not installed.')
-	except Exception as e:
-		last_error = e
 
-	if url is None:
-		err_msg = str(last_error) if last_error else 'Unknown error'
-		print(f'[W2TD Error] Cloudflare tunnel failed: {err_msg}')
-		return
+	if is_fixed:
+		qr_url = (cfg.get('Url') or '').strip()
+		if not qr_url:
+			print('[W2TD Error] Fixedurl=1 but Url is empty in w2td_config')
+			return
+		if '?td=' in qr_url:
+			short_host = qr_url.split('?td=')[-1].strip()
+		else:
+			short_host = qr_url.replace('https://', '').replace('http://', '').strip()
+		print(f'[W2TD] Fixed mode: {qr_url}')
+	else:
+		tunnel_url = None
+		os.environ['TQDM_DISABLE'] = '1'
+		os.environ['PYCLOUDFLARED_LINES_TO_CHECK'] = '100'
+		try:
+			import time
+			from contextlib import redirect_stdout, redirect_stderr
+			from pycloudflared import try_cloudflare
+			print('[W2TD] Starting Cloudflare tunnel... (no signup required)')
+			for attempt in range(3):
+				try:
+					with open(os.devnull, 'w') as devnull:
+						with redirect_stdout(devnull), redirect_stderr(devnull):
+							result = try_cloudflare(port=port, verbose=False)
+					tunnel_url = result.tunnel
+					break
+				except Exception as e:
+					last_error = e
+					if attempt < 2:
+						print(f'[W2TD Error] Tunnel attempt {attempt + 1} failed: {e}')
+						time.sleep(2)
+					else:
+						raise
+			if tunnel_url:
+				print(f'[W2TD] Cloudflare URL: {tunnel_url}')
+		except ImportError:
+			last_error = 'pycloudflared not installed'
+			print('[W2TD Error] pycloudflared not installed.')
+		except Exception as e:
+			last_error = e
 
-	op('/').store('w2td_url', url)
+		if tunnel_url is None:
+			err_msg = str(last_error) if last_error else 'Unknown error'
+			print(f'[W2TD Error] Cloudflare tunnel failed: {err_msg}')
+			return
 
-	host = url.replace('https://', '').replace('http://', '').strip()
-	# Store short tunnel ID (without .trycloudflare.com) for cleaner display
-	short_host = host.replace('.trycloudflare.com', '') if host.endswith('.trycloudflare.com') else host
-	GITHUB_PAGES_URL = 'https://w2td-pro.studio-edul.com/'
-	qr_url = GITHUB_PAGES_URL + '?td=' + host
+		host = tunnel_url.replace('https://', '').replace('http://', '').strip()
+		short_host = host.replace('.trycloudflare.com', '') if host.endswith('.trycloudflare.com') else host
+		GITHUB_PAGES_URL = 'https://w2td-pro.studio-edul.com/'
+		qr_url = GITHUB_PAGES_URL + '?td=' + host
+		_write_config('Url', qr_url)
+
+	op('/').store('w2td_url', qr_url)
 	
 	parent_comp = None
 	url_par_name = 'url'
@@ -388,7 +566,7 @@ def generate():
 					break
 		local_ip = get_local_ip()
 		scheme = 'https' if tls_on else 'http'
-		op('/').store('w2td_cam_base_url', f'{scheme}://{local_ip}:{port}')
+		op('/').store('w2td_cam_base_url', f'{scheme}://127.0.0.1:{port}')
 		op('/').store('w2td_web_port', port)
 		op('/').store('w2td_cam_tls', tls_on)
 		print(f'[W2TD] cam base URL stored: {scheme}://{local_ip}:{port}')

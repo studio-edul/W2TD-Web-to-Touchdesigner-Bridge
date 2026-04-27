@@ -554,6 +554,36 @@ input[type="checkbox"] {
   display: block;
 }
 
+/* Live sketch surface — full-viewport, above sensor viz, below modals/overlays */
+#render-canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 50;
+  display: block;
+  pointer-events: none;
+  background: transparent;
+}
+#render-canvas.hidden {
+  display: none;
+}
+/* When display_mode=2 and canvas_topbar=0: hide top status bar for full immersion */
+body.hide-topbar-for-sketch #top-bar {
+  display: none;
+}
+/* Fullscreen sketch view toggled by the "Fullscreen" button in dev_mode=1.
+   Broadcast bar stays visible so the same button can toggle back out. */
+body.sketch-fullscreen #top-bar,
+body.sketch-fullscreen #sensor-panel,
+body.sketch-fullscreen #viz-container {
+  display: none;
+}
+body.sketch-fullscreen #broadcast-bar {
+  background: transparent;
+}
+
 /* Broadcast Bar */
 #broadcast-bar {
   position: relative;

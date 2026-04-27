@@ -265,6 +265,90 @@ def _broadcast_msg(webServerDAT, msg_str):
 	return success
 
 
+def _resolve_canvas_source(source):
+	"""Accepts a DAT op, an op path string, or a raw code string.
+	Returns the code text. Empty string if unresolvable.
+	"""
+	if source is None:
+		return ''
+	if hasattr(source, 'text'):
+		return source.text or ''
+	if isinstance(source, str):
+		o = op(source)
+		if o is not None and hasattr(o, 'text'):
+			return o.text or ''
+		return source
+	return ''
+
+
+def send_canvas_code_to_all(webServerDAT, source):
+	"""Read JS sketch from a Text DAT (or string) and broadcast to every connected mobile.
+	Caches the code so newly connecting clients receive it automatically.
+	"""
+	code = _resolve_canvas_source(source)
+	op('/').store('w2td_canvas_code', code)
+	msg = json.dumps({'type': 'canvas_code', 'code': code})
+	sent = _broadcast_msg(webServerDAT, msg)
+	print(f'[W2TD Canvas] canvas_code broadcast -> {sent} client(s) ({len(code)} chars)')
+
+
+def send_canvas_code_to_slot(webServerDAT, slot, source):
+	"""Send a JS sketch to a single slot. Caches per-slot for late-join replay."""
+	try:
+		slot = int(slot)
+	except Exception:
+		print(f'[W2TD Canvas] invalid slot: {slot}')
+		return
+	code = _resolve_canvas_source(source)
+	op('/').store(f'w2td_canvas_code_slot_{slot}', code)
+	addr = _addr_for_slot(slot)
+	if addr is None:
+		print(f'[W2TD Canvas] slot {slot} has no active client; cached for later')
+		return
+	try:
+		webServerDAT.webSocketSendText(addr, json.dumps({'type': 'canvas_code', 'code': code}))
+		print(f'[W2TD Canvas] canvas_code -> slot {slot} ({len(code)} chars)')
+	except Exception as e:
+		print(f'[W2TD Canvas Error] send to slot {slot}: {e}')
+
+
+def clear_canvas_code(webServerDAT, slot=None):
+	"""Clear the active sketch. slot=None clears the broadcast cache and tells
+	every client to stop; otherwise clears a single slot.
+	"""
+	empty = json.dumps({'type': 'canvas_code', 'code': ''})
+	if slot is None:
+		op('/').store('w2td_canvas_code', '')
+		for s in range(1, MAX_CLIENTS + 1):
+			op('/').store(f'w2td_canvas_code_slot_{s}', '')
+		sent = _broadcast_msg(webServerDAT, empty)
+		print(f'[W2TD Canvas] cleared (all) -> {sent} client(s)')
+	else:
+		try:
+			slot = int(slot)
+		except Exception:
+			return
+		op('/').store(f'w2td_canvas_code_slot_{slot}', '')
+		addr = _addr_for_slot(slot)
+		if addr:
+			try:
+				webServerDAT.webSocketSendText(addr, empty)
+			except Exception:
+				pass
+		print(f'[W2TD Canvas] cleared (slot {slot})')
+
+
+def _replay_canvas_code(webServerDAT, client, slot):
+	"""Send cached canvas_code to a newly connected client (slot override wins)."""
+	try:
+		slot_code = op('/').fetch(f'w2td_canvas_code_slot_{slot}', '')
+		code = slot_code if slot_code else op('/').fetch('w2td_canvas_code', '')
+		if code:
+			webServerDAT.webSocketSendText(client, json.dumps({'type': 'canvas_code', 'code': code}))
+	except Exception as e:
+		print(f'[W2TD Canvas Error] replay to slot {slot}: {e}')
+
+
 def _handle_cam_receiver_msg(webServerDAT, addr, msg):
 	"""Process messages from cam_receiver.html (Web Render TOP)."""
 	msg_type = msg.get('type')
@@ -432,6 +516,12 @@ def _config_msg(cfg):
 		'audio_noise_suppression': _config_val(cfg, 'Noisesuppression', 'noisesuppression', 'audio_noise_suppression', default=0),
 		'audio_auto_gain':	_config_val(cfg, 'Audiogain', 'audiogain', 'audio_auto_gain', default=0),
 		'show_dots':		  _config_val(cfg, 'Showdots', 'showdots', 'show_dots', default=1),
+		# Videoout: none=off, td=TD video stream, js=JS canvas sketch, color=bg color
+		'videoout':		   _config_val(cfg, 'Videoout', 'videoout', 'display_mode', default='none'),
+		# Audioout: 1=enabled, 0=disabled
+		'audioout':		   int(_config_val(cfg, 'Audioout', 'audioout', default=1)),
+		# Show top status bar while a JS sketch is rendering (0=hide, 1=show)
+		'canvas_topbar':	  _config_val(cfg, 'Canvastopbar', 'canvastopbar', 'canvas_topbar', default=1),
 	}
 	ice_srv = (cfg.get('ice_servers') or cfg.get('Ice_servers') or '').strip()
 	turn_srv = (cfg.get('Turnserver') or cfg.get('turn_server') or '').strip()
@@ -1036,18 +1126,22 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			webServerDAT.webSocketSendText(client, json.dumps(_config_msg(cfg)))
 		except Exception:
 			pass
-		# Send current background color if w2td_background CHOP exists
+		# Send current background color only when videoout == 'color'
 		try:
-			bg_chop = _op('w2td_background')
-			if bg_chop:
-				r = max(0, min(255, int(round(bg_chop['r'].eval() * 255))))
-				g = max(0, min(255, int(round(bg_chop['g'].eval() * 255))))
-				b = max(0, min(255, int(round(bg_chop['b'].eval() * 255))))
-				hex_color = f'#{r:02x}{g:02x}{b:02x}'
-				if hex_color != '#000000':
-					webServerDAT.webSocketSendText(client, json.dumps({'type': 'bg_color', 'color': hex_color, 'duration': 0}))
+			if cfg.get('videoout') == 'color':
+				bg_chop = _op('w2td_background')
+				if bg_chop:
+					r = max(0, min(255, int(round(bg_chop['r'].eval() * 255))))
+					g = max(0, min(255, int(round(bg_chop['g'].eval() * 255))))
+					b = max(0, min(255, int(round(bg_chop['b'].eval() * 255))))
+					hex_color = f'#{r:02x}{g:02x}{b:02x}'
+					if hex_color != '#000000':
+						webServerDAT.webSocketSendText(client, json.dumps({'type': 'bg_color', 'color': hex_color, 'duration': 0}))
 		except Exception:
 			pass
+		# Replay cached canvas_code only when videoout == 'js'
+		if cfg.get('videoout') == 'js':
+			_replay_canvas_code(webServerDAT, client, slot)
 
 	op('/').store(f'w2td_last_seen_{slot}', time.time())
 
@@ -1181,56 +1275,59 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 		try:
 			wrtc.setRemoteDescription(conn_id, 'answer', sdp)
 			print(f'[W2TD WebRTC] Reanswer from slot {slot}, conn_id={conn_id} — audio track negotiated')
-			# Auto-select WebRTC Track on Audio Stream Out CHOP after renegotiation
 			_slot = slot
 			_wrtc = wrtc
-			_attempt = [0]
-			def _auto_select_tx_track():
-				_attempt[0] += 1
-				out_chop = _op(f'webrtc_audio_container/webrtc_audio_out_{_slot}')
-				if out_chop is None:
-					return
-				track_name = f'audio_out_{_slot}'
-				for par_name in ('webrtctrack', 'Webrtctrack', 'track', 'Track'):
-					if hasattr(out_chop.par, par_name):
-						p = getattr(out_chop.par, par_name)
-						menus = getattr(p, 'menuNames', []) or []
-						if track_name in menus:
-							setattr(out_chop.par, par_name, track_name)
-							print(f'[W2TD WebRTC] Auto-selected track "{track_name}" on webrtc_audio_out_{_slot} (attempt {_attempt[0]})')
-						elif menus:
-							setattr(out_chop.par, par_name, menus[0])
-							print(f'[W2TD WebRTC] Auto-selected track "{menus[0]}" on webrtc_audio_out_{_slot} (attempt {_attempt[0]})')
-						elif _attempt[0] < 15:
-							run(_auto_select_tx_track, delayFrames=5, fromOP=_wrtc)
-						else:
-							print(f'[W2TD WebRTC] No tracks on webrtc_audio_out_{_slot} after {_attempt[0]} attempts')
-						break
-			run(_auto_select_tx_track, delayFrames=5, fromOP=wrtc)
-			# Auto-select WebRTC Track on Video Stream Out TOP after renegotiation (if exists)
-			_video_attempt = [0]
-			def _auto_select_video_track():
-				_video_attempt[0] += 1
-				video_top = _op(f'webrtc_video_tx_container/video_stream_out_{_slot}')
-				if video_top is None:
-					return  # No video TX for this connection — skip silently
-				track_name = f'video_out_{_slot}'
-				for par_name in ('webrtctrack', 'Webrtctrack', 'track', 'Track'):
-					if hasattr(video_top.par, par_name):
-						p = getattr(video_top.par, par_name)
-						menus = getattr(p, 'menuNames', []) or []
-						if track_name in menus:
-							setattr(video_top.par, par_name, track_name)
-							print(f'[W2TD WebRTC] Auto-selected video track "{track_name}" on video_stream_out_{_slot} (attempt {_video_attempt[0]})')
-						elif menus:
-							setattr(video_top.par, par_name, menus[0])
-							print(f'[W2TD WebRTC] Auto-selected video track "{menus[0]}" on video_stream_out_{_slot} (attempt {_video_attempt[0]})')
-						elif _video_attempt[0] < 15:
-							run(_auto_select_video_track, delayFrames=5, fromOP=_wrtc)
-						else:
-							print(f'[W2TD WebRTC] No video tracks on video_stream_out_{_slot} after {_video_attempt[0]} attempts')
-						break
-			run(_auto_select_video_track, delayFrames=5, fromOP=wrtc)
+			_cfg = _read_config()
+			# Auto-select WebRTC Track on Audio Stream Out CHOP (only when audioout == 1)
+			if int(_cfg.get('audioout', 1)) == 1:
+				_attempt = [0]
+				def _auto_select_tx_track():
+					_attempt[0] += 1
+					out_chop = _op(f'webrtc_audio_container/webrtc_audio_out_{_slot}')
+					if out_chop is None:
+						return
+					track_name = f'audio_out_{_slot}'
+					for par_name in ('webrtctrack', 'Webrtctrack', 'track', 'Track'):
+						if hasattr(out_chop.par, par_name):
+							p = getattr(out_chop.par, par_name)
+							menus = getattr(p, 'menuNames', []) or []
+							if track_name in menus:
+								setattr(out_chop.par, par_name, track_name)
+								print(f'[W2TD WebRTC] Auto-selected track "{track_name}" on webrtc_audio_out_{_slot} (attempt {_attempt[0]})')
+							elif menus:
+								setattr(out_chop.par, par_name, menus[0])
+								print(f'[W2TD WebRTC] Auto-selected track "{menus[0]}" on webrtc_audio_out_{_slot} (attempt {_attempt[0]})')
+							elif _attempt[0] < 15:
+								run(_auto_select_tx_track, delayFrames=5, fromOP=_wrtc)
+							else:
+								print(f'[W2TD WebRTC] No tracks on webrtc_audio_out_{_slot} after {_attempt[0]} attempts')
+							break
+				run(_auto_select_tx_track, delayFrames=5, fromOP=wrtc)
+			# Auto-select WebRTC Track on Video Stream Out TOP (only when videoout == 'td')
+			if _cfg.get('videoout') == 'td':
+				_video_attempt = [0]
+				def _auto_select_video_track():
+					_video_attempt[0] += 1
+					video_top = _op(f'webrtc_video_tx_container/video_stream_out_{_slot}')
+					if video_top is None:
+						return  # No video TX for this connection — skip silently
+					track_name = f'video_out_{_slot}'
+					for par_name in ('webrtctrack', 'Webrtctrack', 'track', 'Track'):
+						if hasattr(video_top.par, par_name):
+							p = getattr(video_top.par, par_name)
+							menus = getattr(p, 'menuNames', []) or []
+							if track_name in menus:
+								setattr(video_top.par, par_name, track_name)
+								print(f'[W2TD WebRTC] Auto-selected video track "{track_name}" on video_stream_out_{_slot} (attempt {_video_attempt[0]})')
+							elif menus:
+								setattr(video_top.par, par_name, menus[0])
+								print(f'[W2TD WebRTC] Auto-selected video track "{menus[0]}" on video_stream_out_{_slot} (attempt {_video_attempt[0]})')
+							elif _video_attempt[0] < 15:
+								run(_auto_select_video_track, delayFrames=5, fromOP=_wrtc)
+							else:
+								print(f'[W2TD WebRTC] No video tracks on video_stream_out_{_slot} after {_video_attempt[0]} attempts')
+							break
+				run(_auto_select_video_track, delayFrames=5, fromOP=wrtc)
 		except Exception as e:
 			print(f'[W2TD WebRTC Error] Reanswer handling error: {e}')
 
@@ -1369,4 +1466,12 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 				t[row, 'device_pixel_ratio'] = device_pixel_ratio
 		
 		print(f'[W2TD] Screen info updated: slot {slot} -> CSS: {css_width}x{css_height}, Physical: {physical_width}x{physical_height}, Screen: {screen_width}x{screen_height} (DPR: {device_pixel_ratio})')
+
+	elif msg_type == 'canvas_error':
+		# Runtime error from a CanvasRunner sketch on mobile
+		err_msg = msg.get('message', '')
+		err_stack = msg.get('stack', '')
+		print(f'[W2TD Canvas] ⚠ error from slot {slot}: {err_msg}')
+		if err_stack:
+			print(f'[W2TD Canvas]   stack:\n{err_stack}')
 

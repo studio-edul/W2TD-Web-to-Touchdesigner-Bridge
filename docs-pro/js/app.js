@@ -28,6 +28,11 @@ const W2TD_VERSION = '1.0.0';
   let iceServersFromConfig = null;   // from w2td_config ice_servers (JSON)
   let iceTransportPolicyFromConfig = null;  // 'relay' | 'all' | null
   let showTouchPoints = true;
+  // Display mode gate (w2td_config → videoout): 'none'=disabled, 'color'=bg color, 'td'=TD video, 'js'=JS sketch.
+  // Default null = not configured yet — don't gate anything until TD explicitly sets a mode.
+  let displayMode = null;
+  let canvasTopbarVisible = true;
+  let cachedCanvasCode = '';
 
   function _isTunnelConnection() {
     const addr = (els.tdAddress && els.tdAddress.value || '').toLowerCase();
@@ -224,6 +229,64 @@ const W2TD_VERSION = '1.0.0';
       WebRTCModule.setResolution(cfg.cam_resolution);
       _updateCamResolutionUI();
     }
+    if (cfg.canvas_topbar != null) {
+      canvasTopbarVisible = !!parseInt(cfg.canvas_topbar);
+      _applyCanvasTopbarVisibility();
+    }
+    if (cfg.videoout != null) {
+      const next = String(cfg.videoout);
+      if (next !== displayMode) {
+        displayMode = next;
+        addLog(`Config: videoout=${next}`, 'info');
+        _applyDisplayMode();
+      }
+    }
+  }
+
+  /**
+   * Enforce videoout on current UI. Gates bg_color, canvas sketch, TD video
+   * as a mutually exclusive layer switch.
+   *   'none'  = disabled   → stop sketch, close TD stream monitor
+   *   'color' = bg color   → stop sketch, close TD stream monitor
+   *   'td'    = TD video   → stop sketch, reset body bg
+   *   'js'    = JS canvas  → reset body bg, close TD stream, run cached sketch
+   */
+  function _applyDisplayMode() {
+    if (displayMode !== 'color') {
+      // Not color mode: clear any leftover body background color
+      document.body.style.backgroundColor = '';
+      const tp = $('touch-pad');
+      if (tp) tp.style.backgroundColor = '';
+    }
+    if (displayMode !== 'js') {
+      if (typeof CanvasRunner !== 'undefined') CanvasRunner.stop();
+    } else if (cachedCanvasCode && typeof CanvasRunner !== 'undefined') {
+      CanvasRunner.load(cachedCanvasCode);
+    }
+    if (displayMode !== 'td') {
+      // Close TD stream monitor if open
+      const mon = $('td-stream-monitor');
+      if (mon && !mon.classList.contains('hidden')) {
+        mon.classList.add('hidden');
+        if (els.mainUI) els.mainUI.classList.remove('hidden');
+      }
+    } else {
+      // Entering TD video mode — auto-open the stream monitor if video is already flowing.
+      // If the video isn't active yet, the onTdVideoTrack handler will open it on arrival.
+      if (typeof WebRTCModule !== 'undefined' && WebRTCModule.isTdVideoActive && WebRTCModule.isTdVideoActive()) {
+        if (els.tdStreamMonitor && els.mainUI) {
+          els.mainUI.classList.add('hidden');
+          els.tdStreamMonitor.classList.remove('hidden');
+        }
+      }
+    }
+    _applyCanvasTopbarVisibility();
+    _updateFullscreenButtonVisibility();
+  }
+
+  function _applyCanvasTopbarVisibility() {
+    const hide = (displayMode === 'js') && !canvasTopbarVisible;
+    document.body.classList.toggle('hide-topbar-for-sketch', hide);
   }
 
   function _updateCamResolutionUI() {
@@ -425,10 +488,15 @@ const W2TD_VERSION = '1.0.0';
           els.tdStreamVideoArea.appendChild(videoEl);
         }
         if (els.btnTdStream) {
-          els.btnTdStream.classList.remove('hidden');
           els.btnTdStream.classList.add('td-stream-active');
         }
-        addLog('TD video stream received — tap "TD Stream" to view', 'info');
+        _updateFullscreenButtonVisibility();
+        addLog('TD video stream received — tap "Fullscreen" to view', 'info');
+        // Auto-open the stream monitor if the user has already selected videoout=td
+        if (displayMode === 'td' && els.tdStreamMonitor && els.mainUI) {
+          els.mainUI.classList.add('hidden');
+          els.tdStreamMonitor.classList.remove('hidden');
+        }
       } else {
         // dev_mode=0: show as full-screen background behind touch-pad
         videoEl.style.position = 'fixed';
@@ -448,9 +516,9 @@ const W2TD_VERSION = '1.0.0';
         videoEl.srcObject = null;
         if (devMode) {
           if (els.btnTdStream) {
-            els.btnTdStream.classList.add('hidden');
             els.btnTdStream.classList.remove('td-stream-active');
           }
+          _updateFullscreenButtonVisibility();
           exitTdStreamMonitor();
         } else {
           videoEl.style.display = 'none';
@@ -653,6 +721,8 @@ const W2TD_VERSION = '1.0.0';
       onBgColor: (color, duration) => {
         if (!bgColorEnabled) return;
         if (typeof AudioModule === 'undefined') return; // Pro feature check
+        // videoout gate: bg color only applies in 'color' mode (or when unset)
+        if (displayMode !== null && displayMode !== 'color') return;
         document.body.style.backgroundColor = color;
         // Apply to touch pad overlay as well (it covers body with its own background)
         const tp = $('touch-pad');
@@ -663,6 +733,26 @@ const W2TD_VERSION = '1.0.0';
             if (tp) tp.style.backgroundColor = '';
           }, duration);
         }
+      },
+      // Pro: Live JS sketch injection from TD (render-canvas)
+      onCanvasCode: (code) => {
+        if (typeof CanvasRunner === 'undefined') return;
+        const clean = code && String(code).trim();
+        cachedCanvasCode = clean ? code : '';
+        if (!clean) {
+          CanvasRunner.stop();
+          addLog('Canvas sketch cleared', 'info');
+          _updateFullscreenButtonVisibility();
+          return;
+        }
+        addLog(`Canvas sketch received (${code.length} chars)`, 'info');
+        // videoout gate: only run in 'js' mode (or when unset). Cached above for later.
+        if (displayMode !== null && displayMode !== 'js') {
+          addLog(`Sketch cached (videoout=${displayMode}, not js)`, 'info');
+          return;
+        }
+        CanvasRunner.load(code);
+        _updateFullscreenButtonVisibility();
       },
       // Pro: Flashlight control
       onFlashlight: (state) => {
@@ -999,7 +1089,25 @@ const W2TD_VERSION = '1.0.0';
     haptic();
   }
 
+  /**
+   * Fullscreen view action — dispatches based on videoout:
+   *   'td' (TD video): opens td-stream-monitor overlay (existing behavior)
+   *   'js' (JS sketch): toggles body.sketch-fullscreen to hide main UI chrome
+   *                     so the render-canvas shows unobstructed
+   *   otherwise: toast "nothing to show"
+   */
   function enterTdStreamMonitor() {
+    if (displayMode === 'js') {
+      const sketchActive = typeof CanvasRunner !== 'undefined' && CanvasRunner.isActive();
+      if (!sketchActive) {
+        showToast('No JS sketch running');
+        haptic();
+        return;
+      }
+      haptic();
+      document.body.classList.toggle('sketch-fullscreen');
+      return;
+    }
     if (!WebRTCModule.isTdVideoActive()) {
       showToast('No TD video stream active');
       haptic();
@@ -1017,6 +1125,21 @@ const W2TD_VERSION = '1.0.0';
       // dev_mode=0: shouldn't reach here normally
     } else if (els.mainUI) {
       els.mainUI.classList.remove('hidden');
+    }
+  }
+
+  function _updateFullscreenButtonVisibility() {
+    if (!els.btnTdStream) return;
+    const tdActive = typeof WebRTCModule !== 'undefined' && WebRTCModule.isTdVideoActive && WebRTCModule.isTdVideoActive();
+    const sketchActive = typeof CanvasRunner !== 'undefined' && CanvasRunner.isActive();
+    const relevant =
+      (displayMode === 1 && tdActive) ||
+      (displayMode === 2 && sketchActive);
+    if (devMode && relevant) {
+      els.btnTdStream.classList.remove('hidden');
+    } else {
+      els.btnTdStream.classList.add('hidden');
+      document.body.classList.remove('sketch-fullscreen');
     }
   }
 
