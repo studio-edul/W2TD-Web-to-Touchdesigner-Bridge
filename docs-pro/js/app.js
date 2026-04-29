@@ -1533,24 +1533,26 @@ const W2TD_VERSION = '1.0.0';
         results.sensors = true;
       }
 
-      // 2. Microphone permission (getUserMedia)
+      // 2. Microphone permission (getUserMedia) — only if mic is enabled in config
       // Note: On iOS, getUserMedia can be called in async chain after user gesture (iOS 15+)
-      try {
-        const micOk = await WebRTCModule.acquireMic({
-          echoCancellation: audioEchoCancellation,
-          noiseSuppression: audioNoiseSuppression,
-          autoGainControl: audioAutoGain,
-        });
-        if (micOk) {
-          results.microphone = true;
-          addLog('Microphone permission granted', 'info');
-          // Release immediately - will be reacquired when needed
-          await WebRTCModule.stop();
-        } else {
-          addLog('Microphone permission denied', 'warn');
+      if (micEnabled) {
+        try {
+          const micOk = await WebRTCModule.acquireMic({
+            echoCancellation: audioEchoCancellation,
+            noiseSuppression: audioNoiseSuppression,
+            autoGainControl: audioAutoGain,
+          });
+          if (micOk) {
+            results.microphone = true;
+            addLog('Microphone permission granted', 'info');
+            // Release immediately - will be reacquired when needed
+            await WebRTCModule.stop();
+          } else {
+            addLog('Microphone permission denied', 'warn');
+          }
+        } catch (e) {
+          addLog('Microphone permission error: ' + (e.message || e.name), 'warn');
         }
-      } catch (e) {
-        addLog('Microphone permission error: ' + (e.message || e.name), 'warn');
       }
 
       // 3. Camera permission — if rear or front enabled (from config)

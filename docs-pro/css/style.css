@@ -554,14 +554,14 @@ input[type="checkbox"] {
   display: block;
 }
 
-/* Live sketch surface — full-viewport, above sensor viz, below modals/overlays */
+/* Live sketch surface — full-viewport, above touch-pad (500), below stream monitors (600+) */
 #render-canvas {
   position: fixed;
   top: 0;
   left: 0;
   width: 100vw;
   height: 100vh;
-  z-index: 50;
+  z-index: 510;
   display: block;
   pointer-events: none;
   background: transparent;
