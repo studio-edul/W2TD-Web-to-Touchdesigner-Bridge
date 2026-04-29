@@ -605,7 +605,7 @@ def broadcast_config(webServerDAT):
 	"""Push updated config to all connected clients.
 	Call from TD script after editing w2td_config:
 		op('web_server_dat').module.broadcast_config(op('web_server_dat'))
-	w2td_config keys: sample_rate, wake_lock, haptic, sensors, dev_mode, camera, microphone
+	Also called automatically by config_watcher DAT Execute on every w2td_config table change.
 	"""
 	cfg = _read_config()
 	msg = json.dumps(_config_msg(cfg))
@@ -615,7 +615,12 @@ def broadcast_config(webServerDAT):
 		except Exception:
 			pass
 	print(f'[W2TD] Config broadcast -> {len(_slots())} clients')
-	
+
+	# If videoout=js, also push jsfile code so the sketch shows immediately on mode switch
+	videoout = str(cfg.get('Videoout') or cfg.get('videoout') or 'none')
+	if videoout == 'js':
+		reload_jsfile(webServerDAT)
+
 	try:
 		_op('w2td_init').module._init_webrtc_ice()
 	except Exception as e:
