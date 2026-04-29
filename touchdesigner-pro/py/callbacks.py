@@ -338,9 +338,60 @@ def clear_canvas_code(webServerDAT, slot=None):
 		print(f'[W2TD Canvas] cleared (slot {slot})')
 
 
-def _replay_canvas_code(webServerDAT, client, slot):
-	"""Send cached canvas_code to a newly connected client (slot override wins)."""
+def _read_jsfile(path):
+	"""Read a .js file from disk (path to file or directory). Returns content string or ''."""
+	import os
+	path = str(path).strip()
+	if not path:
+		return ''
+	if os.path.isdir(path):
+		for f in sorted(os.listdir(path)):
+			if f.endswith('.js'):
+				path = os.path.join(path, f)
+				break
+		else:
+			print(f'[W2TD Canvas] No .js file found in directory: {path}')
+			return ''
 	try:
+		with open(path, 'r', encoding='utf-8') as fh:
+			return fh.read()
+	except Exception as e:
+		print(f'[W2TD Canvas] Failed to read jsfile "{path}": {e}')
+		return ''
+
+
+def reload_jsfile(webServerDAT):
+	"""Read Jsfile path from w2td_config, load the file, and broadcast to all clients.
+	Call this from a script or DAT Execute when you want to push a new version of the sketch.
+	"""
+	cfg = _read_config()
+	path = cfg.get('Jsfile') or cfg.get('jsfile') or ''
+	if not path:
+		print('[W2TD Canvas] reload_jsfile: Jsfile not set in w2td_config')
+		return
+	code = _read_jsfile(path)
+	if not code:
+		return
+	op('/').store('w2td_canvas_code', code)
+	msg = json.dumps({'type': 'canvas_code', 'code': code})
+	sent = _broadcast_msg(webServerDAT, msg)
+	print(f'[W2TD Canvas] jsfile broadcast -> {sent} client(s) ({len(code)} chars)')
+
+
+def _replay_canvas_code(webServerDAT, client, slot):
+	"""Send canvas code to a newly connected client.
+	Priority: Jsfile config > per-slot cached code > global cached code.
+	"""
+	try:
+		# 1. Jsfile takes priority — always read fresh from disk
+		cfg = _read_config()
+		jsfile = cfg.get('Jsfile') or cfg.get('jsfile') or ''
+		if jsfile:
+			code = _read_jsfile(jsfile)
+			if code:
+				webServerDAT.webSocketSendText(client, json.dumps({'type': 'canvas_code', 'code': code}))
+				return
+		# 2. Fall back to per-slot cached code, then global cached code
 		slot_code = op('/').fetch(f'w2td_canvas_code_slot_{slot}', '')
 		code = slot_code if slot_code else op('/').fetch('w2td_canvas_code', '')
 		if code:
@@ -487,13 +538,13 @@ def init_tables():
 
 
 def _config_val(cfg, *keys, default=0):
-	"""Try config keys in order; normalize to int."""
+	"""Try config keys in order; normalize to int if possible, else return raw string."""
 	for k in keys:
 		if k in cfg:
 			try:
 				return int(float(cfg[k]))
 			except (ValueError, TypeError):
-				return default
+				return cfg[k]  # string values (e.g. videoout='td'/'js'/'none') pass through as-is
 	return default
 
 
