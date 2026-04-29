@@ -1133,8 +1133,8 @@ const W2TD_VERSION = '1.0.0';
     const tdActive = typeof WebRTCModule !== 'undefined' && WebRTCModule.isTdVideoActive && WebRTCModule.isTdVideoActive();
     const sketchActive = typeof CanvasRunner !== 'undefined' && CanvasRunner.isActive();
     const relevant =
-      (displayMode === 1 && tdActive) ||
-      (displayMode === 2 && sketchActive);
+      (displayMode === 'td' && tdActive) ||
+      (displayMode === 'js' && sketchActive);
     if (devMode && relevant) {
       els.btnTdStream.classList.remove('hidden');
     } else {
