@@ -554,14 +554,14 @@ input[type="checkbox"] {
   display: block;
 }
 
-/* Live sketch surface — full-viewport, above touch-pad (500), below stream monitors (600+) */
+/* Live sketch surface — full-viewport, below touch-pad (500) */
 #render-canvas {
   position: fixed;
   top: 0;
   left: 0;
   width: 100vw;
   height: 100vh;
-  z-index: 510;
+  z-index: 50;
   display: block;
   pointer-events: none;
   background: transparent;
@@ -632,7 +632,7 @@ body.sketch-fullscreen #broadcast-bar {
   position: fixed;
   inset: 0;
   z-index: 500;
-  background: var(--bg);
+  background: transparent;
   touch-action: none;
   overscroll-behavior: none;
 }
