@@ -75,9 +75,6 @@
       <canvas id="viz-canvas"></canvas>
     </div>
 
-    <!-- Live sketch render surface (shown only while CanvasRunner is active) -->
-    <canvas id="render-canvas" class="hidden"></canvas>
-
     <!-- Broadcast Control -->
     <div id="broadcast-bar">
       <div id="broadcast-status" class="broadcast-status"></div>
@@ -90,6 +87,9 @@
     </div>
 
   </div>
+
+  <!-- Live sketch render surface — outside #main-ui so it stays visible in dev_mode=0 -->
+  <canvas id="render-canvas" class="hidden"></canvas>
 
   <!-- Fullscreen Touch Pad (shown directly in dev_mode=0, or toggled in dev_mode=1) -->
   <div id="touch-pad" class="hidden">
