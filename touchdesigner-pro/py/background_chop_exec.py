@@ -67,7 +67,8 @@ def onValueChange(channel, sampleIndex, val, prev):
 	chop = channel.owner
 	chop_name = chop.name
 
-	if chop_name == 'w2td_background':
+	if chop_name in ('w2td_background', 'w2td_color'):
+		# Both w2td_background and w2td_color (alias) broadcast to all clients
 		_handle_broadcast(chop)
 
 	elif chop_name == 'w2td_bg_color_bus':

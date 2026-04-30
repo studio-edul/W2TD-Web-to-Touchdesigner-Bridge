@@ -95,6 +95,14 @@ def _build_config_msg(cfg):
 		'hapticfeedback': _cfg_val(cfg, 'Hapticfeedback', 'hapticfeedback', 'Haptic', 'haptic', default=1),
 		'audio_tx': _cfg_val(cfg, 'Audio', 'audio_tx', default=1),
 		'video_tx': _cfg_val(cfg, 'Video', 'video_tx', default=1),
+		# videoout: 'none' | 'td' | 'js' | 'color' — string value, not int
+		'videoout': next(
+			(cfg[k].strip().lower() for k in ('Videoout', 'videoout', 'Video', 'display_mode')
+			 if k in cfg and cfg[k].strip()),
+			'none'
+		),
+		# canvas_topbar: show/hide top bar during JS sketch (0=hide, 1=show)
+		'canvas_topbar': _cfg_val(cfg, 'Canvastopbar', 'canvastopbar', 'canvas_topbar', default=1),
 	}
 	ice_srv = (cfg.get('ice_servers') or cfg.get('Ice_servers') or '').strip()
 	if ice_srv:
@@ -111,26 +119,21 @@ def _build_config_msg(cfg):
 
 
 def _do_broadcast():
-	"""Send config to connected clients only."""
+	"""Send config to all registered clients (same approach as callbacks.py _broadcast_msg)."""
 	web = _op('web_server_dat')
 	if web is None:
 		return
 	cfg = _read_config()
 	msg = json.dumps(_build_config_msg(cfg))
 	slots = op('/').fetch('w2td_client_slots', {})
-	active = set()
-	try:
-		active = set(getattr(web, 'webSocketConnections', []) or [])
-	except Exception:
-		pass
-	valid = [a for a in slots.keys() if str(a) in active]
-	for addr in valid:
+	sent = 0
+	for addr in list(slots.keys()):
 		try:
 			web.webSocketSendText(addr, msg)
+			sent += 1
 		except Exception:
 			pass
-	if valid or slots:
-		print(f'[W2TD] Config broadcast -> {len(valid)} clients' + (f' ({len(slots) - len(valid)} stale)' if len(slots) > len(valid) else ''))
+	print(f'[W2TD] Config broadcast -> {sent} clients')
 	# Update web_render_top resolution + transform_top rotation inside webrtc_video_container
 	_dim_map = {'non-commercial': 1280, 'fhd': 1920}
 	try:
@@ -194,6 +197,33 @@ def _do_broadcast():
 				print(f'[W2TD] web_render_top resolution -> {sq}x{sq}, transform rotate -> {rotate_deg} ({updated} TOPs)')
 	except Exception:
 		pass
+	# If videoout=js, send canvas_code directly (no module access — avoids compilation errors)
+	try:
+		cfg2 = _read_config()
+		_vo = next(
+			(cfg2[k].strip().lower() for k in ('Videoout', 'videoout', 'Video', 'display_mode')
+			 if k in cfg2 and cfg2[k].strip()),
+			'none'
+		)
+		if _vo == 'js':
+			jsfile = next(
+				(cfg2[k].strip() for k in ('Jsfile', 'jsfile') if k in cfg2 and cfg2[k].strip()),
+				''
+			)
+			if jsfile:
+				with open(jsfile, 'r', encoding='utf-8') as _f:
+					_code = _f.read()
+				_code_msg = json.dumps({'type': 'canvas_code', 'code': _code})
+				_slots2 = op('/').fetch('w2td_client_slots', {})
+				for _addr in list(_slots2.keys()):
+					try:
+						web.webSocketSendText(_addr, _code_msg)
+					except Exception:
+						pass
+				print(f'[W2TD Config Watch] canvas_code sent ({len(_code)} chars)')
+	except Exception as e:
+		print(f'[W2TD Config Watch] canvas_code send failed: {e}')
+
 	# Trigger webrtc_table_sync to update TX nodes when Audio/Video flags change
 	try:
 		sync_dat = (_op('webrtc_table_sync')

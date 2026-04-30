@@ -538,8 +538,14 @@ def init_tables():
 
 
 def _get_videoout(cfg):
-	"""Read videoout mode from raw config dict, case-insensitive."""
-	return str(cfg.get('Videoout') or cfg.get('videoout') or cfg.get('display_mode') or 'none').strip().lower()
+	"""Read videoout mode from raw config dict, case-insensitive.
+	Accepts both 'Videoout' (canonical) and 'Video' (legacy/short) as key names.
+	"""
+	return str(
+		cfg.get('Videoout') or cfg.get('videoout') or
+		cfg.get('Video') or cfg.get('video') or
+		cfg.get('display_mode') or 'none'
+	).strip().lower()
 
 
 def _config_val(cfg, *keys, default=0):
@@ -573,7 +579,7 @@ def _config_msg(cfg):
 		'audio_auto_gain':	_config_val(cfg, 'Audiogain', 'audiogain', 'audio_auto_gain', default=0),
 		'show_dots':		  _config_val(cfg, 'Showdots', 'showdots', 'show_dots', default=1),
 		# Videoout: none=off, td=TD video stream, js=JS canvas sketch, color=bg color
-		'videoout':		   _config_val(cfg, 'Videoout', 'videoout', 'display_mode', default='none'),
+		'videoout':		   _config_val(cfg, 'Videoout', 'videoout', 'Video', 'display_mode', default='none'),
 		# Show top status bar while a JS sketch is rendering (0=hide, 1=show)
 		'canvas_topbar':	  _config_val(cfg, 'Canvastopbar', 'canvastopbar', 'canvas_topbar', default=1),
 	}
@@ -623,6 +629,7 @@ def broadcast_config(webServerDAT):
 
 	# If videoout=js, also push jsfile code so the sketch shows immediately on mode switch
 	videoout = _get_videoout(cfg)
+	print(f'[W2TD] videoout mode resolved: "{videoout}" (Videoout={repr(cfg.get("Videoout"))}, Video={repr(cfg.get("Video"))})')
 	if videoout == 'js':
 		reload_jsfile(webServerDAT)
 
@@ -1188,7 +1195,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 		# Send current background color only when videoout == 'color'
 		try:
 			if _get_videoout(cfg) == 'color':
-				bg_chop = _op('w2td_background')
+				bg_chop = _op('w2td_background') or _op('w2td_color')
 				if bg_chop:
 					r = max(0, min(255, int(round(bg_chop['r'].eval() * 255))))
 					g = max(0, min(255, int(round(bg_chop['g'].eval() * 255))))

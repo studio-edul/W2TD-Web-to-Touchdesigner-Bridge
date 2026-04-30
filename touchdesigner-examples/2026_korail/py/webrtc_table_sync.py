@@ -37,27 +37,32 @@ def _w2td_audio():
 
 
 def _w2td_video_tx():
-	"""Return webrtc_video_tx_container if it exists, else fall back to webrtc_audio_container."""
+	"""Return video TX container. Checks both 'webrtc_video_tx_container' (canonical)
+	and 'webrtc_video_container' (common alias used in korail/custom projects)."""
+	_VIDEO_TX_NAMES = ('webrtc_video_tx_container', 'webrtc_video_container')
 	try:
 		p = parent(1)
 		if p:
-			if p.name == 'webrtc_video_tx_container':
+			if p.name in _VIDEO_TX_NAMES:
 				return p
 			if p.name in ('W2TD_Pro', 'W2TD'):
-				c = p.op('webrtc_video_tx_container')
-				if c:
-					return c
+				for name in _VIDEO_TX_NAMES:
+					c = p.op(name)
+					if c:
+						return c
 		p2 = parent(2)
 		if p2 and p2.name in ('W2TD_Pro', 'W2TD'):
-			c = p2.op('webrtc_video_tx_container')
-			if c:
-				return c
+			for name in _VIDEO_TX_NAMES:
+				c = p2.op(name)
+				if c:
+					return c
 	except NameError:
 		pass
 	for proj in ('project1', 'project'):
-		c = op(f'{proj}/{W2TD_VIDEO_TX}')
-		if c:
-			return c
+		for name in _VIDEO_TX_NAMES:
+			c = op(f'{proj}/W2TD_Pro/{name}')
+			if c:
+				return c
 	root = op('/')
 	if root and root.children:
 		c = root.children[0].op(W2TD_VIDEO_TX)
@@ -241,10 +246,18 @@ def _read_tx_flags():
 		try:
 			key = str(cfg_dat[r, 0]).strip().lower()
 			val = str(cfg_dat[r, 1]).strip()
-			if key == 'audio':
-				audio_tx = bool(int(float(val)))
-			elif key == 'video':
-				video_tx = bool(int(float(val)))
+			if key in ('audio', 'audioout'):
+				try:
+					audio_tx = bool(int(float(val)))
+				except (ValueError, TypeError):
+					# Non-numeric value (e.g. 'td', 'none') → enabled unless explicitly off
+					audio_tx = val.lower() not in ('none', '0', 'false', 'off', '')
+			elif key in ('video', 'videoout'):
+				try:
+					video_tx = bool(int(float(val)))
+				except (ValueError, TypeError):
+					# Non-numeric value (e.g. 'td', 'js', 'none') → enabled if mode is td
+					video_tx = val.lower() not in ('none', '0', 'false', 'off', '')
 		except Exception:
 			pass
 	return audio_tx, video_tx
@@ -500,9 +513,12 @@ def sync():
 	# Video TX only runs if webrtc_video_tx_container exists AND Video config flag is 1.
 	# Skip entirely if neither is active.
 	_audio_tx_flag, _video_tx_flag = _read_tx_flags()
+	print(f'[W2TD WebRTC Sync TX] TX flags: audio={_audio_tx_flag} video={_video_tx_flag}')
 	audio_bus = _get_audio_bus() if _audio_tx_flag else None
 	w2td_video_c = _w2td_video_tx() if _video_tx_flag else None
+	print(f'[W2TD WebRTC Sync TX] audio_bus={audio_bus} video_container={w2td_video_c}')
 	if audio_bus is None and w2td_video_c is None and _audio_tx_flag and _video_tx_flag:
+		print('[W2TD WebRTC Sync TX] Neither audio_bus nor video_container found — skipping TX setup')
 		return
 
 	w2td_audio_c = _w2td_audio()

@@ -33,6 +33,8 @@ const W2TD_VERSION = '1.0.0';
   let displayMode = null;
   let canvasTopbarVisible = true;
   let cachedCanvasCode = '';
+  let lastBgColor = localStorage.getItem('w2td-last-bg-color') || '';  // color 모드 즉시 적용용
+  let _tdVideoElUser = null;  // dev_mode=0에서 생성된 fullscreen 비디오 엘리먼트 참조
 
   function _isTunnelConnection() {
     const addr = (els.tdAddress && els.tdAddress.value || '').toLowerCase();
@@ -252,34 +254,64 @@ const W2TD_VERSION = '1.0.0';
    *   'js'    = JS canvas  → reset body bg, close TD stream, run cached sketch
    */
   function _applyDisplayMode() {
-    if (displayMode !== 'color') {
-      // Not color mode: clear any leftover body background color
+    const isTd    = displayMode === 'td';
+    const isColor = displayMode === 'color';
+    const isJs    = displayMode === 'js';
+    // 'color', 'td', 'js' 모드 = 전체화면 표시 모드 → mainUI 숨김
+    const isDisplayMode = isTd || isColor || isJs;
+
+    // ── 배경색 처리 ────────────────────────────────────────────────────────
+    if (isColor) {
+      // color 모드 진입: 저장된 색상 즉시 적용 (없으면 검은색 기본값)
+      const colorToApply = lastBgColor || '#000000';
+      document.body.style.backgroundColor = colorToApply;
+      const tp = $('touch-pad');
+      if (tp) tp.style.backgroundColor = colorToApply;
+    } else if (!isTd) {
+      // td 모드가 아닌 경우 body 배경 초기화 (td 모드일 때는 video가 덮으므로 유지)
       document.body.style.backgroundColor = '';
       const tp = $('touch-pad');
       if (tp) tp.style.backgroundColor = '';
     }
-    if (displayMode !== 'js') {
+
+    // ── TD 영상 element 정리 ───────────────────────────────────────────────
+    if (!isTd && _tdVideoElUser) {
+      _tdVideoElUser.style.display = 'none';
+    }
+
+    // ── JS 캔버스 ──────────────────────────────────────────────────────────
+    if (!isJs) {
       if (typeof CanvasRunner !== 'undefined') CanvasRunner.stop();
     } else if (cachedCanvasCode && typeof CanvasRunner !== 'undefined') {
       CanvasRunner.load(cachedCanvasCode);
     }
-    if (displayMode !== 'td') {
-      // Close TD stream monitor if open
-      const mon = $('td-stream-monitor');
-      if (mon && !mon.classList.contains('hidden')) {
-        mon.classList.add('hidden');
-        if (els.mainUI) els.mainUI.classList.remove('hidden');
-      }
-    } else {
-      // Entering TD video mode — auto-open the stream monitor if video is already flowing.
-      // If the video isn't active yet, the onTdVideoTrack handler will open it on arrival.
-      if (typeof WebRTCModule !== 'undefined' && WebRTCModule.isTdVideoActive && WebRTCModule.isTdVideoActive()) {
-        if (els.tdStreamMonitor && els.mainUI) {
-          els.mainUI.classList.add('hidden');
-          els.tdStreamMonitor.classList.remove('hidden');
-        }
+
+    // ── mainUI 표시/숨김 ──────────────────────────────────────────────────
+    // color/td/js = 전체화면 표시 모드: mainUI 숨김
+    // none = 일반 모드: dev_mode=1이면 mainUI 표시
+    if (devMode && els.mainUI) {
+      if (isDisplayMode) {
+        els.mainUI.classList.add('hidden');
+      } else {
+        // 'none' 모드 복귀 시만 mainUI 표시
+        els.mainUI.classList.remove('hidden');
       }
     }
+
+    // ── TD 스트림 모니터 (dev_mode=1 전용) ───────────────────────────────
+    if (isTd) {
+      if (devMode && typeof WebRTCModule !== 'undefined' && WebRTCModule.isTdVideoActive && WebRTCModule.isTdVideoActive()) {
+        if (els.tdStreamMonitor) els.tdStreamMonitor.classList.remove('hidden');
+      } else if (!devMode && _tdVideoElUser) {
+        _tdVideoElUser.style.display = '';
+      }
+    } else {
+      // td 모드 이탈: 스트림 모니터 닫기
+      if (els.tdStreamMonitor && !els.tdStreamMonitor.classList.contains('hidden')) {
+        els.tdStreamMonitor.classList.add('hidden');
+      }
+    }
+
     _applyCanvasTopbarVisibility();
     _updateFullscreenButtonVisibility();
   }
@@ -507,10 +539,14 @@ const W2TD_VERSION = '1.0.0';
         videoEl.style.objectFit = 'cover';
         videoEl.style.zIndex = '501';
         videoEl.style.pointerEvents = 'none';
+        videoEl.style.display = displayMode === 'td' ? '' : 'none'; // hide if mode already changed
         if (!document.body.contains(videoEl)) document.body.appendChild(videoEl);
-        const tp = document.getElementById('touch-pad');
-        if (tp) tp.style.backgroundColor = 'transparent';
-        document.body.style.backgroundColor = 'transparent';
+        _tdVideoElUser = videoEl;  // track for cleanup on mode change
+        if (displayMode === 'td') {
+          const tp = document.getElementById('touch-pad');
+          if (tp) tp.style.backgroundColor = 'transparent';
+          document.body.style.backgroundColor = 'transparent';
+        }
       }
       track.onended = () => {
         videoEl.srcObject = null;
@@ -519,12 +555,16 @@ const W2TD_VERSION = '1.0.0';
             els.btnTdStream.classList.remove('td-stream-active');
           }
           _updateFullscreenButtonVisibility();
-          exitTdStreamMonitor();
+          // td 모드일 때만 모니터 종료 처리 (다른 모드로 이미 전환된 경우 스킵)
+          if (displayMode === 'td') exitTdStreamMonitor();
         } else {
           videoEl.style.display = 'none';
-          document.body.style.backgroundColor = '';
-          const tp2 = document.getElementById('touch-pad');
-          if (tp2) tp2.style.backgroundColor = '';
+          // td 모드에서 이탈한 경우에만 배경 초기화 (다른 모드로 전환 후 트랙 종료 시 무시)
+          if (displayMode === 'td') {
+            document.body.style.backgroundColor = '';
+            const tp2 = document.getElementById('touch-pad');
+            if (tp2) tp2.style.backgroundColor = '';
+          }
         }
       };
     });
@@ -723,6 +763,11 @@ const W2TD_VERSION = '1.0.0';
         if (typeof AudioModule === 'undefined') return; // Pro feature check
         // videoout gate: bg color only applies in 'color' mode (or when unset)
         if (displayMode !== null && displayMode !== 'color') return;
+        // Store last color for instant apply on mode switch
+        if (color) {
+          lastBgColor = color;
+          localStorage.setItem('w2td-last-bg-color', color);
+        }
         document.body.style.backgroundColor = color;
         // Apply to touch pad overlay as well (it covers body with its own background)
         const tp = $('touch-pad');
