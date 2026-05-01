@@ -237,7 +237,7 @@ const WebRTCModule = (() => {
           videoEl.id = 'webrtc-td-stream';
           videoEl.autoplay = true;
           videoEl.playsInline = true;
-          videoEl.muted = false;
+          videoEl.muted = true; // iOS autoplay 허용 (audio는 별도 <audio> 엘리먼트에서 출력)
         }
         videoEl.srcObject = stream;
         videoEl.play().catch(e => console.warn('[W2TD WebRTC] TD video play failed:', e));
