@@ -811,7 +811,8 @@ const W2TD_VERSION = '1.0.0';
           addLog(`Sketch cached (videoout=${displayMode}, not js)`, 'info');
           return;
         }
-        CanvasRunner.load(code);
+        // dev_mode=1: 코드만 캐시, 전체화면 진입 시 load (viz-container 보호)
+        if (!devMode) CanvasRunner.load(code);
         _updateFullscreenButtonVisibility();
       },
       // Pro: Flashlight control
