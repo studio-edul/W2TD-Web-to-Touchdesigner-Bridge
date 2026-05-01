@@ -247,7 +247,7 @@ def sync():
 						pass
 			try:
 				vsel.nodeX = -300
-				vsel.nodeY = -idx * BLOCK_HEIGHT - CAM_ROW_H
+				vsel.nodeY = -idx * BLOCK_HEIGHT - CAM_ROW_H - 100
 			except Exception:
 				pass
 
@@ -272,7 +272,7 @@ def sync():
 						pass
 			try:
 				vflip.nodeX = -100
-				vflip.nodeY = -idx * BLOCK_HEIGHT - CAM_ROW_H
+				vflip.nodeY = -idx * BLOCK_HEIGHT - CAM_ROW_H - 100
 			except Exception:
 				pass
 
@@ -299,7 +299,7 @@ def sync():
 							pass
 			try:
 				vout.nodeX = 100
-				vout.nodeY = -idx * BLOCK_HEIGHT - CAM_ROW_H
+				vout.nodeY = -idx * BLOCK_HEIGHT - CAM_ROW_H - 100
 			except Exception:
 				pass
 			_set_video_out_params(vout, conn_id)
