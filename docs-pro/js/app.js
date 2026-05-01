@@ -1209,6 +1209,7 @@ const W2TD_VERSION = '1.0.0';
     if (_devFullscreenMode === 'td') {
       exitTdStreamMonitor();
     } else if (_devFullscreenMode === 'js') {
+      if (typeof CanvasRunner !== 'undefined') CanvasRunner.stop(); // viz-container 복원
       document.body.classList.remove('sketch-fullscreen');
       _hideDevExitBtn();
       if (els.mainUI) els.mainUI.classList.remove('hidden');
