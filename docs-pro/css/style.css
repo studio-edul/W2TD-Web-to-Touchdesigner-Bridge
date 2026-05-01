@@ -792,13 +792,7 @@ body.sketch-fullscreen #broadcast-bar {
 /* ===== TD Stream Monitor ===== */
 .td-stream-monitor {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  /* safe area 포함: 홈 인디케이터 영역까지 확장 */
-  bottom: env(safe-area-inset-bottom, 0);
-  padding-bottom: env(safe-area-inset-bottom, 0);
+  inset: 0;
   z-index: 900;
   background: #000;
   display: flex;

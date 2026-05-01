@@ -38,6 +38,7 @@ const WebRTCModule = (() => {
   let _analyser = null;
   let _onLog = null;
   let _onTdVideoTrack = null; // callback(videoEl, track) when TD sends video downlink
+  let _offerQueue = Promise.resolve(); // serialize handleOffer calls (prevents WebRTC glare)
 
   // ── Orientation lock ───────────────────────────────────────────────────────
   let _orientationLocked = false;
@@ -329,23 +330,27 @@ const WebRTCModule = (() => {
    * so the SDP now includes TD's outgoing audio track.
    * Browser sets remote description, creates answer, sends it back.
    */
-  async function handleOffer(sdp) {
-    if (!micPc || micPc.connectionState === 'closed') {
-      _log('handleOffer: no active PC, ignoring TD offer');
-      return;
-    }
-    try {
-      await micPc.setRemoteDescription({ type: 'offer', sdp });
-      const answer = await micPc.createAnswer();
-      // Enhance Opus parameters for better audio quality before setting local description
-      const enhancedSdp = _enhanceOpusSdp(answer.sdp);
-      await micPc.setLocalDescription({ type: 'answer', sdp: enhancedSdp });
-      const sent = WSClient.send({ type: 'webrtc_reanswer', sdp: enhancedSdp });
-      _log(sent ? 'TD offer handled, answer sent (Opus enhanced)' : 'TD offer handled but answer FAILED — WS not connected');
-    } catch (e) {
-      console.error('[W2TD WebRTC] handleOffer failed:', e);
-      _log('handleOffer failed: ' + (e.message || e));
-    }
+  function handleOffer(sdp) {
+    // Queue offers to prevent WebRTC glare when audio+video offers arrive close together
+    _offerQueue = _offerQueue.then(async () => {
+      if (!micPc || micPc.connectionState === 'closed') {
+        _log('handleOffer: no active PC, ignoring TD offer');
+        return;
+      }
+      try {
+        await micPc.setRemoteDescription({ type: 'offer', sdp });
+        const answer = await micPc.createAnswer();
+        // Enhance Opus parameters for better audio quality before setting local description
+        const enhancedSdp = _enhanceOpusSdp(answer.sdp);
+        await micPc.setLocalDescription({ type: 'answer', sdp: enhancedSdp });
+        const sent = WSClient.send({ type: 'webrtc_reanswer', sdp: enhancedSdp });
+        _log(sent ? 'TD offer handled, answer sent (Opus enhanced)' : 'TD offer handled but answer FAILED — WS not connected');
+      } catch (e) {
+        console.error('[W2TD WebRTC] handleOffer failed:', e);
+        _log('handleOffer failed: ' + (e.message || e));
+      }
+    });
+    return _offerQueue;
   }
 
   async function handleIce({ candidate, sdpMLineIndex, sdpMid }) {
