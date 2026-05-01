@@ -191,6 +191,11 @@ const WebRTCModule = (() => {
     // so TD can still send audio downlink even when mic is off
     if (micStream && micStream.getAudioTracks().length > 0) {
       micStream.getTracks().forEach(track => micPc.addTrack(track, micStream));
+      // mic 있어도 video recvonly transceiver는 별도로 추가 (TD→mobile 영상 수신용)
+      if (videoTx) {
+        micPc.addTransceiver('video', { direction: 'recvonly' });
+        _log('Added video recvonly transceiver (mic active)');
+      }
     } else {
       if (audioTx) micPc.addTransceiver('audio', { direction: 'recvonly' });
       if (videoTx) micPc.addTransceiver('video', { direction: 'recvonly' });
@@ -201,7 +206,7 @@ const WebRTCModule = (() => {
     micPc.ontrack = (event) => {
       const track = event.track;
       const stream = event.streams[0] || new MediaStream([track]);
-      _log('Received track from TD: ' + track.kind);
+      _log(`ontrack: kind=${track.kind} id=${track.id.slice(0,8)} readyState=${track.readyState}`);
 
       if (track.kind === 'audio') {
         // Audio downlink from TD → dedicated <audio> element

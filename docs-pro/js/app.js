@@ -303,6 +303,7 @@ const W2TD_VERSION = '1.0.0';
       if (devMode) {
         // td 모드 진입 시 항상 모니터 오픈 (video 없으면 black screen, 나중에 도착하면 자동 표시)
         const _vEl = document.getElementById('webrtc-td-stream');
+        addLog(`TD mode enter: videoEl=${!!_vEl} srcObject=${!!(_vEl && _vEl.srcObject)} paused=${_vEl ? _vEl.paused : 'n/a'}`, 'info');
         if (_vEl && els.tdStreamVideoArea) {
           if (!els.tdStreamVideoArea.contains(_vEl)) {
             _vEl.style.position = '';
@@ -315,7 +316,7 @@ const W2TD_VERSION = '1.0.0';
           }
           // display:none 부모 안에서 video가 멈췄을 수 있으므로 재생 보장
           if (_vEl.srcObject && _vEl.paused) {
-            _vEl.play().catch(() => {});
+            _vEl.play().catch(e => addLog(`TD video play failed: ${e.message}`, 'warn'));
           }
         }
         if (els.mainUI) els.mainUI.classList.add('hidden');
