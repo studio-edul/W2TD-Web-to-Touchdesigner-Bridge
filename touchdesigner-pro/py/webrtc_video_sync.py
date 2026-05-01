@@ -2,12 +2,15 @@
 W2TD Video TX Sync
 ==================
 DAT Execute — webrtc_video_container 안에 배치.
-webrtc_table 변경 시 호출되어 비디오 TX 노드를 생성/삭제하고
+webrtc_table 또는 w2td_config 변경 시 호출되어 비디오 TX 노드를 생성/삭제하고
 WebRTC 재협상(addTrack + createOffer)을 처리한다.
 
 TD 설정 방법:
   1. webrtc_video_container 안에 DAT Execute DAT 추가
-  2. Parameters > DATs: ../webrtc_audio_container/webrtc_table
+  2. Parameters > DATs:
+       ../webrtc_audio_container/webrtc_table
+       ../../w2td_config
+     (두 DAT 모두 등록 — 클라이언트 연결 중 videoout 변경 시에도 즉시 반응)
   3. Parameters > Table Change: On
   4. 이 파일을 Callbacks DAT로 지정
 
@@ -379,5 +382,6 @@ def sync():
 
 
 def onTableChange(dat, prevDAT, info):
-	"""webrtc_table 변경 시 호출."""
+	"""webrtc_table 또는 w2td_config 변경 시 호출.
+	DATs 파라미터에 두 테이블을 모두 등록하면 videoout 변경만으로도 즉시 반응한다."""
 	sync()

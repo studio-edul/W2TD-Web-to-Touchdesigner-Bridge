@@ -2,12 +2,15 @@
 W2TD Video TX Sync
 ==================
 DAT Execute — webrtc_video_container 안에 배치.
-webrtc_table 변경 시 호출되어 비디오 TX 노드를 생성/삭제하고
+webrtc_table 또는 w2td_config 변경 시 호출되어 비디오 TX 노드를 생성/삭제하고
 WebRTC 재협상(addTrack + createOffer)을 처리한다.
 
 TD 설정 방법:
   1. webrtc_video_container 안에 DAT Execute DAT 추가
-  2. Parameters > DATs: ../webrtc_audio_container/webrtc_table
+  2. Parameters > DATs:
+       ../webrtc_audio_container/webrtc_table
+       ../../w2td_config
+     (두 DAT 모두 등록 — 클라이언트 연결 중 videoout 변경 시에도 즉시 반응)
   3. Parameters > Table Change: On
   4. 이 파일을 Callbacks DAT로 지정
 
@@ -24,7 +27,7 @@ video_slot{N} 위치: W2TD_Pro와 같은 계층 (project1/video_slot{N})
 
 W2TD_BASE = 'W2TD_Pro'
 BLOCK_HEIGHT = 300   # cam_render_sync.py와 동일해야 함! 두 파일 항상 같은 값 유지
-CAM_ROW_H   = 150   # webrtc TX 행이 cam 행에서 얼마나 아래에 위치할지
+CAM_ROW_H   = 100   # webrtc TX 행이 cam 행에서 얼마나 아래에 위치할지
 
 
 # ── 노드 탐색 헬퍼 ────────────────────────────────────────────────────────────
@@ -180,6 +183,36 @@ def _set_video_out_params(top, conn_id):
 				pass
 
 
+# ── Video Track 자동 선택 ──────────────────────────────────────────────────────
+
+def _auto_select_video_track(vout, track_name, attempt=1, max_attempts=15):
+	"""Video Stream Out TOP의 webrtctrack 파라미터를 자동 선택. 메뉴가 채워질 때까지 재시도."""
+	if vout is None:
+		return
+	for par_name in ('webrtctrack', 'Webrtctrack', 'track', 'Track'):
+		if hasattr(vout.par, par_name):
+			try:
+				p = getattr(vout.par, par_name)
+				menu_names = p.menuNames if hasattr(p, 'menuNames') else []
+				if menu_names:
+					chosen = track_name if track_name in menu_names else menu_names[0]
+					setattr(vout.par, par_name, chosen)
+					print(f'[W2TD Video Sync] Auto-selected video track "{chosen}" on {vout.name} (attempt {attempt})')
+					return
+			except Exception:
+				pass
+	# 메뉴가 아직 비어 있으면 재시도
+	if attempt < max_attempts:
+		_vout = vout
+		_tn = track_name
+		_att = attempt
+		def _retry():
+			_auto_select_video_track(_vout, _tn, _att + 1, max_attempts)
+		run(_retry, delayFrames=5, fromOP=_vout)
+	else:
+		print(f'[W2TD Video Sync] Warning: could not auto-select video track on {vout.name} after {max_attempts} attempts')
+
+
 # ── 메인 sync ─────────────────────────────────────────────────────────────────
 
 def sync():
@@ -246,10 +279,11 @@ def sync():
 					except Exception:
 						pass
 			try:
-				vsel.nodeX = -300
+				vsel.nodeX = 0
 				vsel.nodeY = -idx * BLOCK_HEIGHT - CAM_ROW_H
-			except Exception:
-				pass
+				print(f'[W2TD Video Sync] select_video_slot{slot} nodeY={vsel.nodeY}')
+			except Exception as e:
+				print(f'[W2TD Video Sync] select_video_slot{slot} nodeY error: {e}')
 
 		# 2. flip_top_{N}
 		vflip = existing_flips.get(slot) or container.op(f'flip_top_{slot}')
@@ -271,10 +305,11 @@ def sync():
 					except Exception:
 						pass
 			try:
-				vflip.nodeX = -100
+				vflip.nodeX = 150
 				vflip.nodeY = -idx * BLOCK_HEIGHT - CAM_ROW_H
-			except Exception:
-				pass
+				print(f'[W2TD Video Sync] flip_top_{slot} nodeY={vflip.nodeY}')
+			except Exception as e:
+				print(f'[W2TD Video Sync] flip_top_{slot} nodeY error: {e}')
 
 		# 3. video_stream_out_{N}
 		vout = existing_outs.get(slot) or container.op(f'video_stream_out_{slot}')
@@ -298,10 +333,11 @@ def sync():
 						except Exception:
 							pass
 			try:
-				vout.nodeX = 100
+				vout.nodeX = 300
 				vout.nodeY = -idx * BLOCK_HEIGHT - CAM_ROW_H
-			except Exception:
-				pass
+				print(f'[W2TD Video Sync] video_stream_out_{slot} nodeY={vout.nodeY}')
+			except Exception as e:
+				print(f'[W2TD Video Sync] video_stream_out_{slot} nodeY error: {e}')
 			_set_video_out_params(vout, conn_id)
 
 		if (is_new_sel or is_new_out) and slot not in newly_created:
@@ -316,6 +352,8 @@ def sync():
 			_conn_map = dict(slot_to_conn)
 			_wrtc = webrtc
 
+			_container = container
+
 			def _trigger_video_offers():
 				for s in _slots_to_offer:
 					cid = _conn_map.get(s)
@@ -329,6 +367,11 @@ def sync():
 						print(f'[W2TD Video Sync] createOffer slot {s}')
 					except Exception as ex:
 						print(f'[W2TD Video Sync] addTrack/createOffer error slot {s}: {ex}')
+						continue
+					# createOffer 후 reanswer가 완료되면 track 메뉴가 채워짐 → 자동 선택 시작
+					vout = _container.op(f'video_stream_out_{s}')
+					if vout:
+						_auto_select_video_track(vout, track_name)
 
 			run(_trigger_video_offers, delayFrames=5, fromOP=_wrtc)
 
@@ -339,5 +382,6 @@ def sync():
 
 
 def onTableChange(dat, prevDAT, info):
-	"""webrtc_table 변경 시 호출."""
+	"""webrtc_table 또는 w2td_config 변경 시 호출.
+	DATs 파라미터에 두 테이블을 모두 등록하면 videoout 변경만으로도 즉시 반응한다."""
 	sync()
