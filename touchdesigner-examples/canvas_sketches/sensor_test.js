@@ -75,75 +75,178 @@
     });
   }
 
-  // ── Holofoil rendering ───────────────────────────────────────────
+  // ── Holofoil rendering (CodePen PrQKgo 스타일) ────────────────────
   // ob = orientation beta  (전후 기울기, 0°=수평, 90°=직립)
   // og = orientation gamma (좌우 기울기, -90~+90°)
+  //
+  // CodePen 핵심 기법 재현:
+  //   1. 좁은 무지개 빛줄기 (::before) — 기울기로 위치 이동
+  //   2. 홀로그래픽 미세 줄무늬 (::after holo.png 대체)
+  //   3. 반짝이 sparkle (::after sparkles.gif 대체)
+  //   4. color-dodge 블렌드로 강렬한 발광
+
+  // sparkle 텍스처 캐시 (한 번만 생성)
+  let _sparkleCanvas = null;
+  function _getSparkleTexture(size) {
+    if (_sparkleCanvas && _sparkleCanvas.width === size) return _sparkleCanvas;
+    _sparkleCanvas = document.createElement('canvas');
+    _sparkleCanvas.width = size;
+    _sparkleCanvas.height = size;
+    const sctx = _sparkleCanvas.getContext('2d');
+    // 랜덤 sparkle 점 생성
+    for (let i = 0; i < size * size * 0.012; i++) {
+      const sx = Math.random() * size;
+      const sy = Math.random() * size;
+      const sr = 0.5 + Math.random() * 1.5;
+      const sa = 0.3 + Math.random() * 0.7;
+      sctx.fillStyle = `rgba(255, 255, 255, ${sa})`;
+      sctx.beginPath();
+      sctx.arc(sx, sy, sr, 0, Math.PI * 2);
+      sctx.fill();
+    }
+    return _sparkleCanvas;
+  }
+
+  // 홀로그래픽 줄무늬 텍스처 캐시
+  let _holoCanvas = null;
+  function _getHoloTexture(size) {
+    if (_holoCanvas && _holoCanvas.width === size) return _holoCanvas;
+    _holoCanvas = document.createElement('canvas');
+    _holoCanvas.width = size;
+    _holoCanvas.height = size;
+    const hctx = _holoCanvas.getContext('2d');
+    // 미세한 가로 줄무늬 — 회절격자(diffraction grating) 효과
+    const lineH = 3;
+    for (let y = 0; y < size; y += lineH) {
+      const hue = (y / size) * 360;
+      hctx.fillStyle = `hsla(${hue}, 100%, 50%, 0.12)`;
+      hctx.fillRect(0, y, size, lineH * 0.6);
+    }
+    return _holoCanvas;
+  }
+
   function drawHolofoil(cx, cy, r, ob, og) {
     ctx.save();
 
-    // circle clip
+    // ── 원형 클리핑 ──────────────────────────────────────────────
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.clip();
 
-    // 어두운 금속 베이스
-    ctx.fillStyle = '#07070f';
-    ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+    const x0 = cx - r, y0 = cy - r, d = r * 2;
 
-    // 기울기에서 hue 기준값 산출
-    // 폰을 들고 있을 때 ob≈90이므로 (ob-90)으로 정규화
-    const tiltX = og  / 90;           // -1 ~ +1 (좌우)
-    const tiltY = (ob - 90) / 90;     // -1 ~ +1 (전후, 0=직립)
-    const hueBase = tiltX * 120 + tiltY * 80;
+    // ── 어두운 금속 베이스 ────────────────────────────────────────
+    ctx.fillStyle = '#040712';
+    ctx.fillRect(x0, y0, d, d);
 
-    // Rainbow layer 1 — gamma 기울기 방향을 그라디언트 축으로
-    const angle1 = tiltX * (Math.PI / 2.5);
-    const c1 = Math.cos(angle1), s1 = Math.sin(angle1);
+    // ── 기울기 정규화 ────────────────────────────────────────────
+    // 감도 높게: ±45°에서 풀 스윙
+    const tiltX = Math.max(-1, Math.min(1, og / 45));
+    const tiltY = Math.max(-1, Math.min(1, (ob - 90) / 45));
+    // CodePen의 px, py (0~100 퍼센트) 에 대응
+    const px = 50 + tiltX * 40;
+    const py = 50 + tiltY * 40;
+
+    // ── Layer 1: 좁은 무지개 빛줄기 (::before 재현) ──────────────
+    // CodePen: linear-gradient(110deg, transparent 25%, color1 48%, color2 52%, transparent 75%)
+    // 기울기에 따라 빛줄기 위치와 각도가 이동
+    const sweepAngle = Math.PI * 0.6 + tiltX * 0.5;
+    const sa = Math.cos(sweepAngle), sb = Math.sin(sweepAngle);
     const g1 = ctx.createLinearGradient(
-      cx + c1 * r, cy + s1 * r,
-      cx - c1 * r, cy - s1 * r
+      cx - sa * r * 1.3, cy - sb * r * 1.3,
+      cx + sa * r * 1.3, cy + sb * r * 1.3
     );
-    for (let i = 0; i <= 6; i++) {
-      const hue = ((hueBase + i * 60) % 360 + 360) % 360;
-      g1.addColorStop(i / 6, `hsla(${hue.toFixed(0)}, 100%, 62%, 0.9)`);
-    }
-    ctx.globalCompositeOperation = 'screen';
+    // 빛줄기 중심 위치 — 기울기로 이동
+    const bandCenter = 0.2 + (px / 100) * 0.6;   // 0.2 ~ 0.8 범위
+    const bw = 0.04;  // 매우 좁은 밴드
+    const hueA = ((180 + tiltX * 60 + tiltY * 40) % 360 + 360) % 360;
+    const hueB = ((hueA + 40) % 360);
+
+    g1.addColorStop(0, 'transparent');
+    g1.addColorStop(Math.max(0.01, bandCenter - bw * 4), 'transparent');
+    g1.addColorStop(Math.max(0.02, bandCenter - bw), `hsla(${hueA}, 100%, 65%, 0.85)`);
+    g1.addColorStop(bandCenter, 'rgba(255, 255, 255, 0.95)');
+    g1.addColorStop(Math.min(0.98, bandCenter + bw), `hsla(${hueB}, 100%, 65%, 0.85)`);
+    g1.addColorStop(Math.min(0.99, bandCenter + bw * 4), 'transparent');
+    g1.addColorStop(1, 'transparent');
+
+    // CodePen: filter brightness(0.66) contrast(1.33), opacity 0.88
+    ctx.globalCompositeOperation = 'color-dodge';
+    ctx.globalAlpha = 0.88;
     ctx.fillStyle = g1;
-    ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+    ctx.fillRect(x0, y0, d, d);
+    ctx.globalAlpha = 1;
 
-    // Rainbow layer 2 — 수직 교차축 (회절 격자 느낌)
-    const angle2 = angle1 + Math.PI / 2;
-    const c2 = Math.cos(angle2), s2 = Math.sin(angle2);
+    // ── Layer 2: 홀로그래픽 무지개 워시 (::after 베이스 그라디언트) ─
+    // CodePen: linear-gradient(125deg, #ff008450 15%, ... #cc4cfa50 85%)
+    const hueShift = tiltX * 100 + tiltY * 70;
     const g2 = ctx.createLinearGradient(
-      cx + c2 * r * 0.9, cy + s2 * r * 0.9,
-      cx - c2 * r * 0.9, cy - s2 * r * 0.9
+      cx - r * 0.9, cy - r * 0.9,
+      cx + r * 0.9, cy + r * 0.9
     );
-    for (let i = 0; i <= 6; i++) {
-      const hue = ((hueBase + 180 + i * 60) % 360 + 360) % 360;
-      g2.addColorStop(i / 6, `hsla(${hue.toFixed(0)}, 100%, 55%, 0.4)`);
-    }
+    const colors = [
+      [0.00, 330], [0.15, 30], [0.30, 60], [0.45, 120],
+      [0.60, 180], [0.75, 240], [0.90, 280], [1.00, 330]
+    ];
+    colors.forEach(function (pair) {
+      var stop = pair[0], h = pair[1];
+      var hue = ((h + hueShift) % 360 + 360) % 360;
+      g2.addColorStop(stop, 'hsla(' + hue + ', 90%, 55%, 0.25)');
+    });
+    ctx.globalCompositeOperation = 'color-dodge';
     ctx.fillStyle = g2;
-    ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+    ctx.fillRect(x0, y0, d, d);
 
-    // Specular highlight — 기울기에 따라 반사점 이동
-    const specX = cx + tiltX * r * 0.52;
-    const specY = cy - tiltY * r * 0.42;
-    const sg = ctx.createRadialGradient(specX, specY, 0, specX, specY, r * 0.62);
-    sg.addColorStop(0,    'rgba(255, 255, 255, 1.0)');
-    sg.addColorStop(0.10, 'rgba(255, 255, 255, 0.65)');
-    sg.addColorStop(0.35, 'rgba(255, 255, 255, 0.15)');
+    // ── Layer 3: 홀로그래픽 줄무늬 텍스처 (holo.png 대체) ────────
+    // 줄무늬가 기울기에 따라 스크롤되는 효과
+    var texSize = Math.max(64, Math.round(r * 2));
+    var holoTex = _getHoloTexture(texSize);
+    ctx.save();
+    ctx.globalCompositeOperation = 'color-dodge';
+    ctx.globalAlpha = 0.75;
+    // 기울기에 따라 텍스처 오프셋
+    var texOffX = tiltX * texSize * 0.3;
+    var texOffY = tiltY * texSize * 0.4;
+    ctx.translate(cx, cy);
+    ctx.rotate(sweepAngle * 0.3);
+    ctx.drawImage(holoTex, -r + texOffX, -r + texOffY, d, d);
+    ctx.restore();
+
+    // ── Layer 4: sparkle 반짝이 (sparkles.gif 대체) ──────────────
+    // 위치가 기울기에 따라 미세하게 이동 → 반짝이는 효과
+    var sparkTex = _getSparkleTexture(texSize);
+    ctx.save();
+    ctx.globalCompositeOperation = 'color-dodge';
+    // opacity: CodePen처럼 기울기 각도에 비례
+    var pa = Math.abs(50 - px) + Math.abs(50 - py);
+    var sparkOpacity = Math.min(1, 0.3 + pa * 0.02);
+    ctx.globalAlpha = sparkOpacity;
+    var spkOffX = (px - 50) * r * 0.014;
+    var spkOffY = (py - 50) * r * 0.014;
+    ctx.drawImage(sparkTex, x0 + spkOffX, y0 + spkOffY, d, d);
+    ctx.restore();
+
+    // ── Layer 5: specular highlight ──────────────────────────────
+    // 기울기에 따라 밝은 반사점이 이동
+    var specX = cx + tiltX * r * 0.5;
+    var specY = cy - tiltY * r * 0.45;
+    var sg = ctx.createRadialGradient(specX, specY, 0, specX, specY, r * 0.55);
+    sg.addColorStop(0,    'rgba(255, 255, 255, 0.9)');
+    sg.addColorStop(0.06, 'rgba(255, 255, 255, 0.55)');
+    sg.addColorStop(0.20, 'rgba(255, 255, 255, 0.12)');
     sg.addColorStop(1,    'rgba(255, 255, 255, 0)');
-    ctx.globalCompositeOperation = 'screen';
+    ctx.globalCompositeOperation = 'color-dodge';
     ctx.fillStyle = sg;
-    ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+    ctx.fillRect(x0, y0, d, d);
 
-    // 테두리 어둡게 (구 느낌)
-    const vg = ctx.createRadialGradient(cx, cy, r * 0.5, cx, cy, r);
+    // ── Edge vignette (구체감) ────────────────────────────────────
+    var vg = ctx.createRadialGradient(cx, cy, r * 0.45, cx, cy, r);
     vg.addColorStop(0, 'rgba(0, 0, 0, 0)');
-    vg.addColorStop(1, 'rgba(0, 0, 0, 0.62)');
+    vg.addColorStop(0.7, 'rgba(0, 0, 0, 0.15)');
+    vg.addColorStop(1, 'rgba(0, 0, 0, 0.65)');
     ctx.globalCompositeOperation = 'source-over';
     ctx.fillStyle = vg;
-    ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+    ctx.fillRect(x0, y0, d, d);
 
     ctx.restore();
   }

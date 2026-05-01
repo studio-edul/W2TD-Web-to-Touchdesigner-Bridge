@@ -67,8 +67,13 @@ Auto-created per slot inside this container (by `webrtc_table_sync`):
 
 Auto-created per slot: `web_render_top_{N}` → `transform_top_{N}` → `crop_top_{N}` → `video_received_slot{N}` (null TOP) → `layout1`.
 
-**`webrtc_video_tx_container`** _(Pro only)_ — Per-slot video downlink. Auto-created per slot:
-`select_video_slot{N}` → `flip_top_{N}` → `video_stream_out_{N}`. Source TOPs named `video_slot{N}` are placed one level above (inside `W2TD_Pro`) by the user.
+**`webrtc_video_container`** _(Pro only)_ — Camera uplink pipeline + per-slot video downlink TX:
+
+Camera uplink (auto-created per slot by `cam_render_sync`):
+`web_render_top_{N}` → `transform_top_{N}` → `crop_top_{N}` → `video_received_slot{N}` → `layout1`
+
+Video TX downlink (auto-created per slot by `webrtc_video_sync`):
+`select_video_slot{N}` → `flip_top_{N}` → `video_stream_out_{N}`. Source TOPs named `video_slot{N}` are placed outside `W2TD_Pro` (e.g. in `project1`) by the user.
 
 **Web Server DAT settings:**
 - Active: `On`
@@ -99,7 +104,9 @@ Columns: `key` | `value`. Changes are debounced and broadcast automatically by `
 | `Flashlight` | `1` | _(Pro)_ Enable flashlight control |
 | `Hapticfeedback` | `1` | _(Pro)_ Enable haptic from CHOP |
 | `Video` | `1` | _(Pro)_ Enable per-slot video downlink TX |
-| `Videoout` | `none` | _(Pro)_ Mobile display mode: `none` = off, `color` = background color control, `js` = live JS canvas sketch, `td` = TD video stream |
+| `Videoout` | `none` | _(Pro)_ Mobile display mode: `none` = off, `color` = background color control, `js` = live JS canvas sketch, `td` = TD video stream. Also accepted as `Video` key. Changes are broadcast live (no reconnect needed). |
+| `Jsfile` | _(optional)_ | _(Pro)_ Absolute path to a `.js` sketch file. When `Videoout=js`, `config_watch` reads this file and sends `canvas_code` to all clients on config change. |
+| `Canvastopbar` | `1` | _(Pro)_ Show/hide top bar during JS sketch (`0` = hide, `1` = show) |
 
 #### w2td_init.py (Execute DAT)
 
@@ -176,7 +183,7 @@ Copy `touchdesigner/py/callbacks.py` (or the Pro equivalent) into the Web Server
 - Mobile opens the hosted web app directly — WebSocket connects via the tunnel
 - Mic audio (uplink): WebRTC offer/answer via WebSocket → `webrtc_dat` → `webrtc_audio_{N}` Audio Stream In CHOP
 - Audio downlink (Pro): TD `addTrack()` → `createOffer()` renegotiation → `webrtc_audio_out_{N}` Audio Stream Out CHOP → mobile `<audio>` playback
-- Video downlink (Pro): TD `addTrack()` (video) → `webrtc_video_tx_container/video_stream_out_{N}` → mobile `<video>` playback
+- Video downlink (Pro): TD `addTrack()` (video) → `webrtc_video_container/video_stream_out_{N}` → mobile `<video>` playback
 - Camera uplink: WebRTC relay via WebSocket → per-slot `web_render_top_{N}` served from the `cam_receiver_html` Text DAT (TD serves it over HTTP on port 9980)
 
 ### Persistent state
@@ -308,6 +315,13 @@ Inside `W2TD_Pro`, add an `In DAT` named `js_code_in` and a `DAT Execute` pointi
 **Example sketch** — sensor test ball with inertia, holofoil, and heartbeat:
 `touchdesigner-examples/canvas_sketches/sensor_test.js`
 
+The holofoil effect uses 5 Canvas 2D layers driven by device orientation (beta/gamma):
+1. Narrow rainbow light streak (color-dodge) — tilts and shifts with device angle
+2. Holographic rainbow wash — hue-shifted gradient overlay
+3. Diffraction grating stripe texture — scrolls with tilt
+4. Sparkle particles — opacity varies with tilt angle
+5. Specular highlight — moves with device orientation
+
 ## TD Flashlight API (Pro)
 
 Rear camera must be active on the mobile device.
@@ -322,10 +336,16 @@ op('web_server_dat').module.send_flashlight_to_all(op('web_server_dat'), state=0
 
 ## TD Video Downlink (Pro)
 
-1. Create a TOP named `video_slot{N}` inside `W2TD_Pro` (one per target slot) — feed whatever TD output you want to stream.
-2. When slot `N` connects via WebRTC, `webrtc_table_sync.py` auto-creates inside `webrtc_video_tx_container`:
+1. Create a TOP named `video_slot{N}` outside `W2TD_Pro` (e.g. in `project1`, one per target slot) — feed whatever TD output you want to stream.
+2. When slot `N` connects via WebRTC, `webrtc_video_sync.py` auto-creates inside `webrtc_video_container`:
    `select_video_slot{N}` (pulls `../../video_slot{N}`) → `flip_top_{N}` (flipX) → `video_stream_out_{N}` (WebRTC mode).
-3. TD calls `addTrack(conn_id, 'video_out_{N}', 'video')` + `createOffer` to renegotiate the existing peer connection.
+3. TD calls `addTrack(conn_id, 'video_out_{N}', 'video')` + `createOffer` (delayFrames=5, after audio addTrack at frame 3) to renegotiate the existing peer connection.
+
+**Setup in TD:**
+1. Add a DAT Execute DAT inside `webrtc_video_container`
+2. Set `Callbacks DAT` → `webrtc_video_sync` (this script)
+3. Set `DATs` → `webrtc_table` (same container or `../webrtc_audio_container/webrtc_table`)
+4. Enable `Table Change`
 
 On the mobile side:
 - `dev_mode=1` → "TD Stream" button appears when a video track is received → tap to view fullscreen monitor
@@ -342,9 +362,9 @@ On the mobile side:
 - **Microphone** — WebRTC → Audio Stream In CHOP (uplink)
 - **Camera** — WebRTC → per-slot Web Render TOP (rear/front, mutually exclusive per device), with transform + crop + layout compositing
 - **Audio downlink** _(Pro)_ — TD Audio Stream Out CHOP → WebRTC → mobile speaker (per-slot routing via `w2td_audio_bus`)
-- **Video downlink** _(Pro)_ — TD Video Stream Out TOP → WebRTC → mobile `<video>` (source: `video_slot{N}` TOP; dev_mode=1: monitor overlay, dev_mode=0: fullscreen background). Requires `Videoout = td`.
-- **Background color** _(Pro)_ — broadcast via `w2td_background` (r/g/b) or per-slot via `w2td_bg_color_bus` (channels `slot{N}_r/g/b`). Requires `Videoout = color`.
-- **Live JS canvas sketch** _(Pro)_ — inject JavaScript into mobile canvas from a Text DAT. Sensor data (motion, orientation, touch) available inside the sketch via `getSensors()`. Auto-broadcast on edit via `canvas_code_dat_exec.py`. Requires `Videoout = js`.
+- **Video downlink** _(Pro)_ — TD Video Stream Out TOP → WebRTC → mobile `<video>` (source: `video_slot{N}` TOP; dev_mode=1: monitor overlay, dev_mode=0: fullscreen background). Requires `Videoout = td`. Managed by `webrtc_video_sync.py` (separate from audio sync).
+- **Background color** _(Pro)_ — broadcast via `w2td_background` or `w2td_color` (r/g/b) or per-slot via `w2td_bg_color_bus` (channels `slot{N}_r/g/b`). Requires `Videoout = color`. Last color is saved to localStorage and instantly applied on mode switch.
+- **Live JS canvas sketch** _(Pro)_ — inject JavaScript into mobile canvas from a Text DAT or `Jsfile` path. Sensor data (motion, orientation, touch) available inside the sketch via `getSensors()`. Auto-broadcast on edit via `canvas_code_dat_exec.py` or `config_watch.py` (when `Videoout=js` + `Jsfile` set). Requires `Videoout = js`.
 - **Haptic feedback** _(Pro)_ — pattern-based or continuous, driven by `w2td_haptic` CHOP or Python API
 - **Flashlight** _(Pro)_ — driven by `w2td_flashlight` CHOP (channels `slot{N}` or `all`)
 - **WebSocket Heartbeat** — auto-reconnect on connection loss
@@ -394,7 +414,8 @@ touchdesigner/py/            ← Free TD scripts (W2TD base COMP)
 touchdesigner-pro/py/        ← Pro TD scripts (W2TD_Pro base COMP)
   callbacks.py               ← + webrtc_reoffer/reanswer handlers, canvas_code/bg_color/flashlight API
   webrtc_callbacks.py        ← + onOffer (TD-initiated offer sending)
-  webrtc_table_sync.py       ← + audio/video TX routing (Select → flip → Stream Out)
+  webrtc_table_sync.py       ← + audio TX routing (Select → Audio Stream Out)
+  webrtc_video_sync.py       ← Video TX sync (webrtc_video_container) — Select → flip → Video Stream Out
   canvas_code_dat_exec.py    ← DAT Execute — watches js_code_in (In DAT) → auto-broadcast sketch
   background_chop_exec.py    ← w2td_background / w2td_bg_color_bus → bg_color msgs
   haptic_chop_exec.py        ← w2td_haptic → haptic state msgs
