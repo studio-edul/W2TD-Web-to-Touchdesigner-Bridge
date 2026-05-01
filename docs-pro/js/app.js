@@ -268,11 +268,10 @@ const W2TD_VERSION = '1.0.0';
         if (_devFullscreenMode) _exitDevFullscreen();
         else if (els.mainUI) els.mainUI.classList.remove('hidden');
       }
-      // JS 캔버스: 로드는 하되 자동 전체화면 전환은 하지 않음
-      if (!isJs) {
-        if (typeof CanvasRunner !== 'undefined') CanvasRunner.stop();
-      } else if (cachedCanvasCode && typeof CanvasRunner !== 'undefined') {
-        CanvasRunner.load(cachedCanvasCode);
+      // JS 캔버스: dev_mode=1에서는 코드만 캐시, 전체화면 진입 시에만 load
+      // (load()가 viz-container를 숨겨 센서 그래프가 사라지는 문제 방지)
+      if (!isJs && typeof CanvasRunner !== 'undefined') {
+        CanvasRunner.stop();
       }
       if (!isTd && _tdVideoElUser) _tdVideoElUser.style.display = 'none';
       _applyCanvasTopbarVisibility();
@@ -1182,9 +1181,9 @@ const W2TD_VERSION = '1.0.0';
       if (els.tdStreamMonitor) els.tdStreamMonitor.classList.remove('hidden');
       _devFullscreenMode = 'td';
     } else if (displayMode === 'js') {
-      // JS 스케치 모드: 전체화면
-      const sketchActive = typeof CanvasRunner !== 'undefined' && CanvasRunner.isActive();
-      if (!sketchActive) { showToast('No JS sketch running'); return; }
+      // JS 스케치 모드: 전체화면 진입 시 캔버스 load (여기서 viz-container가 숨겨짐)
+      if (!cachedCanvasCode) { showToast('No JS sketch loaded'); return; }
+      if (typeof CanvasRunner !== 'undefined') CanvasRunner.load(cachedCanvasCode);
       if (els.mainUI) els.mainUI.classList.add('hidden');
       document.body.classList.add('sketch-fullscreen');
       _showDevExitBtn();
