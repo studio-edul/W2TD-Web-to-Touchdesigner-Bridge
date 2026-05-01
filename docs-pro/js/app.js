@@ -1303,6 +1303,19 @@ const W2TD_VERSION = '1.0.0';
     if (logLines.length > LOG_MAX) logLines.shift();
     _renderLog();
     console.log('[W2TD]', msg);
+    _tdDebugLog(time, msg, level);
+  }
+
+  // ── 화면 디버그 패널 (td-stream-monitor 위 오버레이) ─────────────────────────
+  const _tdDebugLines = [];
+  function _tdDebugLog(time, msg, level) {
+    const panel = document.getElementById('td-debug-log');
+    if (!panel) return;
+    const color = level === 'error' ? '#ff6677' : level === 'warn' ? '#ffaa44' : '#88ff88';
+    _tdDebugLines.push(`<span style="color:${color}">[${time}] ${msg.replace(/</g,'&lt;')}</span>`);
+    if (_tdDebugLines.length > 40) _tdDebugLines.shift();
+    panel.innerHTML = _tdDebugLines.join('\n');
+    panel.scrollTop = panel.scrollHeight;
   }
 
   function _renderLog() {
