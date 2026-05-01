@@ -1119,6 +1119,7 @@ const W2TD_VERSION = '1.0.0';
   function enterTouchPad() {
     touchPadActive = true;
     stopVizTouch();
+    if (els.mainUI) els.mainUI.classList.add('hidden');
     els.touchPad.classList.remove('hidden');
     els.btnExitTouch.classList.remove('hidden'); // always visible in dev_mode=1
     if (els.btnToggleTouchPoints) {
@@ -1144,6 +1145,7 @@ const W2TD_VERSION = '1.0.0';
   function exitTouchPad() {
     touchPadActive = false;
     els.touchPad.classList.add('hidden');
+    if (els.mainUI) els.mainUI.classList.remove('hidden');
     if (els.btnToggleTouchPoints) {
       els.btnToggleTouchPoints.classList.add('hidden'); // hide toggle button
     }
