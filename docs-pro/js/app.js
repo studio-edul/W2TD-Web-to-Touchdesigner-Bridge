@@ -35,6 +35,7 @@ const W2TD_VERSION = '1.0.0';
   let cachedCanvasCode = '';
   let lastBgColor = localStorage.getItem('w2td-last-bg-color') || '';  // color 모드 즉시 적용용
   let _tdVideoElUser = null;  // dev_mode=0에서 생성된 fullscreen 비디오 엘리먼트 참조
+  let _devFullscreenMode = null; // dev_mode=1 전용: 현재 수동 진입한 전체화면 모드 ('td'/'js'/'color'/null)
 
   function _isTunnelConnection() {
     const addr = (els.tdAddress && els.tdAddress.value || '').toLowerCase();
@@ -260,6 +261,27 @@ const W2TD_VERSION = '1.0.0';
     // 'color', 'td', 'js' 모드 = 전체화면 표시 모드 → mainUI 숨김
     const isDisplayMode = isTd || isColor || isJs;
 
+    // ── dev_mode=1: 자동 전체화면 전환 없음. mainUI 유지, Fullscreen 버튼만 표시 ──
+    if (devMode) {
+      if (!isDisplayMode) {
+        // 'none' 모드 복귀: 활성 전체화면 있으면 종료
+        if (_devFullscreenMode) _exitDevFullscreen();
+        else if (els.mainUI) els.mainUI.classList.remove('hidden');
+      }
+      // JS 캔버스: 로드는 하되 자동 전체화면 전환은 하지 않음
+      if (!isJs) {
+        if (typeof CanvasRunner !== 'undefined') CanvasRunner.stop();
+      } else if (cachedCanvasCode && typeof CanvasRunner !== 'undefined') {
+        CanvasRunner.load(cachedCanvasCode);
+      }
+      if (!isTd && _tdVideoElUser) _tdVideoElUser.style.display = 'none';
+      _applyCanvasTopbarVisibility();
+      _updateFullscreenButtonVisibility();
+      return;
+    }
+
+    // ── dev_mode=0: 기존 자동 전환 동작 ─────────────────────────────────
+
     // ── 배경색 처리 ────────────────────────────────────────────────────────
     if (isColor) {
       // color 모드 진입: 저장된 색상 즉시 적용 (없으면 검은색 기본값)
@@ -287,45 +309,18 @@ const W2TD_VERSION = '1.0.0';
     }
 
     // ── mainUI 표시/숨김 ──────────────────────────────────────────────────
-    // color/td/js = 전체화면 표시 모드: mainUI 숨김
-    // none = 일반 모드: dev_mode=1이면 mainUI 표시
-    if (devMode && els.mainUI) {
+    if (els.mainUI) {
       if (isDisplayMode) {
         els.mainUI.classList.add('hidden');
       } else {
-        // 'none' 모드 복귀 시만 mainUI 표시
         els.mainUI.classList.remove('hidden');
       }
     }
 
-    // ── TD 스트림 모니터 (dev_mode=1 전용) ───────────────────────────────
+    // ── TD 스트림 모니터 (dev_mode=0) ─────────────────────────────────────
     if (isTd) {
-      if (devMode) {
-        // td 모드 진입 시 항상 모니터 오픈 (video 없으면 black screen, 나중에 도착하면 자동 표시)
-        const _vEl = document.getElementById('webrtc-td-stream');
-        addLog(`TD mode enter: videoEl=${!!_vEl} srcObject=${!!(_vEl && _vEl.srcObject)} paused=${_vEl ? _vEl.paused : 'n/a'}`, 'info');
-        if (_vEl && els.tdStreamVideoArea) {
-          if (!els.tdStreamVideoArea.contains(_vEl)) {
-            _vEl.style.position = '';
-            _vEl.style.zIndex = '0';
-            _vEl.style.pointerEvents = '';
-            _vEl.style.objectFit = 'cover';
-            _vEl.style.width = '100%';
-            _vEl.style.height = '100%';
-            els.tdStreamVideoArea.appendChild(_vEl);
-          }
-          // display:none 부모 안에서 video가 멈췄을 수 있으므로 재생 보장
-          if (_vEl.srcObject && _vEl.paused) {
-            _vEl.play().catch(e => addLog(`TD video play failed: ${e.message}`, 'warn'));
-          }
-        }
-        if (els.mainUI) els.mainUI.classList.add('hidden');
-        if (els.tdStreamMonitor) els.tdStreamMonitor.classList.remove('hidden');
-      } else if (!devMode && _tdVideoElUser) {
-        _tdVideoElUser.style.display = '';
-      }
+      if (_tdVideoElUser) _tdVideoElUser.style.display = '';
     } else {
-      // td 모드 이탈: 스트림 모니터 닫기
       if (els.tdStreamMonitor && !els.tdStreamMonitor.classList.contains('hidden')) {
         els.tdStreamMonitor.classList.add('hidden');
       }
@@ -524,6 +519,8 @@ const W2TD_VERSION = '1.0.0';
     if (els.btnExitCameraMonitor) els.btnExitCameraMonitor.addEventListener('click', exitCameraMonitor);
     if (els.btnTdStream) els.btnTdStream.addEventListener('click', enterTdStreamMonitor);
     if (els.btnExitTdStream) els.btnExitTdStream.addEventListener('click', exitTdStreamMonitor);
+    const btnDevExit = $('btn-dev-fullscreen-exit');
+    if (btnDevExit) btnDevExit.addEventListener('click', _exitDevFullscreen);
 
     // TD video downlink callback — routes display based on devMode
     WebRTCModule.setOnTdVideoTrack((videoEl, track) => {
@@ -1163,46 +1160,83 @@ const W2TD_VERSION = '1.0.0';
    *   otherwise: toast "nothing to show"
    */
   function enterTdStreamMonitor() {
-    if (displayMode === 'js') {
-      const sketchActive = typeof CanvasRunner !== 'undefined' && CanvasRunner.isActive();
-      if (!sketchActive) {
-        showToast('No JS sketch running');
-        haptic();
-        return;
-      }
-      haptic();
-      document.body.classList.toggle('sketch-fullscreen');
-      return;
-    }
-    if (!WebRTCModule.isTdVideoActive()) {
-      showToast('No TD video stream active');
-      haptic();
-      return;
-    }
     haptic();
-    els.mainUI.classList.add('hidden');
-    els.tdStreamMonitor.classList.remove('hidden');
+    if (displayMode === 'td') {
+      // TD 영상 모드: td-stream-monitor 열기
+      const _vEl = document.getElementById('webrtc-td-stream');
+      addLog(`TD enter: videoEl=${!!_vEl} srcObject=${!!(_vEl && _vEl.srcObject)}`, 'info');
+      if (_vEl && els.tdStreamVideoArea) {
+        if (!els.tdStreamVideoArea.contains(_vEl)) {
+          _vEl.style.position = '';
+          _vEl.style.zIndex = '0';
+          _vEl.style.objectFit = 'cover';
+          _vEl.style.width = '100%';
+          _vEl.style.height = '100%';
+          els.tdStreamVideoArea.appendChild(_vEl);
+        }
+        if (_vEl.srcObject && _vEl.paused) {
+          _vEl.play().catch(e => addLog(`TD video play failed: ${e.message}`, 'warn'));
+        }
+      }
+      if (els.mainUI) els.mainUI.classList.add('hidden');
+      if (els.tdStreamMonitor) els.tdStreamMonitor.classList.remove('hidden');
+      _devFullscreenMode = 'td';
+    } else if (displayMode === 'js') {
+      // JS 스케치 모드: 전체화면
+      const sketchActive = typeof CanvasRunner !== 'undefined' && CanvasRunner.isActive();
+      if (!sketchActive) { showToast('No JS sketch running'); return; }
+      if (els.mainUI) els.mainUI.classList.add('hidden');
+      document.body.classList.add('sketch-fullscreen');
+      _showDevExitBtn();
+      _devFullscreenMode = 'js';
+    } else if (displayMode === 'color') {
+      // Color 모드: 배경색 전체화면
+      if (els.mainUI) els.mainUI.classList.add('hidden');
+      document.body.style.backgroundColor = lastBgColor || '#000000';
+      _showDevExitBtn();
+      _devFullscreenMode = 'color';
+    }
   }
 
   function exitTdStreamMonitor() {
     if (!els.tdStreamMonitor) return;
     els.tdStreamMonitor.classList.add('hidden');
-    if (els.mainUI && !devMode) {
-      // dev_mode=0: shouldn't reach here normally
-    } else if (els.mainUI) {
-      els.mainUI.classList.remove('hidden');
+    _devFullscreenMode = null;
+    if (els.mainUI) els.mainUI.classList.remove('hidden');
+  }
+
+  function _exitDevFullscreen() {
+    if (_devFullscreenMode === 'td') {
+      exitTdStreamMonitor();
+    } else if (_devFullscreenMode === 'js') {
+      document.body.classList.remove('sketch-fullscreen');
+      _hideDevExitBtn();
+      if (els.mainUI) els.mainUI.classList.remove('hidden');
+      _devFullscreenMode = null;
+    } else if (_devFullscreenMode === 'color') {
+      document.body.style.backgroundColor = '';
+      _hideDevExitBtn();
+      if (els.mainUI) els.mainUI.classList.remove('hidden');
+      _devFullscreenMode = null;
     }
+  }
+
+  function _showDevExitBtn() {
+    const el = $('dev-fullscreen-exit');
+    if (el) el.classList.remove('hidden');
+  }
+  function _hideDevExitBtn() {
+    const el = $('dev-fullscreen-exit');
+    if (el) el.classList.add('hidden');
   }
 
   function _updateFullscreenButtonVisibility() {
     if (!els.btnTdStream) return;
-    const tdActive = typeof WebRTCModule !== 'undefined' && WebRTCModule.isTdVideoActive && WebRTCModule.isTdVideoActive();
-    const sketchActive = typeof CanvasRunner !== 'undefined' && CanvasRunner.isActive();
-    const relevant =
-      (displayMode === 'td' && tdActive) ||
-      (displayMode === 'js' && sketchActive);
-    if (devMode && relevant) {
+    if (devMode && (displayMode === 'td' || displayMode === 'js' || displayMode === 'color')) {
+      // dev_mode=1: 모드가 설정된 순간 버튼 노출 (수동 진입 대기)
       els.btnTdStream.classList.remove('hidden');
+      const labels = { td: 'TD Stream', js: 'JS Sketch', color: 'Color View' };
+      els.btnTdStream.textContent = labels[displayMode] || 'Fullscreen';
     } else {
       els.btnTdStream.classList.add('hidden');
       document.body.classList.remove('sketch-fullscreen');
