@@ -1,4 +1,4 @@
-"""
+﻿"""
 sensor_table -> Web Render TOP sync
 ==================================
 Creates web_render_top_1, web_render_top_2, ... based on connected slots.
@@ -11,6 +11,7 @@ Setup in TD:
   5. Paste this script
 """
 NODE_OFFSET_Y = 100
+BLOCK_HEIGHT  = 300   # 슬롯당 세로 블록 높이 (cam 행 + webrtc TX 행 + 여유)
 # Square side per Resolution config: Non-Commercial(1280), FHD(1920)
 _CAM_TOP_DIM_MAP = {'non-commercial': 1280, 'fhd': 1920}
 
@@ -239,10 +240,10 @@ def sync(table_dat=None):
 						c.destroy()
 					except Exception:
 						pass
-			# Also destroy video_received_slot{slot} null TOP (slot number, not index)
+			# Also destroy camera_slot{slot} null TOP (slot number, not index)
 			try:
 				if 0 <= idx < len(prev_slots):
-					null_c = container.op(f'video_received_slot{prev_slots[idx]}')
+					null_c = container.op(f'camera_slot{prev_slots[idx]}')
 					if null_c:
 						null_c.destroy()
 			except Exception:
@@ -253,7 +254,7 @@ def sync(table_dat=None):
 			except Exception as e:
 				print(f'[Cam Render Sync] Error destroying {name}: {e}')
 
-	# Create/update nodes: web_render_top -> transform_top -> crop_top -> null_top (video_received_slot{N}) -> layout1
+	# Create/update nodes: web_render_top -> transform_top -> crop_top -> null_top (camera_slot{N}) -> layout1
 	for i, name in enumerate(target_names):
 		idx = i + 1
 
@@ -287,7 +288,7 @@ def sync(table_dat=None):
 				except Exception:
 					pass
 			top.nodeX = 0
-			top.nodeY = -i * NODE_OFFSET_Y
+			top.nodeY = -i * BLOCK_HEIGHT
 		except Exception as e:
 			print(f'[Cam Render Sync] Error setting {name} params: {e}')
 		op('/').store(f'w2td_web_render_slot_{slot}', top.path)
@@ -309,7 +310,7 @@ def sync(table_dat=None):
 				print(f'[Cam Render Sync] Error setting {t_name} rotate: {e}')
 			try:
 				t_top.nodeX = top.nodeX + 150
-				t_top.nodeY = -i * NODE_OFFSET_Y
+				t_top.nodeY = -i * BLOCK_HEIGHT
 			except Exception:
 				pass
 			try:
@@ -330,7 +331,7 @@ def sync(table_dat=None):
 		if c_top:
 			try:
 				c_top.nodeX = top.nodeX + 300
-				c_top.nodeY = -i * NODE_OFFSET_Y
+				c_top.nodeY = -i * BLOCK_HEIGHT
 			except Exception:
 				pass
 			# Crop black bars in pixels (unit=0 -> pixel mode)
@@ -363,8 +364,8 @@ def sync(table_dat=None):
 			except Exception as e:
 				print(f'[Cam Render Sync] Error connecting {t_name} -> {c_name}: {e}')
 
-		# --- null_top (video_received_slot{N}) ---
-		n_name = f'video_received_slot{slot}'
+		# --- null_top (camera_slot{N}) ---
+		n_name = f'camera_slot{slot}'
 		n_top = container.op(n_name)
 		if n_top is None:
 			try:
@@ -376,7 +377,7 @@ def sync(table_dat=None):
 		if n_top:
 			try:
 				n_top.nodeX = top.nodeX + 450
-				n_top.nodeY = -i * NODE_OFFSET_Y
+				n_top.nodeY = -i * BLOCK_HEIGHT
 			except Exception:
 				pass
 			try:
