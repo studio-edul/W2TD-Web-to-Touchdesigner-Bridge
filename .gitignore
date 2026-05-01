@@ -18,6 +18,11 @@ development/
 
 # TouchDesigner
 touchdesigner/qr.png
+touchdesigner-pro/qr.png
+
+# Data / runtime output files
+*.csv
+*.npy
 touchdesigner/Backup/
 touchdesigner/.venv/
 touchdesigner/__pycache__/
