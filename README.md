@@ -65,12 +65,12 @@ Auto-created per slot inside this container (by `webrtc_table_sync`):
 | DAT Execute | DAT | `cam_render_sync` | Watches `sensor_table` → manages per-slot nodes |
 | Layout TOP | TOP | `layout1` | Composites all slots (auto-created when slots connect) |
 
-Auto-created per slot: `web_render_top_{N}` → `transform_top_{N}` → `crop_top_{N}` → `video_received_slot{N}` (null TOP) → `layout1`.
+Auto-created per slot: `web_render_top_{N}` → `transform_top_{N}` → `crop_top_{N}` → `camera_slot{N}` (null TOP) → `layout1`.
 
 **`webrtc_video_container`** _(Pro only)_ — Camera uplink pipeline + per-slot video downlink TX:
 
 Camera uplink (auto-created per slot by `cam_render_sync`):
-`web_render_top_{N}` → `transform_top_{N}` → `crop_top_{N}` → `video_received_slot{N}` → `layout1`
+`web_render_top_{N}` → `transform_top_{N}` → `crop_top_{N}` → `camera_slot{N}` → `layout1`
 
 Video TX downlink (auto-created per slot by `webrtc_video_sync`):
 `select_video_slot{N}` → `flip_top_{N}` → `video_stream_out_{N}`. Source TOPs named `video_slot{N}` are placed outside `W2TD_Pro` (e.g. in `project1`) by the user.
@@ -344,11 +344,11 @@ op('web_server_dat').module.send_flashlight_to_all(op('web_server_dat'), state=0
 **Setup in TD:**
 1. Add a DAT Execute DAT inside `webrtc_video_container`
 2. Set `Callbacks DAT` → `webrtc_video_sync` (this script)
-3. Set `DATs` → `webrtc_table` (same container or `../webrtc_audio_container/webrtc_table`)
+3. Set `DATs` → add **both**: `webrtc_table` (same container or `../webrtc_audio_container/webrtc_table`) **and** `../../w2td_config` — this ensures nodes are created/destroyed when `Videoout` changes while a client is already connected
 4. Enable `Table Change`
 
 On the mobile side:
-- `dev_mode=1` → "TD Stream" button appears when a video track is received → tap to view fullscreen monitor
+- `dev_mode=1` → **"TD Stream" button appears** (does not auto-enter fullscreen). Tap the button to open the fullscreen monitor; tap "Exit" to return to the main UI
 - `dev_mode=0` → video plays as a fullscreen background behind the touch pad
 
 ---
@@ -427,6 +427,7 @@ touchdesigner-pro/py/        ← Pro TD scripts (W2TD_Pro base COMP)
 touchdesigner-examples/      ← Example projects
   canvas_sketches/
     sensor_test.js           ← Sensor test: inertia ball + holofoil + heartbeat (canvas_code sketch)
+    sensor_diagnostic.js     ← Sensor diagnostic: THREE.js 3D phone model + gyro rings + 2D HUD sparklines
 ```
 
 > **Workflow:** Only `docs/` and `docs-pro/` are pushed to GitHub / hosted. Python files are applied directly in TD — TD reads them live from disk.

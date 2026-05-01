@@ -1,6 +1,6 @@
 # W2TD (Web-to-TouchDesigner Bridge) 개발 문서
 
-> 최종 업데이트: 2026-05-01 (webrtc_video_sync.py 분리, config 키 대소문자 수정, displayMode 배타적 전환 재작성, holofoil 5레이어 업그레이드, Jsfile/Canvastopbar 키 추가)
+> 최종 업데이트: 2026-05-06 (dev_mode=1 수동 fullscreen 버튼 플로우, touch pad mainUI 숨김 수정, null TOP 노드명 camera_slot{N} 변경, webrtc_video_sync DATs 2개 등록 필요, sensor_diagnostic.js 추가)
 > 목적: 추후 세션에서 파일 위치·구현 방식을 빠르게 파악하기 위한 참고 문서
 
 ---
@@ -90,7 +90,7 @@ op('w2td_init').module.install_packages()
 | `webrtc_video_sync` | DAT Execute | `webrtc_table` 변경 감지 → 슬롯별 비디오 TX 파이프라인 관리 (Pro) |
 | `layout1` | Layout TOP | 슬롯이 하나라도 연결되면 자동 생성 — 모든 슬롯 컴포지트 |
 
-카메라 업링크 (cam_render_sync 관리): `web_render_top_{N}` → `transform_top_{N}` (rotate) → `crop_top_{N}` → `video_received_slot{N}` (null TOP) → `layout1`
+카메라 업링크 (cam_render_sync 관리): `web_render_top_{N}` → `transform_top_{N}` (rotate) → `crop_top_{N}` → `camera_slot{N}` (null TOP) → `layout1`
 
 비디오 TX 다운링크 (webrtc_video_sync 관리, Pro):
 사용자가 베이스 COMP 밖(`project1`)에 `video_slot{N}` TOP을 배치하면 자동으로 파이프라인이 생성된다:
@@ -189,7 +189,8 @@ Integrated-Web-to-TouchDesigner-Bridge/
 │
 ├── touchdesigner-examples/
 │   └── canvas_sketches/
-│       └── sensor_test.js         ← 스케치 예제: 관성 공 + CodePen 스타일 holofoil(5레이어) + 심장박동 (센서 확인용)
+│       ├── sensor_test.js         ← 스케치 예제: 관성 공 + CodePen 스타일 holofoil(5레이어) + 심장박동 (센서 확인용)
+│       └── sensor_diagnostic.js   ← 진단용 스케치: THREE.js 3D 폰 모델 + 자이로 링 + 2D HUD 스파크라인
 │
 ├── development/
 │   ├── DEV_DOCS.md                ← 이 파일
@@ -575,16 +576,46 @@ Pro 버전의 app.js는 `Videoout` config 값에 따라 배경색·스케치·TD
 
 `applyConfig(cfg)` 에서 `cfg.videoout` 값을 받아 `displayMode`에 저장하고 `_applyDisplayMode()` 호출.
 
-**`_applyDisplayMode()` 동작 (v2 — 배타적 모드 전환):**
+**`_applyDisplayMode()` 동작 (v3 — dev_mode별 분기):**
 
-모드 전환 시 이전 모드를 완전히 정리 후 새 모드 활성화:
-- `'color'` 이 아닐 때: body/touch-pad 배경색 초기화 + CanvasRunner.stop() + td-stream 정리
-- `'color'` 일 때: `lastBgColor`(localStorage 캐시)가 있으면 즉시 적용, mainUI 숨김
-- `'js'` 이 아닐 때: `CanvasRunner.stop()` 호출
-- `'js'` 일 때: `cachedCanvasCode`가 있으면 즉시 `CanvasRunner.load(code)` 재실행, mainUI 숨김
-- `'td'` 이 아닐 때: td-stream-monitor 오버레이 닫기 + `_tdVideoElUser` 비디오 엘리먼트 제거
-- `'td'` 일 때 + 이미 비디오 활성 → td-stream-monitor 자동 오픈, mainUI 숨김
-- `'none'` 일 때: mainUI 복원 (devMode=1), 모든 출력 모드 비활성
+**`dev_mode=0`**: 기존 자동 전환 유지.
+- `'color'`: 배경색 즉시 적용, mainUI 숨김
+- `'js'`: `cachedCanvasCode`가 있으면 즉시 `CanvasRunner.load(code)`, mainUI 숨김
+- `'td'`: 비디오 활성 시 td-stream-monitor 자동 오픈, mainUI 숨김
+- `'none'`: mainUI 복원, 모든 출력 비활성
+
+**`dev_mode=1`**: 자동 전환 없음. `_updateFullscreenButtonVisibility()` 호출만 하고 리턴. 모드별 전용 버튼이 broadcast-bar에 표시되며, 버튼을 탭해야 fullscreen으로 진입한다.
+
+| 버튼 | 표시 조건 | 진입 함수 |
+|------|----------|---------|
+| "TD Stream" | `displayMode === 'td'` | `enterTdStreamMonitor('td')` |
+| "JS Sketch" | `displayMode === 'js'` | `enterTdStreamMonitor('js')` |
+| "Color View" | `displayMode === 'color'` | `enterTdStreamMonitor('color')` |
+
+**`_devFullscreenMode`** (string | null): dev_mode=1에서 현재 fullscreen 상태 추적 (`'td'` / `'js'` / `'color'` / null).
+
+**`enterTdStreamMonitor(mode)` 동작 (dev_mode=1):**
+- `'td'`: td-stream-monitor 오버레이 표시, mainUI 숨김
+- `'js'`: `CanvasRunner.load(cachedCanvasCode)`, sketch-fullscreen 진입, mainUI 숨김
+- `'color'`: body bg 설정, mainUI 숨김, `#dev-fullscreen-exit` 버튼 표시
+
+**`_exitDevFullscreen()` 동작:**
+- `'js'`: `CanvasRunner.stop()` (viz-container 복원), mainUI 표시
+- `'td'`: td-stream-monitor 닫기, mainUI 표시
+- `'color'`: body bg 초기화, mainUI 표시
+
+**CanvasRunner lifecycle (dev_mode=1):**
+- `_applyDisplayMode('js')` 호출 시 → `CanvasRunner.load()` 호출하지 않음 (버튼만 표시)
+- `onCanvasCode` 수신 시 → `cachedCanvasCode` 업데이트만 하고, `CanvasRunner.load()` 호출하지 않음 (guard: `if (!devMode)`)
+- JS Sketch 버튼 탭 시에만 → `CanvasRunner.load(cachedCanvasCode)` 호출
+- Exit 버튼 탭 시 → `CanvasRunner.stop()` 호출 → viz-container 자동 복원됨
+
+이 설계로 dev_mode=1에서 모드 변경 시 센서 그래프가 사라지지 않는다.
+
+**`enterTouchPad()` / `exitTouchPad()` (수정됨):**
+- `enterTouchPad()`: `#main-ui` 숨김 추가 → 터치패드가 그래프 위에 투명하게 표시되던 문제 해결
+- `exitTouchPad()`: `#main-ui` 복원 추가
+- CSS: `#touch-pad { background: var(--bg, #0a0a0f) }` (투명 → 불투명) 도 함께 필요
 
 **`track.onended` 안전 처리:** WebRTC 트랙이 끊길 때 이미 다른 모드(`displayMode !== 'td'`)로 전환된 상태면 배경 초기화를 스킵하여 UI 플래시 방지.
 
@@ -656,6 +687,43 @@ if (typeof ret === 'function') userCleanup = ret;  // cleanup 함수 등록
 마지막에 edge vignette (source-over)로 구체감 추가.
 
 텍스처 캐시(`_sparkleCanvas`, `_holoCanvas`)는 크기 변경 시에만 재생성. IIFE 클로저 안에서 관리.
+
+---
+
+### 5-12. `sensor_diagnostic.js` — 진단 스케치 (THREE.js + 2D HUD)
+
+모든 센서 채널의 수치와 변화를 한 화면에서 확인하는 진단용 스케치.
+
+**렌더링 구조:**
+
+THREE.js WebGLRenderer는 offscreen canvas에 렌더링하고, CanvasRunner의 주 canvas(2D)에 `ctx.drawImage(gl, ...)` 로 합성. 같은 canvas에 WebGL + 2D 컨텍스트를 동시에 사용할 수 없기 때문에 이 패턴을 사용한다.
+
+```javascript
+const gl = document.createElement('canvas');
+const renderer = new THREE.WebGLRenderer({ canvas: gl, antialias: true });
+// 매 프레임:
+renderer.render(scene, camera);
+ctx.drawImage(gl, 0, 0, W, H);   // 3D 합성
+drawHUD(s);                        // 2D 오버레이
+```
+
+**3D 씬 구성:**
+
+| 오브젝트 | 역할 |
+|---------|------|
+| 폰 바디 (BoxGeometry) | `MeshPhysicalMaterial` — orientation(α/β/γ)으로 쿼터니언 회전 |
+| 폰 스크린 (CanvasTexture) | 터치 포인트 + 글로우 + 가속도 크기 바 표시, 매 프레임 업데이트 |
+| accel ArrowHelper | ax/ay/az 벡터 방향 시각화 |
+| 자이로 링 ×3 (TorusGeometry) | Red(ga) / Green(gb) / Blue(gg) — deg/s 크기로 회전속도 표현 |
+
+**2D HUD 패널:**
+
+| 위치 | 내용 |
+|------|------|
+| 상단 패널 | Accel X/Y/Z + Gyro α/β/γ 수치 + 90샘플 스파크라인 |
+| 하단 패널 | Orientation α/β/γ + 미니 컴패스 + 터치 수 + GPS 좌표 + 센서 상태 도트 |
+
+**cleanup 함수:** renderer, 모든 geometry, material, texture 를 dispose. CanvasRunner가 스케치 교체 시 자동 호출한다.
 
 ---
 
@@ -1084,6 +1152,19 @@ TD callbacks.py:
 ### 센서 목록에 새 항목 추가하기
 
 `app.js` `renderSensorList()` 내부에서 `els.sensorList.appendChild(li)` 패턴 따라 추가. CSS 클래스: `available selected/deselected` 또는 `unavailable`.
+
+---
+
+## 14-0-1. webrtc_video_sync.py DAT Execute 설정 주의사항
+
+`webrtc_video_container` 안의 DAT Execute가 **두 DAT 모두**를 감시해야 한다:
+
+| DATs 파라미터 항목 | 이유 |
+|---|---|
+| `webrtc_table` (or `../webrtc_audio_container/webrtc_table`) | 클라이언트 연결/해제 시 노드 생성/삭제 |
+| `../../w2td_config` | `Videoout` 값이 바뀔 때 (`none` → `td` 등) 이미 연결된 클라이언트에 대해서도 즉시 노드 생성 트리거 |
+
+`w2td_config`를 누락하면 `Videoout=td`로 설정을 바꿔도 클라이언트가 이미 연결된 상태에서는 sync()가 호출되지 않아 video TX 노드가 생성되지 않는다.
 
 ---
 
