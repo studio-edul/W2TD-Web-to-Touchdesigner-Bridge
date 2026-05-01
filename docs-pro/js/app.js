@@ -301,6 +301,17 @@ const W2TD_VERSION = '1.0.0';
     // ── TD 스트림 모니터 (dev_mode=1 전용) ───────────────────────────────
     if (isTd) {
       if (devMode && typeof WebRTCModule !== 'undefined' && WebRTCModule.isTdVideoActive && WebRTCModule.isTdVideoActive()) {
+        // 모드 전환 후 재진입 시 video 엘리먼트가 tdStreamVideoArea에서 빠져 있을 수 있으므로 재부착
+        const _vEl = document.getElementById('webrtc-td-stream');
+        if (_vEl && els.tdStreamVideoArea && !els.tdStreamVideoArea.contains(_vEl)) {
+          _vEl.style.position = '';
+          _vEl.style.zIndex = '0';
+          _vEl.style.pointerEvents = '';
+          _vEl.style.objectFit = 'cover';
+          _vEl.style.width = '100%';
+          _vEl.style.height = '100%';
+          els.tdStreamVideoArea.appendChild(_vEl);
+        }
         if (els.tdStreamMonitor) els.tdStreamMonitor.classList.remove('hidden');
       } else if (!devMode && _tdVideoElUser) {
         _tdVideoElUser.style.display = '';
@@ -513,7 +524,7 @@ const W2TD_VERSION = '1.0.0';
         videoEl.style.position = '';
         videoEl.style.zIndex = '0';
         videoEl.style.pointerEvents = '';
-        videoEl.style.objectFit = 'contain';
+        videoEl.style.objectFit = 'cover';
         videoEl.style.width = '100%';
         videoEl.style.height = '100%';
         if (els.tdStreamVideoArea && !els.tdStreamVideoArea.contains(videoEl)) {

@@ -1,14 +1,15 @@
-﻿"""
+"""
 W2TD webrtc_table -> Audio Stream In CHOP sync
 ==============================================
 Called from DAT Execute DAT on webrtc_table change.
-Nodes under W2TD_Pro/webrtc_audio_container (audio TX/RX) and
-W2TD_Pro/webrtc_video_tx_container (video TX, falls back to audio container).
+Manages Audio RX (Stream In CHOP) and Audio TX (Stream Out CHOP) nodes
+inside W2TD_Pro/webrtc_audio_container.
+
+Video TX is handled separately by webrtc_video_sync.py (webrtc_video_container).
 """
 
 W2TD_BASE = 'W2TD_Pro'
 W2TD_AUDIO = f'{W2TD_BASE}/webrtc_audio_container'
-W2TD_VIDEO_TX = f'{W2TD_BASE}/webrtc_video_tx_container'
 
 
 def _w2td_audio():
@@ -34,41 +35,6 @@ def _w2td_audio():
 		if c:
 			return c
 	return op(W2TD_AUDIO)
-
-
-def _w2td_video_tx():
-	"""Return video TX container. Checks both 'webrtc_video_tx_container' (canonical)
-	and 'webrtc_video_container' (common alias used in korail/custom projects)."""
-	_VIDEO_TX_NAMES = ('webrtc_video_tx_container', 'webrtc_video_container')
-	try:
-		p = parent(1)
-		if p:
-			if p.name in _VIDEO_TX_NAMES:
-				return p
-			if p.name in ('W2TD_Pro', 'W2TD'):
-				for name in _VIDEO_TX_NAMES:
-					c = p.op(name)
-					if c:
-						return c
-		p2 = parent(2)
-		if p2 and p2.name in ('W2TD_Pro', 'W2TD'):
-			for name in _VIDEO_TX_NAMES:
-				c = p2.op(name)
-				if c:
-					return c
-	except NameError:
-		pass
-	for proj in ('project1', 'project'):
-		for name in _VIDEO_TX_NAMES:
-			c = op(f'{proj}/W2TD_Pro/{name}')
-			if c:
-				return c
-	root = op('/')
-	if root and root.children:
-		c = root.children[0].op(W2TD_VIDEO_TX)
-		if c:
-			return c
-	return op(W2TD_VIDEO_TX)
 
 
 def _get_container():
@@ -117,7 +83,6 @@ def _get_web_server():
 	"""Find Web Server DAT for sending WebSocket messages."""
 	c = _w2td_audio()
 	if c:
-		# Go up to W2TD base
 		base = c.parent()
 		if base:
 			ws = base.op('web_server_dat')
@@ -161,7 +126,6 @@ def _read_rows():
 			if '-' not in conn_id or len(conn_id) < 10:
 				continue
 			state = str(t[r, 'state']).strip().lower()
-			# Include connecting (state update may be delayed, prevents chop from being removed)
 			if state not in ('connected', 'connecting'):
 				continue
 			slot = int(t[r, 'slot'])
@@ -184,7 +148,6 @@ def _set_audio_chop_params(chop, conn_id):
 	webrtc = _get_webrtc()
 	if webrtc is None:
 		return False
-	# Source Type = WebRTC
 	for par_name in ('srctype', 'Srctype', 'sourcetype'):
 		if hasattr(chop.par, par_name):
 			try:
@@ -192,7 +155,6 @@ def _set_audio_chop_params(chop, conn_id):
 				break
 			except Exception:
 				pass
-	# WebRTC DAT
 	for par_name in ('webrtc', 'Webrtc'):
 		if hasattr(chop.par, par_name):
 			try:
@@ -200,7 +162,6 @@ def _set_audio_chop_params(chop, conn_id):
 				break
 			except Exception:
 				pass
-	# WebRTC Connection (conn_id)
 	for par_name in ('webrtcconnection', 'Webrtcconnection', 'connection', 'Connection'):
 		if hasattr(chop.par, par_name):
 			try:
@@ -208,7 +169,6 @@ def _set_audio_chop_params(chop, conn_id):
 				break
 			except Exception as e:
 				print(f'[W2TD WebRTC Sync] Error Set {par_name} failed: {e}')
-	# WebRTC Track (mono: select first/only track)
 	for par_name in ('webrtctrack', 'Webrtctrack', 'track', 'Track'):
 		if hasattr(chop.par, par_name):
 			try:
@@ -220,7 +180,6 @@ def _set_audio_chop_params(chop, conn_id):
 				break
 			except Exception:
 				pass
-	# Play = 1
 	for par_name in ('play', 'Play'):
 		if hasattr(chop.par, par_name):
 			try:
@@ -230,8 +189,8 @@ def _set_audio_chop_params(chop, conn_id):
 	return False
 
 
-def _read_tx_flags():
-	"""Read Audio/Video TX feature flags from w2td_config. Returns (audio_tx, video_tx) as bool."""
+def _read_audio_tx_enabled():
+	"""Read Audio TX flag from w2td_config. Returns bool."""
 	base = _w2td_base()
 	cfg_dat = None
 	if base:
@@ -239,28 +198,19 @@ def _read_tx_flags():
 	if cfg_dat is None:
 		cfg_dat = op('w2td_config')
 	if cfg_dat is None:
-		return True, True  # default: both enabled
-	audio_tx = True
-	video_tx = True
+		return True
 	for r in range(1, cfg_dat.numRows):
 		try:
 			key = str(cfg_dat[r, 0]).strip().lower()
 			val = str(cfg_dat[r, 1]).strip()
 			if key in ('audio', 'audioout'):
 				try:
-					audio_tx = bool(int(float(val)))
+					return bool(int(float(val)))
 				except (ValueError, TypeError):
-					# Non-numeric value (e.g. 'td', 'none') → enabled unless explicitly off
-					audio_tx = val.lower() not in ('none', '0', 'false', 'off', '')
-			elif key in ('video', 'videoout'):
-				try:
-					video_tx = bool(int(float(val)))
-				except (ValueError, TypeError):
-					# Non-numeric value (e.g. 'td', 'js', 'none') → enabled if mode is td
-					video_tx = val.lower() not in ('none', '0', 'false', 'off', '')
+					return val.lower() not in ('none', '0', 'false', 'off', '')
 		except Exception:
 			pass
-	return audio_tx, video_tx
+	return True
 
 
 def _w2td_base():
@@ -293,7 +243,6 @@ def _get_audio_bus():
 		bus = c.op('w2td_audio_bus')
 		if bus:
 			return bus
-	# Search in parent W2TD base
 	for proj in ('project1', 'project'):
 		bus = op(f'{proj}/{W2TD_BASE}/w2td_audio_bus')
 		if bus:
@@ -301,13 +250,11 @@ def _get_audio_bus():
 	return op('w2td_audio_bus')
 
 
-
 def _set_audio_out_params(chop, conn_id):
 	"""Set WebRTC parameters for Audio Stream Out CHOP (TX: TD -> mobile)."""
 	webrtc = _get_webrtc()
 	if webrtc is None:
 		return
-	# Protocol/Mode → WebRTC (default is RTSP, must change)
 	for par_name in ('protocol', 'Protocol', 'mode', 'Mode'):
 		if hasattr(chop.par, par_name):
 			try:
@@ -319,7 +266,6 @@ def _set_audio_out_params(chop, conn_id):
 					break
 				except Exception:
 					pass
-	# WebRTC DAT
 	for par_name in ('webrtc', 'Webrtc'):
 		if hasattr(chop.par, par_name):
 			try:
@@ -327,7 +273,6 @@ def _set_audio_out_params(chop, conn_id):
 				break
 			except Exception:
 				pass
-	# WebRTC Connection (conn_id)
 	for par_name in ('webrtcconnection', 'Webrtcconnection', 'connection', 'Connection'):
 		if hasattr(chop.par, par_name):
 			try:
@@ -335,7 +280,6 @@ def _set_audio_out_params(chop, conn_id):
 				break
 			except Exception as e:
 				print(f'[W2TD WebRTC Sync TX] Error Set {par_name} failed: {e}')
-	# Sample Rate = 48000 (WebRTC Opus native rate — reduces resampling artifacts)
 	for par_name in ('rate', 'Rate', 'samplerate', 'Samplerate'):
 		if hasattr(chop.par, par_name):
 			try:
@@ -343,7 +287,6 @@ def _set_audio_out_params(chop, conn_id):
 				break
 			except Exception:
 				pass
-	# Active/Play = 1
 	for par_name in ('active', 'Active', 'play', 'Play'):
 		if hasattr(chop.par, par_name):
 			try:
@@ -352,50 +295,10 @@ def _set_audio_out_params(chop, conn_id):
 				pass
 
 
-def _set_video_out_params(top, conn_id):
-	"""Set WebRTC parameters for Video Stream Out TOP (TX: TD -> mobile)."""
-	webrtc = _get_webrtc()
-	if webrtc is None:
-		return
-	# Protocol/Mode → WebRTC
-	for par_name in ('protocol', 'Protocol', 'mode', 'Mode'):
-		if hasattr(top.par, par_name):
-			try:
-				setattr(top.par, par_name, 'webrtc')
-				break
-			except Exception:
-				try:
-					setattr(top.par, par_name, 'WebRTC')
-					break
-				except Exception:
-					pass
-	# WebRTC DAT
-	for par_name in ('webrtc', 'Webrtc'):
-		if hasattr(top.par, par_name):
-			try:
-				setattr(top.par, par_name, webrtc)
-				break
-			except Exception:
-				pass
-	# WebRTC Connection (conn_id)
-	for par_name in ('webrtcconnection', 'Webrtcconnection', 'connection', 'Connection'):
-		if hasattr(top.par, par_name):
-			try:
-				setattr(top.par, par_name, conn_id)
-				break
-			except Exception as e:
-				print(f'[W2TD WebRTC Sync Video] Error Set {par_name} failed: {e}')
-	# Active/Play = 1
-	for par_name in ('active', 'Active'):
-		if hasattr(top.par, par_name):
-			try:
-				setattr(top.par, par_name, 1)
-			except Exception:
-				pass
-
-
 def sync():
-	"""Sync with webrtc_table: create/remove Audio Stream In CHOPs (RX) and Audio Stream Out CHOPs (TX)."""
+	"""Sync with webrtc_table: create/remove Audio Stream In CHOPs (RX) and Audio Stream Out CHOPs (TX).
+	Video TX is handled separately by webrtc_video_sync.py.
+	"""
 	container = _get_container()
 	merge_chop = _get_merge()
 	if container is None:
@@ -409,7 +312,7 @@ def sync():
 	target_names = [f'webrtc_audio_{i}' for i in range(1, len(rows) + 1)]
 	slot_conn = {r[0]: r[1] for r in rows}
 
-	# Query existing Audio Stream In CHOPs (search container, chopnet, w2td_audio)
+	# ── RX: Audio Stream In CHOPs ─────────────────────────────────────────────
 	existing = {}
 	for chop in (container.ops('webrtc_audio_*') if hasattr(container, 'ops') else []):
 		if chop.name.startswith('webrtc_audio_') and chop.name[14:].isdigit():
@@ -430,7 +333,6 @@ def sync():
 			if chop:
 				existing[name] = chop
 
-	# Remove: delete if not in target and name matches webrtc_audio_N
 	to_delete = [n for n in existing if n not in target_names]
 	for name in to_delete:
 		try:
@@ -439,7 +341,6 @@ def sync():
 		except Exception as e:
 			print(f'[W2TD WebRTC Sync] Error Destroy {name} failed: {e}')
 
-	# Create: only when node doesn't exist (check via container.op), same x, y increases upward (-)
 	NODE_OFFSET_Y = 100
 	for i, name in enumerate(target_names):
 		chop = existing.get(name) or container.op(name)
@@ -459,7 +360,6 @@ def sync():
 			_, conn_id, _ = rows[i]
 			_set_audio_chop_params(chop, conn_id)
 
-	# Connect Merge CHOP inputs (using setInputs)
 	chops_to_merge = []
 	for name in target_names:
 		chop = container.op(name)
@@ -477,7 +377,6 @@ def sync():
 					except Exception:
 						pass
 
-	# Rename CHOP: set renameto param to names (device names) per order
 	rename_chop = _get_rename()
 	if rename_chop:
 		try:
@@ -485,7 +384,6 @@ def sync():
 		except Exception:
 			pass
 		if rows:
-			# renameto: space-separated channel names (using device name)
 			renameto_val = ' '.join(channel_name for _, _, channel_name in rows)
 			for par_name in ('renameto', 'Renameto', 'commonrenameto'):
 				if hasattr(rename_chop.par, par_name):
@@ -494,7 +392,6 @@ def sync():
 						break
 					except Exception:
 						pass
-			# renamefrom: match all channels
 			for par_name in ('renamefrom', 'Renamefrom', 'commonrenamefrom'):
 				if hasattr(rename_chop.par, par_name):
 					try:
@@ -508,67 +405,35 @@ def sync():
 	else:
 		print('[W2TD WebRTC Sync RX] No connections - all audio stream in chops removed')
 
-	# ── TX: Audio Stream Out + Video Stream Out (TD -> Mobile) ──────────────
-	# Audio TX only runs if w2td_audio_bus CHOP exists AND Audio config flag is 1.
-	# Video TX only runs if webrtc_video_tx_container exists AND Video config flag is 1.
-	# Skip entirely if neither is active.
-	_audio_tx_flag, _video_tx_flag = _read_tx_flags()
-	print(f'[W2TD WebRTC Sync TX] TX flags: audio={_audio_tx_flag} video={_video_tx_flag}')
-	audio_bus = _get_audio_bus() if _audio_tx_flag else None
-	w2td_video_c = _w2td_video_tx() if _video_tx_flag else None
-	print(f'[W2TD WebRTC Sync TX] audio_bus={audio_bus} video_container={w2td_video_c}')
-	if audio_bus is None and w2td_video_c is None and _audio_tx_flag and _video_tx_flag:
-		print('[W2TD WebRTC Sync TX] Neither audio_bus nor video_container found — skipping TX setup')
+	# ── TX: Audio Stream Out (TD -> Mobile) ───────────────────────────────────
+	audio_tx = _read_audio_tx_enabled()
+	audio_bus = _get_audio_bus() if audio_tx else None
+	print(f'[W2TD WebRTC Sync TX] audio_tx={audio_tx} audio_bus={audio_bus}')
+	if audio_bus is None:
 		return
 
 	w2td_audio_c = _w2td_audio()
 	if w2td_audio_c is None:
 		return
 
-	# Build target slot set from connected rows
 	active_slots = set()
 	slot_to_conn = {}
 	for slot, conn_id, _ in rows:
 		active_slots.add(slot)
 		slot_to_conn[slot] = conn_id
 
-	# Find existing TX nodes (select_slot*, webrtc_audio_out_* in audio container; video_stream_out_* in video TX container)
 	existing_selects = {}
 	existing_outs = {}
-	existing_video_outs = {}
 	for child in w2td_audio_c.children:
 		if child.name.startswith('select_slot') and child.name[11:].isdigit():
 			existing_selects[int(child.name[11:])] = child
 		elif child.name.startswith('webrtc_audio_out_') and child.name[17:].isdigit():
 			existing_outs[int(child.name[17:])] = child
-	# Always scan video container for existing nodes (needed for cleanup when flag turns 0)
-	existing_video_flips = {}
-	_video_c_scan = w2td_video_c or _w2td_video_tx()
-	if _video_c_scan is not None:
-		for child in _video_c_scan.children:
-			if child.name.startswith('video_stream_out_') and child.name[17:].isdigit():
-				existing_video_outs[int(child.name[17:])] = child
-			elif child.name.startswith('flip_top_') and child.name[9:].isdigit():
-				existing_video_flips[int(child.name[9:])] = child
-			elif child.name.startswith('select_video_slot') and child.name[17:].isdigit():
-				pass  # scanned below
-	# Scan container-level select video TOPs
-	existing_video_selects = {}  # slot -> select_video_slot{N} selectTOP in container
-	if _video_c_scan is not None:
-		for child in _video_c_scan.children:
-			if child.name.startswith('select_video_slot') and child.name[17:].isdigit():
-				existing_video_selects[int(child.name[17:])] = child
 
-	# Remove stale TX nodes for disconnected slots or disabled flags
-	stale_slots = (set(existing_selects.keys()) | set(existing_outs.keys()) | set(existing_video_outs.keys()) | set(existing_video_selects.keys()) | set(existing_video_flips.keys())) - active_slots
-	if not _audio_tx_flag:
-		stale_slots |= set(existing_selects.keys()) | set(existing_outs.keys())
-	if not _video_tx_flag:
-		stale_slots |= set(existing_video_outs.keys()) | set(existing_video_selects.keys()) | set(existing_video_flips.keys())
+	stale_slots = (set(existing_selects.keys()) | set(existing_outs.keys())) - active_slots
 	for slot in stale_slots:
 		sel = existing_selects.get(slot)
 		out = existing_outs.get(slot)
-		vout = existing_video_outs.get(slot)
 		if sel:
 			try:
 				sel.destroy()
@@ -581,30 +446,7 @@ def sync():
 				print(f'[W2TD WebRTC Sync TX] Destroyed webrtc_audio_out_{slot}')
 			except Exception as e:
 				print(f'[W2TD WebRTC Sync TX] Error Destroy webrtc_audio_out_{slot}: {e}')
-		if vout:
-			try:
-				vout.destroy()
-				print(f'[W2TD WebRTC Sync TX] Destroyed video_stream_out_{slot}')
-			except Exception as e:
-				print(f'[W2TD WebRTC Sync TX] Error Destroy video_stream_out_{slot}: {e}')
-		vsel_stale = existing_video_selects.get(slot)
-		if vsel_stale:
-			try:
-				vsel_stale.destroy()
-				print(f'[W2TD WebRTC Sync TX] Destroyed select_video_slot{slot}')
-			except Exception as e:
-				print(f'[W2TD WebRTC Sync TX] Error Destroy select_video_slot{slot}: {e}')
-		vflip_stale = existing_video_flips.get(slot)
-		if vflip_stale:
-			try:
-				vflip_stale.destroy()
-				print(f'[W2TD WebRTC Sync TX] Destroyed flip_top_{slot}')
-			except Exception as e:
-				print(f'[W2TD WebRTC Sync TX] Error Destroy flip_top_{slot}: {e}')
 
-	# Each slot gets: video_slot{N} (manually placed at parent level) → select_video_slot{N} → flip_top_{N} → video_stream_out_{N}
-
-	# Create/update TX nodes for active slots
 	TX_BASE_X = 1200
 	TX_OFFSET_Y = 150
 	tx_count = 0
@@ -613,186 +455,86 @@ def sync():
 		conn_id = slot_to_conn[slot]
 		select_name = f'select_slot{slot}'
 		out_name = f'webrtc_audio_out_{slot}'
-		video_out_name = f'video_stream_out_{slot}'
 
-		# ── Audio TX ──────────────────────────────────────────────────────
-		if audio_bus is not None:
-			# Select CHOP: select channel slotN from w2td_audio_bus
-			sel = existing_selects.get(slot) or w2td_audio_c.op(select_name)
-			if sel is None:
+		sel = existing_selects.get(slot) or w2td_audio_c.op(select_name)
+		if sel is None:
+			try:
+				sel = w2td_audio_c.create('selectCHOP', select_name)
+				print(f'[W2TD WebRTC Sync TX] Created {select_name}')
+			except Exception as e:
+				print(f'[W2TD WebRTC Sync TX] Error Create {select_name}: {e}')
+				sel = None
+		if sel is not None:
+			try:
+				sel.setInputs([audio_bus])
+			except Exception:
 				try:
-					sel = w2td_audio_c.create('selectCHOP', select_name)
-					print(f'[W2TD WebRTC Sync TX] Created {select_name}')
-				except Exception as e:
-					print(f'[W2TD WebRTC Sync TX] Error Create {select_name}: {e}')
-					sel = None
-			if sel is not None:
-				try:
-					sel.setInputs([audio_bus])
+					sel.inputConnectors[0].connect(audio_bus)
 				except Exception:
+					pass
+			chan_name = f'slot{slot}'
+			for par_name in ('channames', 'Channames', 'channame', 'Channame'):
+				if hasattr(sel.par, par_name):
 					try:
-						sel.inputConnectors[0].connect(audio_bus)
+						setattr(sel.par, par_name, chan_name)
+						break
 					except Exception:
 						pass
-				chan_name = f'slot{slot}'
-				for par_name in ('channames', 'Channames', 'channame', 'Channame'):
-					if hasattr(sel.par, par_name):
-						try:
-							setattr(sel.par, par_name, chan_name)
-							break
-						except Exception:
-							pass
-				try:
-					sel.nodeX = TX_BASE_X
-					sel.nodeY = -idx * TX_OFFSET_Y
-				except Exception:
-					pass
+			try:
+				sel.nodeX = TX_BASE_X
+				sel.nodeY = -idx * TX_OFFSET_Y
+			except Exception:
+				pass
 
-				# Audio Stream Out CHOP
-				out = existing_outs.get(slot) or w2td_audio_c.op(out_name)
-				is_new_audio = out is None
-				if is_new_audio:
+			out = existing_outs.get(slot) or w2td_audio_c.op(out_name)
+			is_new_audio = out is None
+			if is_new_audio:
+				try:
+					out = w2td_audio_c.create('audiostreamoutCHOP', out_name)
+					print(f'[W2TD WebRTC Sync TX] Created {out_name}')
+				except Exception as e:
+					print(f'[W2TD WebRTC Sync TX] Error Create {out_name}: {e}')
+					out = None
+			if out is not None:
+				try:
+					out.setInputs([sel])
+				except Exception:
 					try:
-						out = w2td_audio_c.create('audiostreamoutCHOP', out_name)
-						print(f'[W2TD WebRTC Sync TX] Created {out_name}')
-					except Exception as e:
-						print(f'[W2TD WebRTC Sync TX] Error Create {out_name}: {e}')
-						out = None
-				if out is not None:
-					try:
-						out.setInputs([sel])
-					except Exception:
-						try:
-							out.inputConnectors[0].connect(sel)
-						except Exception:
-							pass
-					try:
-						out.nodeX = TX_BASE_X + 300
-						out.nodeY = -idx * TX_OFFSET_Y
+						out.inputConnectors[0].connect(sel)
 					except Exception:
 						pass
-					_set_audio_out_params(out, conn_id)
-					tx_count += 1
-					if is_new_audio and slot not in newly_created_slots:
-						newly_created_slots.append(slot)
-
-		# ── Video TX ──────────────────────────────────────────────────────
-		if w2td_video_c is not None:
-			# Create select_video_slot{N} selectTOP inside container (references ../../video_slot{N})
-			vsel = existing_video_selects.get(slot) or w2td_video_c.op(f'select_video_slot{slot}')
-			if vsel is None:
 				try:
-					vsel = w2td_video_c.create('selectTOP', f'select_video_slot{slot}')
-					print(f'[W2TD WebRTC Sync TX] Created select_video_slot{slot}')
-				except Exception as e:
-					print(f'[W2TD WebRTC Sync TX] Error creating select_video_slot{slot}: {e}')
-					vsel = None
-			if vsel is not None:
-				for par_name in ('top', 'Top'):
-					if hasattr(vsel.par, par_name):
-						try:
-							setattr(vsel.par, par_name, f'../../video_slot{slot}')
-							break
-						except Exception:
-							pass
-				try:
-					vsel.nodeX = 0
-					vsel.nodeY = -idx * TX_OFFSET_Y
+					out.nodeX = TX_BASE_X + 300
+					out.nodeY = -idx * TX_OFFSET_Y
 				except Exception:
 					pass
-			# 3. Create flip_top_{N} (flipX) between select and stream out
-			flip_name = f'flip_top_{slot}'
-			vflip = existing_video_flips.get(slot) or w2td_video_c.op(flip_name)
-			if vflip is None:
-				try:
-					vflip = w2td_video_c.create('flipTOP', flip_name)
-					print(f'[W2TD WebRTC Sync TX] Created {flip_name}')
-				except Exception as e:
-					print(f'[W2TD WebRTC Sync TX] Error Create {flip_name}: {e}')
-					vflip = None
-			if vflip is not None:
-				if vsel is not None:
-					try:
-						vflip.setInputs([vsel])
-					except Exception:
-						try:
-							vflip.inputConnectors[0].connect(vsel)
-						except Exception:
-							pass
-				for par_name in ('flipx', 'Flipx', 'flipX', 'FlipX'):
-					if hasattr(vflip.par, par_name):
-						try:
-							setattr(vflip.par, par_name, 1)
-							break
-						except Exception:
-							pass
-				try:
-					vflip.nodeX = 150
-					vflip.nodeY = -idx * TX_OFFSET_Y
-				except Exception:
-					pass
-			# 4. Create video_stream_out_{N} and wire to flip_top
-			vout = existing_video_outs.get(slot) or w2td_video_c.op(video_out_name)
-			is_new_video = vout is None
-			if is_new_video:
-				try:
-					vout = w2td_video_c.create('videostreamoutTOP', video_out_name)
-					print(f'[W2TD WebRTC Sync TX] Created {video_out_name}')
-				except Exception as e:
-					print(f'[W2TD WebRTC Sync TX] Error Create {video_out_name}: {e}')
-					vout = None
-			if vout is not None:
-				upstream = vflip if vflip is not None else vsel
-				if upstream is not None:
-					try:
-						vout.setInputs([upstream])
-					except Exception:
-						try:
-							vout.inputConnectors[0].connect(upstream)
-						except Exception:
-							pass
-				try:
-					vout.nodeX = 300
-					vout.nodeY = -idx * TX_OFFSET_Y
-				except Exception:
-					pass
-				_set_video_out_params(vout, conn_id)
+				_set_audio_out_params(out, conn_id)
 				tx_count += 1
-				if is_new_video and slot not in newly_created_slots:
+				if is_new_audio and slot not in newly_created_slots:
 					newly_created_slots.append(slot)
 
 	if tx_count:
-		print(f'[W2TD WebRTC Sync TX] {tx_count} stream out nodes synced')
-		# TD-initiated renegotiation: call createOffer on the WebRTC DAT
-		# so TD's new audio/video tracks are included in the SDP.
-		# Delay a few frames to let Stream Out nodes cook first.
+		print(f'[W2TD WebRTC Sync TX] {tx_count} audio out nodes synced')
 		if newly_created_slots:
 			webrtc = _get_webrtc()
 			if webrtc:
 				_slots_to_offer = list(newly_created_slots)
 				_conn_map = dict(slot_to_conn)
-				_has_audio = audio_bus is not None
-				_has_video = w2td_video_c is not None
 				def _trigger_offers():
 					for s in _slots_to_offer:
 						cid = _conn_map.get(s)
 						if cid:
 							try:
-								if _has_audio:
-									track_name = f'audio_out_{s}'
-									webrtc.addTrack(cid, track_name, 'audio')
-									print(f'[W2TD WebRTC Sync TX] addTrack("{track_name}", audio) for slot {s}')
-								if _has_video:
-									video_track_name = f'video_out_{s}'
-									webrtc.addTrack(cid, video_track_name, 'video')
-									print(f'[W2TD WebRTC Sync TX] addTrack("{video_track_name}", video) for slot {s}')
+								track_name = f'audio_out_{s}'
+								webrtc.addTrack(cid, track_name, 'audio')
+								print(f'[W2TD WebRTC Sync TX] addTrack("{track_name}", audio) for slot {s}')
 								webrtc.createOffer(cid)
 								print(f'[W2TD WebRTC Sync TX] TD createOffer for slot {s}, conn_id={cid}')
 							except Exception as ex:
 								print(f'[W2TD WebRTC Sync TX] addTrack/createOffer error for slot {s}: {ex}')
 				run(_trigger_offers, delayFrames=3, fromOP=webrtc)
 	elif active_slots:
-		print('[W2TD WebRTC Sync TX] Warning: active slots but no TX nodes created')
+		print('[W2TD WebRTC Sync TX] Warning: active slots but no audio TX nodes created')
 
 
 def onTableChange(dat, prevDAT, info):
