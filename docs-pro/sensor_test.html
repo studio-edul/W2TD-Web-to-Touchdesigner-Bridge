@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Sensor Test</title>
+<style>
+  :root {
+    --bg: #0a0a12;
+    --card: #12121e;
+    --border: #1e1e30;
+    --text: #e0e0e8;
+    --dim: #666680;
+    --accent: #4488ff;
+    --green: #44dd88;
+    --red: #ff4466;
+    --orange: #ffaa44;
+    --purple: #aa66ff;
+    --radius: 12px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow-x: hidden;
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: pan-y;
+  }
+  h1 {
+    text-align: center;
+    font-size: 20px;
+    padding: 16px 0 8px;
+    color: var(--accent);
+    letter-spacing: 2px;
+  }
+  .subtitle {
+    text-align: center;
+    font-size: 12px;
+    color: var(--dim);
+    margin-bottom: 12px;
+  }
+
+  /* ── Permission Banner ─────────────────── */
+  #perm-banner {
+    position: fixed; inset: 0;
+    z-index: 1000;
+    background: rgba(0,0,0,0.92);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #perm-banner.hidden { display: none; }
+  #perm-banner button {
+    font-size: 22px;
+    padding: 18px 48px;
+    border: none;
+    border-radius: 14px;
+    background: var(--accent);
+    color: #fff;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 1px;
+  }
+
+  /* ── Cards ──────────────────────────────── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin: 8px 12px;
+    padding: 12px;
+    overflow: hidden;
+  }
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .card-header .icon {
+    font-size: 18px;
+  }
+  .card-header .badge {
+    margin-left: auto;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 500;
+  }
+  .badge-active { background: var(--green); color: #000; }
+  .badge-inactive { background: var(--border); color: var(--dim); }
+
+  /* ── Values Row ────────────────────────── */
+  .values {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+  .val-box {
+    flex: 1;
+    min-width: 60px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 8px;
+    padding: 6px 8px;
+    text-align: center;
+  }
+  .val-label {
+    font-size: 10px;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .val-num {
+    font-size: 16px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-weight: 600;
+    margin-top: 2px;
+  }
+
+  /* ── Canvas in cards ───────────────────── */
+  .card canvas {
+    width: 100%;
+    display: block;
+    border-radius: 8px;
+  }
+
+  /* ── Touch Pad ─────────────────────────── */
+  #touch-card canvas {
+    height: 200px;
+    touch-action: none;
+  }
+
+  /* ── Camera Previews ───────────────────── */
+  .cam-row {
+    display: flex;
+    gap: 8px;
+  }
+  .cam-box {
+    flex: 1;
+    position: relative;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #000;
+    aspect-ratio: 4/3;
+  }
+  .cam-box video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .cam-label {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    font-size: 10px;
+    background: rgba(0,0,0,0.6);
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 4px;
+    pointer-events: none;
+  }
+  .cam-btn {
+    display: block;
+    width: 100%;
+    padding: 8px;
+    margin-top: 8px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--accent);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .cam-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+
+  /* ── GPS ────────────────────────────────── */
+  #gps-map {
+    height: 120px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--dim);
+    font-size: 12px;
+  }
+
+  /* ── Footer ────────────────────────────── */
+  .footer {
+    text-align: center;
+    padding: 16px;
+    color: var(--dim);
+    font-size: 11px;
+  }
+</style>
+</head>
+<body>
+
+<!-- Permission Banner (iOS) -->
+<div id="perm-banner">
+  <button id="btn-start">TAP TO START</button>
+</div>
+
+<h1>SENSOR TEST</h1>
+<p class="subtitle">Real-time mobile sensor diagnostic</p>
+
+<!-- Accelerometer -->
+<div class="card" id="accel-card">
+  <div class="card-header">
+    <span class="icon">📐</span> Accelerometer
+    <span class="badge badge-inactive" id="accel-badge">OFF</span>
+  </div>
+  <div class="values">
+    <div class="val-box"><div class="val-label">X</div><div class="val-num" id="ax" style="color:var(--red)">—</div></div>
+    <div class="val-box"><div class="val-label">Y</div><div class="val-num" id="ay" style="color:var(--green)">—</div></div>
+    <div class="val-box"><div class="val-label">Z</div><div class="val-num" id="az" style="color:var(--accent)">—</div></div>
+  </div>
+  <canvas id="accel-canvas" height="100"></canvas>
+</div>
+
+<!-- Gyroscope -->
+<div class="card" id="gyro-card">
+  <div class="card-header">
+    <span class="icon">🌀</span> Gyroscope
+    <span class="badge badge-inactive" id="gyro-badge">OFF</span>
+  </div>
+  <div class="values">
+    <div class="val-box"><div class="val-label">α</div><div class="val-num" id="gx" style="color:var(--red)">—</div></div>
+    <div class="val-box"><div class="val-label">β</div><div class="val-num" id="gy" style="color:var(--green)">—</div></div>
+    <div class="val-box"><div class="val-label">γ</div><div class="val-num" id="gz" style="color:var(--accent)">—</div></div>
+  </div>
+  <canvas id="gyro-canvas" height="100"></canvas>
+</div>
+
+<!-- Orientation -->
+<div class="card" id="orient-card">
+  <div class="card-header">
+    <span class="icon">🧭</span> Orientation
+    <span class="badge badge-inactive" id="orient-badge">OFF</span>
+  </div>
+  <div class="values">
+    <div class="val-box"><div class="val-label">α (yaw)</div><div class="val-num" id="oa" style="color:var(--orange)">—</div></div>
+    <div class="val-box"><div class="val-label">β (pitch)</div><div class="val-num" id="ob" style="color:var(--accent)">—</div></div>
+    <div class="val-box"><div class="val-label">γ (roll)</div><div class="val-num" id="og" style="color:var(--purple)">—</div></div>
+  </div>
+  <canvas id="orient-canvas" height="180"></canvas>
+</div>
+
+<!-- Touch -->
+<div class="card" id="touch-card">
+  <div class="card-header">
+    <span class="icon">👆</span> Touch
+    <span class="badge badge-inactive" id="touch-badge">OFF</span>
+  </div>
+  <div class="values">
+    <div class="val-box"><div class="val-label">Fingers</div><div class="val-num" id="touch-count">0</div></div>
+    <div class="val-box"><div class="val-label">Last X</div><div class="val-num" id="touch-x">—</div></div>
+    <div class="val-box"><div class="val-label">Last Y</div><div class="val-num" id="touch-y">—</div></div>
+  </div>
+  <canvas id="touch-canvas" height="200"></canvas>
+</div>
+
+<!-- Camera -->
+<div class="card" id="cam-card">
+  <div class="card-header">
+    <span class="icon">📷</span> Camera
+  </div>
+  <div class="cam-row">
+    <div class="cam-box">
+      <video id="cam-rear" autoplay playsinline muted></video>
+      <div class="cam-label">Rear</div>
+    </div>
+    <div class="cam-box">
+      <video id="cam-front" autoplay playsinline muted></video>
+      <div class="cam-label">Front</div>
+    </div>
+  </div>
+  <div style="display:flex; gap:8px; margin-top:8px;">
+    <button class="cam-btn" id="btn-cam-rear">Rear Camera</button>
+    <button class="cam-btn" id="btn-cam-front">Front Camera</button>
+  </div>
+  <div class="values" style="margin-top:8px">
+    <div class="val-box"><div class="val-label">Rear Res</div><div class="val-num" id="cam-rear-res" style="font-size:12px">—</div></div>
+    <div class="val-box"><div class="val-label">Front Res</div><div class="val-num" id="cam-front-res" style="font-size:12px">—</div></div>
+  </div>
+</div>
+
+<!-- GPS -->
+<div class="card" id="gps-card">
+  <div class="card-header">
+    <span class="icon">📍</span> GPS
+    <span class="badge badge-inactive" id="gps-badge">OFF</span>
+  </div>
+  <div class="values">
+    <div class="val-box"><div class="val-label">Lat</div><div class="val-num" id="gps-lat" style="font-size:13px">—</div></div>
+    <div class="val-box"><div class="val-label">Lon</div><div class="val-num" id="gps-lon" style="font-size:13px">—</div></div>
+  </div>
+  <div class="values">
+    <div class="val-box"><div class="val-label">Accuracy</div><div class="val-num" id="gps-acc">—</div></div>
+    <div class="val-box"><div class="val-label">Speed</div><div class="val-num" id="gps-speed">—</div></div>
+    <div class="val-box"><div class="val-label">Heading</div><div class="val-num" id="gps-heading">—</div></div>
+  </div>
+  <button class="cam-btn" id="btn-gps">Start GPS</button>
+</div>
+
+<div class="footer">W2TD Sensor Test &mdash; standalone diagnostic tool</div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  //  STATE
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  const sensor = {
+    ax: 0, ay: 0, az: 0,     // accelerometer  (m/s²)
+    gx: 0, gy: 0, gz: 0,     // gyroscope      (°/s)
+    oa: 0, ob: 0, og: 0,     // orientation     (°)
+    motionActive: false,
+    orientActive: false,
+  };
+
+  // Ring buffers for sparkline graphs
+  const HIST = 120;
+  const hist = {
+    ax: [], ay: [], az: [],
+    gx: [], gy: [], gz: [],
+    oa: [], ob: [], og: [],
+  };
+  function pushHist(key, val) {
+    const a = hist[key];
+    a.push(val);
+    if (a.length > HIST) a.shift();
+  }
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  //  PERMISSION (iOS)
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  const needsPerm = typeof DeviceMotionEvent !== 'undefined'
+                    && typeof DeviceMotionEvent.requestPermission === 'function';
+
+  async function requestPermissions() {
+    if (needsPerm) {
+      try {
+        const m = await DeviceMotionEvent.requestPermission();
+        const o = await DeviceOrientationEvent.requestPermission();
+        if (m !== 'granted' || o !== 'granted') {
+          alert('Sensor permission denied. Reload and try again.');
+          return false;
+        }
+      } catch (e) {
+        alert('Permission error: ' + e.message);
+        return false;
+      }
+    }
+    return true;
+  }
+
+  $('btn-start').addEventListener('click', async () => {
+    const ok = await requestPermissions();
+    if (ok) {
+      $('perm-banner').classList.add('hidden');
+      startSensors();
+      startGPS();
+    }
+  });
+
+  // Auto-start on Android / desktop (no permission prompt needed)
+  if (!needsPerm) {
+    $('perm-banner').classList.add('hidden');
+    window.addEventListener('DOMContentLoaded', () => {
+      startSensors();
+    });
+  }
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  //  MOTION + ORIENTATION LISTENERS
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  function startSensors() {
+    window.addEventListener('devicemotion', e => {
+      const a = e.accelerationIncludingGravity || {};
+      sensor.ax = a.x || 0;
+      sensor.ay = a.y || 0;
+      sensor.az = a.z || 0;
+      const r = e.rotationRate || {};
+      sensor.gx = r.alpha || 0;
+      sensor.gy = r.beta  || 0;
+      sensor.gz = r.gamma || 0;
+      sensor.motionActive = true;
+    });
+
+    window.addEventListener('deviceorientation', e => {
+      sensor.oa = e.alpha || 0;
+      sensor.ob = e.beta  || 0;
+      sensor.og = e.gamma || 0;
+      sensor.orientActive = true;
+    });
+  }
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  //  TOUCH
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  const touches = [];
+  const touchTrails = new Map(); // id → [{x,y}, ...]
+
+  const tc = $('touch-canvas');
+  tc.addEventListener('touchstart', onTouch, { passive: false });
+  tc.addEventListener('touchmove', onTouch, { passive: false });
+  tc.addEventListener('touchend', onTouchEnd, { passive: false });
+  tc.addEventListener('touchcancel', onTouchEnd, { passive: false });
+
+  function onTouch(e) {
+    e.preventDefault();
+    const rect = tc.getBoundingClientRect();
+    touches.length = 0;
+    for (let i = 0; i < e.touches.length; i++) {
+      const t = e.touches[i];
+      const x = (t.clientX - rect.left) / rect.width;
+      const y = (t.clientY - rect.top) / rect.height;
+      touches.push({ id: t.identifier, x, y });
+
+      // Trail
+      if (!touchTrails.has(t.identifier)) touchTrails.set(t.identifier, []);
+      const trail = touchTrails.get(t.identifier);
+      trail.push({ x, y });
+      if (trail.length > 50) trail.shift();
+    }
+    $('touch-count').textContent = touches.length;
+    $('touch-badge').textContent = 'ACTIVE';
+    $('touch-badge').className = 'badge badge-active';
+    if (touches.length > 0) {
+      $('touch-x').textContent = touches[0].x.toFixed(3);
+      $('touch-y').textContent = touches[0].y.toFixed(3);
+    }
+  }
+
+  function onTouchEnd(e) {
+    e.preventDefault();
+    const activeIds = new Set();
+    for (let i = 0; i < e.touches.length; i++) activeIds.add(e.touches[i].identifier);
+    for (const id of touchTrails.keys()) {
+      if (!activeIds.has(id)) touchTrails.delete(id);
+    }
+    if (e.touches.length === 0) {
+      touches.length = 0;
+      touchTrails.clear();
+      $('touch-count').textContent = '0';
+      $('touch-badge').textContent = 'OFF';
+      $('touch-badge').className = 'badge badge-inactive';
+    }
+  }
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  //  CAMERA
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  let rearStream = null, frontStream = null;
+
+  $('btn-cam-rear').addEventListener('click', async () => {
+    if (rearStream) {
+      rearStream.getTracks().forEach(t => t.stop());
+      $('cam-rear').srcObject = null;
+      rearStream = null;
+      $('btn-cam-rear').classList.remove('active');
+      $('cam-rear-res').textContent = '—';
+      return;
+    }
+    try {
+      rearStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
+      });
+      $('cam-rear').srcObject = rearStream;
+      $('btn-cam-rear').classList.add('active');
+      $('cam-rear').onloadedmetadata = () => {
+        const s = rearStream.getVideoTracks()[0].getSettings();
+        $('cam-rear-res').textContent = `${s.width}x${s.height}`;
+      };
+    } catch (e) { alert('Rear camera error: ' + e.message); }
+  });
+
+  $('btn-cam-front').addEventListener('click', async () => {
+    if (frontStream) {
+      frontStream.getTracks().forEach(t => t.stop());
+      $('cam-front').srcObject = null;
+      frontStream = null;
+      $('btn-cam-front').classList.remove('active');
+      $('cam-front-res').textContent = '—';
+      return;
+    }
+    try {
+      frontStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 1920 }, height: { ideal: 1080 } }
+      });
+      $('cam-front').srcObject = frontStream;
+      $('btn-cam-front').classList.add('active');
+      $('cam-front').onloadedmetadata = () => {
+        const s = frontStream.getVideoTracks()[0].getSettings();
+        $('cam-front-res').textContent = `${s.width}x${s.height}`;
+      };
+    } catch (e) { alert('Front camera error: ' + e.message); }
+  });
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  //  GPS
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  let gpsWatchId = null;
+  $('btn-gps').addEventListener('click', () => {
+    if (gpsWatchId != null) {
+      navigator.geolocation.clearWatch(gpsWatchId);
+      gpsWatchId = null;
+      $('btn-gps').textContent = 'Start GPS';
+      $('btn-gps').classList.remove('active');
+      $('gps-badge').textContent = 'OFF';
+      $('gps-badge').className = 'badge badge-inactive';
+      return;
+    }
+    if (!navigator.geolocation) { alert('Geolocation not supported'); return; }
+    $('btn-gps').textContent = 'Stop GPS';
+    $('btn-gps').classList.add('active');
+    $('gps-badge').textContent = 'ACTIVE';
+    $('gps-badge').className = 'badge badge-active';
+    gpsWatchId = navigator.geolocation.watchPosition(pos => {
+      const c = pos.coords;
+      $('gps-lat').textContent = c.latitude.toFixed(6);
+      $('gps-lon').textContent = c.longitude.toFixed(6);
+      $('gps-acc').textContent = c.accuracy ? c.accuracy.toFixed(1) + 'm' : '—';
+      $('gps-speed').textContent = c.speed != null ? c.speed.toFixed(1) + ' m/s' : '—';
+      $('gps-heading').textContent = c.heading != null ? c.heading.toFixed(1) + '°' : '—';
+    }, err => {
+      $('gps-lat').textContent = 'Err';
+      $('gps-lon').textContent = err.message;
+    }, { enableHighAccuracy: true, maximumAge: 1000 });
+  });
+
+  function startGPS() {
+    $('btn-gps').click();
+  }
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  //  RENDER LOOP
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  const dpr = window.devicePixelRatio || 1;
+
+  function sizeCanvas(c, h) {
+    const w = c.parentElement.clientWidth - 24;
+    c.style.width = w + 'px';
+    c.style.height = h + 'px';
+    c.width = w * dpr;
+    c.height = h * dpr;
+  }
+
+  function initCanvases() {
+    sizeCanvas($('accel-canvas'), 100);
+    sizeCanvas($('gyro-canvas'), 100);
+    sizeCanvas($('orient-canvas'), 180);
+    sizeCanvas($('touch-canvas'), 200);
+  }
+  initCanvases();
+  window.addEventListener('resize', initCanvases);
+
+  // ── Sparkline Drawer ──────────────────────────────────────────────
+  function drawSparkline(ctx, data, color, yMin, yMax, x, y, w, h) {
+    if (data.length < 2) return;
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5 * dpr;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    for (let i = 0; i < data.length; i++) {
+      const px = x + (i / (HIST - 1)) * w;
+      const norm = (data[i] - yMin) / (yMax - yMin || 1);
+      const py = y + h - norm * h;
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // ── Accel Graph ───────────────────────────────────────────────────
+  function renderAccel() {
+    pushHist('ax', sensor.ax);
+    pushHist('ay', sensor.ay);
+    pushHist('az', sensor.az);
+    $('ax').textContent = sensor.ax.toFixed(1);
+    $('ay').textContent = sensor.ay.toFixed(1);
+    $('az').textContent = sensor.az.toFixed(1);
+
+    if (sensor.motionActive) {
+      $('accel-badge').textContent = 'ACTIVE';
+      $('accel-badge').className = 'badge badge-active';
+    }
+
+    const c = $('accel-canvas');
+    const ctx = c.getContext('2d');
+    const W = c.width, H = c.height;
+    ctx.clearRect(0, 0, W, H);
+
+    // Zero line
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, H / 2);
+    ctx.lineTo(W, H / 2);
+    ctx.stroke();
+
+    drawSparkline(ctx, hist.ax, 'rgba(255,68,102,0.9)',  -20, 20, 0, 0, W, H);
+    drawSparkline(ctx, hist.ay, 'rgba(68,221,136,0.9)',   -20, 20, 0, 0, W, H);
+    drawSparkline(ctx, hist.az, 'rgba(68,136,255,0.9)',   -20, 20, 0, 0, W, H);
+  }
+
+  // ── Gyro Graph ────────────────────────────────────────────────────
+  function renderGyro() {
+    pushHist('gx', sensor.gx);
+    pushHist('gy', sensor.gy);
+    pushHist('gz', sensor.gz);
+    $('gx').textContent = sensor.gx.toFixed(1);
+    $('gy').textContent = sensor.gy.toFixed(1);
+    $('gz').textContent = sensor.gz.toFixed(1);
+
+    if (sensor.motionActive) {
+      $('gyro-badge').textContent = 'ACTIVE';
+      $('gyro-badge').className = 'badge badge-active';
+    }
+
+    const c = $('gyro-canvas');
+    const ctx = c.getContext('2d');
+    const W = c.width, H = c.height;
+    ctx.clearRect(0, 0, W, H);
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, H / 2);
+    ctx.lineTo(W, H / 2);
+    ctx.stroke();
+
+    drawSparkline(ctx, hist.gx, 'rgba(255,68,102,0.9)',  -200, 200, 0, 0, W, H);
+    drawSparkline(ctx, hist.gy, 'rgba(68,221,136,0.9)',   -200, 200, 0, 0, W, H);
+    drawSparkline(ctx, hist.gz, 'rgba(68,136,255,0.9)',   -200, 200, 0, 0, W, H);
+  }
+
+  // ── Orientation: Compass + Horizon ────────────────────────────────
+  function renderOrientation() {
+    pushHist('oa', sensor.oa);
+    pushHist('ob', sensor.ob);
+    pushHist('og', sensor.og);
+    $('oa').textContent = sensor.oa.toFixed(1) + '°';
+    $('ob').textContent = sensor.ob.toFixed(1) + '°';
+    $('og').textContent = sensor.og.toFixed(1) + '°';
+
+    if (sensor.orientActive) {
+      $('orient-badge').textContent = 'ACTIVE';
+      $('orient-badge').className = 'badge badge-active';
+    }
+
+    const c = $('orient-canvas');
+    const ctx = c.getContext('2d');
+    const W = c.width, H = c.height;
+    ctx.clearRect(0, 0, W, H);
+
+    const compassR = Math.min(W / 4, H / 2 - 10 * dpr);
+    const compassCx = W / 4;
+    const compassCy = H / 2;
+
+    // Compass circle
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 2 * dpr;
+    ctx.beginPath();
+    ctx.arc(compassCx, compassCy, compassR, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Cardinal labels
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = `${11 * dpr}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const alpha = sensor.oa * Math.PI / 180;
+    const labels = [
+      { text: 'N', angle: 0, color: '#ff4466' },
+      { text: 'E', angle: 90 },
+      { text: 'S', angle: 180 },
+      { text: 'W', angle: 270 },
+    ];
+    labels.forEach(l => {
+      const a = (l.angle * Math.PI / 180) - alpha;
+      const lx = compassCx + Math.sin(a) * (compassR - 14 * dpr);
+      const ly = compassCy - Math.cos(a) * (compassR - 14 * dpr);
+      ctx.fillStyle = l.color || 'rgba(255,255,255,0.3)';
+      ctx.fillText(l.text, lx, ly);
+    });
+
+    // Compass needle
+    const needleLen = compassR * 0.65;
+    ctx.save();
+    ctx.translate(compassCx, compassCy);
+    // Needle points to North (counter-rotated by alpha)
+    ctx.rotate(-alpha);
+    // North (red)
+    ctx.fillStyle = '#ff4466';
+    ctx.beginPath();
+    ctx.moveTo(0, -needleLen);
+    ctx.lineTo(-5 * dpr, 0);
+    ctx.lineTo(5 * dpr, 0);
+    ctx.closePath();
+    ctx.fill();
+    // South (dim)
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.beginPath();
+    ctx.moveTo(0, needleLen);
+    ctx.lineTo(-5 * dpr, 0);
+    ctx.lineTo(5 * dpr, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    // Center dot
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(compassCx, compassCy, 3 * dpr, 0, Math.PI * 2);
+    ctx.fill();
+
+    // ── Artificial Horizon (right half) ──────────────────────────────
+    const horizCx = W * 3 / 4;
+    const horizCy = H / 2;
+    const horizR = compassR;
+    const beta = sensor.ob * Math.PI / 180;   // pitch
+    const gamma = sensor.og * Math.PI / 180;  // roll
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(horizCx, horizCy, horizR, 0, Math.PI * 2);
+    ctx.clip();
+
+    // Rotate by roll (gamma)
+    ctx.save();
+    ctx.translate(horizCx, horizCy);
+    ctx.rotate(gamma);
+
+    // Pitch offset: shift the horizon line up/down
+    const pitchPx = Math.max(-horizR, Math.min(horizR, beta * horizR / (Math.PI / 3)));
+
+    // Sky
+    ctx.fillStyle = '#1a3366';
+    ctx.fillRect(-horizR * 2, -horizR * 2, horizR * 4, horizR * 2 + pitchPx);
+    // Ground
+    ctx.fillStyle = '#4a3322';
+    ctx.fillRect(-horizR * 2, pitchPx, horizR * 4, horizR * 4);
+
+    // Horizon line
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2 * dpr;
+    ctx.beginPath();
+    ctx.moveTo(-horizR * 2, pitchPx);
+    ctx.lineTo(horizR * 2, pitchPx);
+    ctx.stroke();
+
+    // Pitch ladder lines
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 1 * dpr;
+    ctx.font = `${9 * dpr}px monospace`;
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.textAlign = 'left';
+    for (let deg = -60; deg <= 60; deg += 10) {
+      if (deg === 0) continue;
+      const yy = pitchPx - (deg * Math.PI / 180) * horizR / (Math.PI / 3);
+      const lw = deg % 30 === 0 ? horizR * 0.5 : horizR * 0.25;
+      ctx.beginPath();
+      ctx.moveTo(-lw, yy);
+      ctx.lineTo(lw, yy);
+      ctx.stroke();
+      if (deg % 30 === 0) {
+        ctx.fillText(`${deg}`, lw + 4 * dpr, yy + 3 * dpr);
+      }
+    }
+
+    ctx.restore(); // un-rotate
+
+    // Aircraft symbol (fixed)
+    ctx.strokeStyle = '#ffaa44';
+    ctx.lineWidth = 2.5 * dpr;
+    ctx.beginPath();
+    ctx.moveTo(-horizR * 0.35, 0);
+    ctx.lineTo(-horizR * 0.1, 0);
+    ctx.lineTo(0, horizR * 0.08);
+    ctx.lineTo(horizR * 0.1, 0);
+    ctx.lineTo(horizR * 0.35, 0);
+    ctx.stroke();
+
+    // Center dot
+    ctx.fillStyle = '#ffaa44';
+    ctx.beginPath();
+    ctx.arc(0, 0, 3 * dpr, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore(); // un-clip
+
+    // Outer ring
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 2 * dpr;
+    ctx.beginPath();
+    ctx.arc(horizCx, horizCy, horizR, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Labels
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.font = `${10 * dpr}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText('COMPASS', compassCx, H - 6 * dpr);
+    ctx.fillText('HORIZON', horizCx, H - 6 * dpr);
+  }
+
+  // ── Touch Pad ─────────────────────────────────────────────────────
+  const TOUCH_COLORS = ['#ff4466', '#44dd88', '#4488ff', '#ffaa44', '#ff44aa',
+                         '#44ffaa', '#aa66ff', '#ffff44', '#44ffff', '#ff8888'];
+
+  function renderTouch() {
+    const c = $('touch-canvas');
+    const ctx = c.getContext('2d');
+    const W = c.width, H = c.height;
+    ctx.clearRect(0, 0, W, H);
+
+    // Grid
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 10; i++) {
+      const gx = (i / 10) * W;
+      const gy = (i / 10) * H;
+      ctx.beginPath();
+      ctx.moveTo(gx, 0); ctx.lineTo(gx, H);
+      ctx.moveTo(0, gy); ctx.lineTo(W, gy);
+      ctx.stroke();
+    }
+
+    // Trails + Points
+    touches.forEach((t, idx) => {
+      const color = TOUCH_COLORS[idx % TOUCH_COLORS.length];
+      const px = t.x * W;
+      const py = t.y * H;
+
+      // Trail
+      const trail = touchTrails.get(t.id);
+      if (trail && trail.length > 1) {
+        ctx.strokeStyle = color + '40';
+        ctx.lineWidth = 2 * dpr;
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        trail.forEach((p, i) => {
+          const tx = p.x * W, ty = p.y * H;
+          i === 0 ? ctx.moveTo(tx, ty) : ctx.lineTo(tx, ty);
+        });
+        ctx.stroke();
+      }
+
+      // Crosshair
+      ctx.strokeStyle = color + '44';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(px, 0); ctx.lineTo(px, H);
+      ctx.moveTo(0, py); ctx.lineTo(W, py);
+      ctx.stroke();
+
+      // Outer ring
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2 * dpr;
+      ctx.beginPath();
+      ctx.arc(px, py, 22 * dpr, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Inner dot
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(px, py, 6 * dpr, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Coord label
+      ctx.fillStyle = color;
+      ctx.font = `${11 * dpr}px monospace`;
+      ctx.textAlign = 'left';
+      ctx.fillText(`#${idx + 1} (${t.x.toFixed(2)}, ${t.y.toFixed(2)})`, px + 28 * dpr, py - 6 * dpr);
+    });
+  }
+
+  // ── Main Loop ─────────────────────────────────────────────────────
+  function frame() {
+    renderAccel();
+    renderGyro();
+    renderOrientation();
+    renderTouch();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>
