@@ -300,18 +300,25 @@ const W2TD_VERSION = '1.0.0';
 
     // ── TD 스트림 모니터 (dev_mode=1 전용) ───────────────────────────────
     if (isTd) {
-      if (devMode && typeof WebRTCModule !== 'undefined' && WebRTCModule.isTdVideoActive && WebRTCModule.isTdVideoActive()) {
-        // 모드 전환으로 td 재진입: video 엘리먼트가 tdStreamVideoArea를 벗어났을 경우 재부착
+      if (devMode) {
+        // td 모드 진입 시 항상 모니터 오픈 (video 없으면 black screen, 나중에 도착하면 자동 표시)
         const _vEl = document.getElementById('webrtc-td-stream');
-        if (_vEl && els.tdStreamVideoArea && !els.tdStreamVideoArea.contains(_vEl)) {
-          _vEl.style.position = '';
-          _vEl.style.zIndex = '0';
-          _vEl.style.pointerEvents = '';
-          _vEl.style.objectFit = 'cover';
-          _vEl.style.width = '100%';
-          _vEl.style.height = '100%';
-          els.tdStreamVideoArea.appendChild(_vEl);
+        if (_vEl && els.tdStreamVideoArea) {
+          if (!els.tdStreamVideoArea.contains(_vEl)) {
+            _vEl.style.position = '';
+            _vEl.style.zIndex = '0';
+            _vEl.style.pointerEvents = '';
+            _vEl.style.objectFit = 'cover';
+            _vEl.style.width = '100%';
+            _vEl.style.height = '100%';
+            els.tdStreamVideoArea.appendChild(_vEl);
+          }
+          // display:none 부모 안에서 video가 멈췄을 수 있으므로 재생 보장
+          if (_vEl.srcObject && _vEl.paused) {
+            _vEl.play().catch(() => {});
+          }
         }
+        if (els.mainUI) els.mainUI.classList.add('hidden');
         if (els.tdStreamMonitor) els.tdStreamMonitor.classList.remove('hidden');
       } else if (!devMode && _tdVideoElUser) {
         _tdVideoElUser.style.display = '';
