@@ -58,21 +58,18 @@ Auto-created per slot inside this container (by `webrtc_table_sync`):
 - `webrtc_audio_{N}` — Audio Stream In CHOP (mic uplink)
 - `select_slot{N}` + `webrtc_audio_out_{N}` — Audio Stream Out CHOP (Pro audio downlink)
 
-**`webrtc_video_container`** — Camera uplink pipeline (one chain per connected slot):
+**`webrtc_video_container`** — Camera uplink pipeline (free + Pro):
 
 | Node | Type | Name | Purpose |
 |------|------|------|---------|
-| DAT Execute | DAT | `cam_render_sync` | Watches `sensor_table` → manages per-slot nodes |
-| Layout TOP | TOP | `layout1` | Composites all slots (auto-created when slots connect) |
+| DAT Execute | DAT | `cam_render_sync` | Watches `sensor_table` → manages per-slot camera nodes |
+| DAT Execute | DAT | `webrtc_video_sync` | _(Pro only)_ Watches `webrtc_table` → manages per-slot video TX nodes |
+| Layout TOP | TOP | `layout1` | Composites all camera slots (auto-created when slots connect) |
 
-Auto-created per slot: `web_render_top_{N}` → `transform_top_{N}` → `crop_top_{N}` → `camera_slot{N}` (null TOP) → `layout1`.
+Camera uplink (auto-created per slot by `cam_render_sync` — free + Pro):
+`web_render_top_{N}` → `transform_top_{N}` → `crop_top_{N}` → `camera_slot{N}` (null TOP) → `layout1`
 
-**`webrtc_video_container`** _(Pro only)_ — Camera uplink pipeline + per-slot video downlink TX:
-
-Camera uplink (auto-created per slot by `cam_render_sync`):
-`web_render_top_{N}` → `transform_top_{N}` → `crop_top_{N}` → `camera_slot{N}` → `layout1`
-
-Video TX downlink (auto-created per slot by `webrtc_video_sync`):
+Video TX downlink (auto-created per slot by `webrtc_video_sync` — Pro only):
 `select_video_slot{N}` → `flip_top_{N}` → `video_stream_out_{N}`. Source TOPs named `video_slot{N}` are placed outside `W2TD_Pro` (e.g. in `project1`) by the user.
 
 **Web Server DAT settings:**

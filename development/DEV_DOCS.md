@@ -1,6 +1,6 @@
 # W2TD (Web-to-TouchDesigner Bridge) 개발 문서
 
-> 최종 업데이트: 2026-05-06 (dev_mode=1 수동 fullscreen 버튼 플로우, touch pad mainUI 숨김 수정, null TOP 노드명 camera_slot{N} 변경, webrtc_video_sync DATs 2개 등록 필요, sensor_diagnostic.js 추가)
+> 최종 업데이트: 2026-05-03 (free 버전 cam_render_sync.py 버그 수정: touchoutTOP → nullTOP(camera_slot{N}), free 버전 webrtc.js: mic=false 시 getUserMedia 스킵 버그 수정 + _enhanceOpusSdp 적용, dev_mode=1 수동 fullscreen 버튼 플로우, touch pad mainUI 숨김 수정, null TOP 노드명 camera_slot{N} 변경, webrtc_video_sync DATs 2개 등록 필요, sensor_diagnostic.js 추가)
 > 목적: 추후 세션에서 파일 위치·구현 방식을 빠르게 파악하기 위한 참고 문서
 
 ---
@@ -452,6 +452,8 @@ WebRTC 피어 연결 관리. 시그널링은 기존 WebSocket 재활용.
 - Screenmode: `Portrait`(세로 크롭), `Landscape`(가로 크롭 + TD에서 rotate -90°)
 
 **ICE 서버**: Google STUN × 2 + openrelay.metered.ca TURN (무료)
+
+**`_enhanceOpusSdp(sdp)`** (free + Pro): 마이크 offer SDP에 Opus 파라미터를 주입해 음질 개선. `maxaveragebitrate=64000`(기본 ~32kbps → 64kbps), `useinbandfec=1`(FEC 활성화), `usedtx=0`(묵음 구간 패킷 끊김 방지). `start()` → `createOffer()` 직후 SDP에 적용 후 `setLocalDescription`.
 
 **주요 메서드**
 

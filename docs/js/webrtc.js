@@ -60,6 +60,40 @@ const WebRTCModule = (() => {
     console.log('[W2TD WebRTC]', msg);
   }
 
+  /**
+   * Enhance Opus codec parameters in SDP for better audio quality.
+   * Sets higher bitrate, enables forward error correction (FEC),
+   * and disables discontinuous transmission (DTX) to reduce crackling.
+   */
+  function _enhanceOpusSdp(sdp) {
+    if (!sdp) return sdp;
+    const opusMatch = sdp.match(/a=rtpmap:(\d+)\s+opus\/48000/i);
+    if (!opusMatch) return sdp;
+    const pt = opusMatch[1];
+    const fmtpRegex = new RegExp(`a=fmtp:${pt}\\s+(.*)`, 'i');
+    const fmtpMatch = sdp.match(fmtpRegex);
+    const opusParams = {
+      'maxaveragebitrate': '64000',
+      'useinbandfec': '1',
+      'usedtx': '0',
+    };
+    if (fmtpMatch) {
+      const parts = fmtpMatch[1].split(';').map(s => s.trim());
+      const paramMap = {};
+      parts.forEach(p => {
+        const [k, v] = p.split('=');
+        if (k) paramMap[k.trim()] = v ? v.trim() : '';
+      });
+      Object.assign(paramMap, opusParams);
+      const newFmtp = `a=fmtp:${pt} ` + Object.entries(paramMap).map(([k, v]) => `${k}=${v}`).join(';');
+      sdp = sdp.replace(fmtpRegex, newFmtp);
+    } else {
+      const newFmtp = `a=fmtp:${pt} ` + Object.entries(opusParams).map(([k, v]) => `${k}=${v}`).join(';');
+      sdp = sdp.replace(opusMatch[0], opusMatch[0] + '\r\n' + newFmtp);
+    }
+    return sdp;
+  }
+
   function _logCamResolution(stream, label) {
     const track = stream && stream.getVideoTracks()[0];
     if (!track) return;
@@ -125,13 +159,13 @@ const WebRTCModule = (() => {
     _micIceRecvCount = 0;
     if (micPc) { micPc.close(); micPc = null; }
 
-    if (!micStream) {
+    if (!micStream && mic) {
       try {
         micStream = await navigator.mediaDevices.getUserMedia({
-          audio: mic ? { echoCancellation, noiseSuppression, autoGainControl } : false,
+          audio: { echoCancellation, noiseSuppression, autoGainControl },
           video: false,
         });
-        micActive = mic && micStream.getAudioTracks().length > 0;
+        micActive = micStream.getAudioTracks().length > 0;
         _log('getUserMedia (mic) OK — mic:' + micActive);
       } catch (e) {
         _lastError = e.name || 'unknown';
@@ -173,8 +207,9 @@ const WebRTCModule = (() => {
 
     try {
       const offer = await micPc.createOffer();
-      await micPc.setLocalDescription(offer);
-      const sent = WSClient.send({ type: 'webrtc_offer', sdp: offer.sdp });
+      const enhancedOffer = _enhanceOpusSdp(offer.sdp);
+      await micPc.setLocalDescription({ type: 'offer', sdp: enhancedOffer });
+      const sent = WSClient.send({ type: 'webrtc_offer', sdp: enhancedOffer });
       _log(sent ? 'Mic offer sent to TD' : 'Mic offer FAILED — WebSocket not connected');
     } catch (e) {
       console.error('[W2TD WebRTC] mic createOffer failed:', e);
