@@ -2,7 +2,7 @@ import json
 import time
 
 W2TD_VERSION = '1.0.0'
-GITHUB_PAGES_URL = 'https://w2td-pro.studio-edul.com/'
+GITHUB_PAGES_URL = 'https://w2td-pro-dev.studio-edul.com/'
 MAX_CLIENTS = 20
 ACK_INTERVAL = 1.0  # seconds between data_ack signals per slot
 

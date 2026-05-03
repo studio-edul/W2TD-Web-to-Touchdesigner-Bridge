@@ -313,7 +313,7 @@ def generate():
 	host = url.replace('https://', '').replace('http://', '').strip()
 	# Store short tunnel ID (without .trycloudflare.com) for cleaner display
 	short_host = host.replace('.trycloudflare.com', '') if host.endswith('.trycloudflare.com') else host
-	GITHUB_PAGES_URL = 'https://w2td.studio-edul.com/'
+	GITHUB_PAGES_URL = 'https://w2td-dev.studio-edul.com/'
 	qr_url = GITHUB_PAGES_URL + '?td=' + host
 	
 	parent_comp = None
