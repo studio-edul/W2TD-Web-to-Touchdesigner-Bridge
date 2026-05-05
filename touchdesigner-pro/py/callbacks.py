@@ -246,7 +246,6 @@ def _release_slot(addr, slot):
 			t.deleteRow(row)
 	op('/').store(f'w2td_last_seen_{slot}', 0)
 	op('/').store(f'w2td_last_ack_{slot}', 0)
-	op('/').store(f'w2td_slot_hidden_{slot}', False)
 
 def _broadcast_msg(webServerDAT, msg_str):
 	"""Send a JSON message to all actually connected clients.
@@ -1538,7 +1537,6 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 	elif msg_type == 'visibility':
 		state = msg.get('state')
 		if state == 'hidden':
-			op('/').store(f'w2td_slot_hidden_{slot}', True)
 			t = _op('sensor_table')
 			if t is not None:
 				row = _find_row(t, slot)
@@ -1562,7 +1560,6 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			_save_touch(touch)
 			print(f'[W2TD] Slot {slot} backgrounded — sensor values zeroed')
 		elif state == 'visible':
-			op('/').store(f'w2td_slot_hidden_{slot}', False)
 			t = _op('sensor_table')
 			if t is not None:
 				row = _find_row(t, slot)

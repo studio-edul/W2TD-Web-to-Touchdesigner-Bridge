@@ -114,11 +114,17 @@ def cook(scriptOp):
                 except Exception:
                     continue
 
-    # ── 백그라운드(visibility:hidden) 슬롯 수집 ─────────────
+    # ── 백그라운드(visibility:hidden) 슬롯 수집 — sensor_table.visibility 기준 ──
     hidden_slots = set()
-    for slot in list(_slot_to_key.keys()):
-        if op('/').fetch(f'w2td_slot_hidden_{slot}', False):
-            hidden_slots.add(slot)
+    if st is not None and st.numRows >= 2:
+        st_hv = {str(st[0, c]): c for c in range(st.numCols)}
+        if 'slot' in st_hv and 'visibility' in st_hv:
+            for row in range(1, st.numRows):
+                try:
+                    if int(st[row, st_hv['visibility']]) == 0:
+                        hidden_slots.add(int(st[row, st_hv['slot']]))
+                except Exception:
+                    continue
 
     # ── base maxY 파라미터 ────────────────────────────────────
     try:
