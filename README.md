@@ -214,6 +214,9 @@ Client slot assignments are stored via `op('/').store/fetch` and survive script 
 { "type": "webrtc_offer_cam", "sdp": "...", "camType": "rear" }   // camera offer
 { "type": "webrtc_ice_cam",   "candidate": "...", "sdpMLineIndex": 0, "sdpMid": "0", "camType": "rear" }
 
+{ "type": "visibility", "state": "hidden" }   // mobile went to background (home button / app switch)
+{ "type": "visibility", "state": "visible" }  // mobile returned to foreground
+
 { "type": "ping" }                   // heartbeat
 ```
 

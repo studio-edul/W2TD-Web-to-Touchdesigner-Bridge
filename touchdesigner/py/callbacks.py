@@ -973,3 +973,27 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 		
 		print(f'[W2TD] Screen info updated: slot {slot} -> CSS: {css_width}x{css_height}, Physical: {physical_width}x{physical_height}, Screen: {screen_width}x{screen_height} (DPR: {device_pixel_ratio})')
 
+	elif msg_type == 'visibility':
+		state = msg.get('state')
+		if state == 'hidden':
+			t = _op('sensor_table')
+			if t is not None:
+				row = _find_row(t, slot)
+				if row is not None:
+					for col in ('ax', 'ay', 'az', 'ga', 'gb', 'gg', 'oa', 'ob', 'og', 'lat', 'lon', 'touch_count'):
+						try:
+							t[row, col] = 0
+						except Exception:
+							pass
+			tt = _op('touch_table')
+			if tt is not None:
+				rows_to_delete = [r for r in range(1, tt.numRows) if int(tt[r, 'slot']) == slot]
+				for r in reversed(rows_to_delete):
+					tt.deleteRow(r)
+			touch = _touch()
+			touch[slot] = 0
+			_save_touch(touch)
+			print(f'[W2TD] Slot {slot} backgrounded — sensor values zeroed')
+		elif state == 'visible':
+			print(f'[W2TD] Slot {slot} foregrounded — resuming')
+

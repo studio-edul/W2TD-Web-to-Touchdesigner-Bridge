@@ -28,6 +28,9 @@ const WSClient = (() => {
   let lastCountTime = Date.now();
   let packetsPerSec = 0;
 
+  // Page Visibility
+  let visibilityListenerAdded = false;
+
   /**
    * Connect to TouchDesigner WebSocket DAT
    */
@@ -43,6 +46,7 @@ const WSClient = (() => {
     url = url.replace(/^(wss?|https?):\/\//, '');
     url = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + url;
     serverUrl = url;
+    _setupVisibilityListener();
     _createConnection();
   }
 
@@ -218,6 +222,14 @@ const WSClient = (() => {
       msg[`t${idx}s`] = t.state;
     });
     return send(msg);
+  }
+
+  function _setupVisibilityListener() {
+    if (visibilityListenerAdded) return;
+    visibilityListenerAdded = true;
+    document.addEventListener('visibilitychange', () => {
+      send({ type: 'visibility', state: document.hidden ? 'hidden' : 'visible' });
+    });
   }
 
   function _updatePacketRate() {

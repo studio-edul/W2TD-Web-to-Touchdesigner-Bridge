@@ -240,10 +240,10 @@ def sync(table_dat=None):
 						c.destroy()
 					except Exception:
 						pass
-			# Also destroy video_received_slot{slot} null TOP (slot number, not index)
+			# Also destroy camera_slot{slot} null TOP (slot number, not index)
 			try:
 				if 0 <= idx < len(prev_slots):
-					null_c = container.op(f'video_received_slot{prev_slots[idx]}')
+					null_c = container.op(f'camera_slot{prev_slots[idx]}')
 					if null_c:
 						null_c.destroy()
 			except Exception:
@@ -254,7 +254,7 @@ def sync(table_dat=None):
 			except Exception as e:
 				print(f'[Cam Render Sync] Error destroying {name}: {e}')
 
-	# Create/update nodes: web_render_top -> transform_top -> crop_top -> null_top (video_received_slot{N}) -> layout1
+	# Create/update nodes: web_render_top -> transform_top -> crop_top -> null_top (camera_slot{N}) -> layout1
 	for i, name in enumerate(target_names):
 		idx = i + 1
 
@@ -364,8 +364,8 @@ def sync(table_dat=None):
 			except Exception as e:
 				print(f'[Cam Render Sync] Error connecting {t_name} -> {c_name}: {e}')
 
-		# --- null_top (video_received_slot{N}) ---
-		n_name = f'video_received_slot{slot}'
+		# --- null_top (camera_slot{N}) ---
+		n_name = f'camera_slot{slot}'
 		n_top = container.op(n_name)
 		if n_top is None:
 			try:
