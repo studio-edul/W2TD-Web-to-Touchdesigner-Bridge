@@ -567,6 +567,7 @@ const W2TD_VERSION = '1.0.0';
       onDataAck: () => {
         updateDataAckIndicator();
       },
+      onHaptic: (msg) => handleHapticFeedback(msg),
     });
 
     els.modal.classList.remove('active');
@@ -1027,6 +1028,73 @@ const W2TD_VERSION = '1.0.0';
   function haptic(duration = 30) {
     // Temporarily disabled: local UI tap vibration feedback.
     return;
+  }
+
+  // ── iOS haptic (checkbox switch trick, Safari 17.4+) ──────────────────────
+  const _isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+                 (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  let _iosHapticEl = null;
+
+  function _iosHaptic() {
+    if (!_iosHapticEl) {
+      _iosHapticEl = document.createElement('input');
+      _iosHapticEl.type = 'checkbox';
+      _iosHapticEl.setAttribute('switch', '');
+      _iosHapticEl.style.cssText = 'position:fixed;opacity:0;pointer-events:none;width:0;height:0;';
+      document.body.appendChild(_iosHapticEl);
+    }
+    _iosHapticEl.checked = !_iosHapticEl.checked;
+  }
+
+  // Haptic state management (CHOP-based)
+  let hapticState = 0;
+  let hapticInterval = null;
+  const HAPTIC_INTERVAL_MS = 100;
+
+  function handleHapticFeedback(data) {
+    if (_isIOS) {
+      // iOS: checkbox switch trick (one-shot repeated)
+      if (data.state !== undefined) {
+        const newState = data.state === 1 ? 1 : 0;
+        if (newState !== hapticState) {
+          hapticState = newState;
+          if (hapticInterval !== null) { clearInterval(hapticInterval); hapticInterval = null; }
+          if (hapticState === 1) {
+            _iosHaptic();
+            hapticInterval = setInterval(() => {
+              if (hapticState === 1) _iosHaptic();
+              else { clearInterval(hapticInterval); hapticInterval = null; }
+            }, HAPTIC_INTERVAL_MS);
+          }
+        }
+        return;
+      }
+      // Pattern mode: fire once per pattern entry
+      _iosHaptic();
+      return;
+    }
+
+    // Android / others: Vibration API
+    if (!navigator.vibrate) return;
+    if (data.state !== undefined) {
+      const newState = data.state === 1 ? 1 : 0;
+      if (newState !== hapticState) {
+        hapticState = newState;
+        if (hapticInterval !== null) { clearInterval(hapticInterval); hapticInterval = null; navigator.vibrate(0); }
+        if (hapticState === 1) {
+          navigator.vibrate(HAPTIC_INTERVAL_MS);
+          hapticInterval = setInterval(() => {
+            if (hapticState === 1) navigator.vibrate(HAPTIC_INTERVAL_MS);
+            else { clearInterval(hapticInterval); hapticInterval = null; }
+          }, HAPTIC_INTERVAL_MS);
+        }
+      }
+      return;
+    }
+    const pattern = data.pattern;
+    if (pattern && Array.isArray(pattern) && pattern.length > 0) {
+      navigator.vibrate(pattern.map(v => Math.max(0, Math.min(Number(v) || 0, 10000))));
+    }
   }
 
   // ── WebRTC ──────────────────────────────────────────────────────────────

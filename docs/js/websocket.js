@@ -16,6 +16,7 @@ const WSClient = (() => {
   let onConfig = null;
   let onWebRTCSignal = null; // callback(msg) for webrtc_answer / webrtc_ice / webrtc_state
   let onDataAck = null; // callback() for data acknowledgment
+  let onHaptic = null; // callback(msg) for haptic feedback
   
   // Heartbeat
   let heartbeatInterval = null;
@@ -40,6 +41,7 @@ const WSClient = (() => {
     onConfig = callbacks.onConfig || null;
     onWebRTCSignal = callbacks.onWebRTCSignal || null;
     onDataAck = callbacks.onDataAck || null;
+    onHaptic = callbacks.onHaptic || null;
     reconnectAttempts = 0; // reset in case previous session was rejected
 
     // Strip any existing protocol prefix, then re-add the correct one
@@ -98,6 +100,8 @@ const WSClient = (() => {
         } else if (msg.type === 'data_ack') {
           // TD data acknowledgment → show indicator
           if (onDataAck) onDataAck();
+        } else if (msg.type === 'haptic') {
+          if (onHaptic) onHaptic(msg);
         } else if (msg.type === 'rejected') {
           // Server full — cancel reconnect and surface the reason
           if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
