@@ -74,6 +74,8 @@ def cook(scriptOp):
     global _last_cook_t, _ch_count, _frame_count
     global _dyn_max_y, _ease_start, _ease_from
 
+    scriptOp.rate = OUTPUT_FPS  # lock X-axis scale regardless of TD timeline FPS
+
     now          = _time.monotonic()
     dt           = (now - _last_cook_t) if _last_cook_t is not None else 0.0
     _last_cook_t = now
@@ -112,6 +114,12 @@ def cook(scriptOp):
                 except Exception:
                     continue
 
+    # ── 백그라운드(visibility:hidden) 슬롯 수집 ─────────────
+    hidden_slots = set()
+    for slot in list(_slot_to_key.keys()):
+        if op('/').fetch(f'w2td_slot_hidden_{slot}', False):
+            hidden_slots.add(slot)
+
     # ── base maxY 파라미터 ────────────────────────────────────
     try:
         base_max_y = float(scriptOp.par.Maxy)
@@ -138,10 +146,11 @@ def cook(scriptOp):
             key = f'index_{_ch_count}'
             _ch_count += 1
             _channels[key] = {
-                'buf':    [],   # cur_y 값
-                'times':  [],   # monotonic 타임스탬프
-                'cur_y':  0.0,
-                'active': True,
+                'buf':        [],   # cur_y 값
+                'times':      [],   # monotonic 타임스탬프
+                'cur_y':      0.0,
+                'active':     True,
+                'created_at': now,
             }
             _key_order.append(key)
             _slot_to_key[slot] = key
@@ -157,16 +166,23 @@ def cook(scriptOp):
         ch = _channels[_slot_to_key[slot]]
         ch['cur_y'] += speed * dt
 
-    # ── 끊긴 슬롯: inactive 마킹 (폰이 완전히 끊겼을 때만) ──
+    # ── 끊긴 슬롯: inactive 마킹 (백그라운드 슬롯은 유지) ───
     for slot in list(_slot_to_key.keys()):
-        if slot not in active_slots and slot not in connected_slots:
+        if slot not in active_slots and slot not in connected_slots and slot not in hidden_slots:
             _channels[_slot_to_key[slot]]['active'] = False
             del _slot_to_key[slot]
 
     # ── 모든 채널에 매 프레임 1샘플 append (타임스탬프 포함) ─
-    # cur_y == 0이면 NO_DATA → GLSL 스킵 (선 안 그림)
-    for ch in _channels.values():
-        val = (ch['cur_y'] if ch['cur_y'] > 0.0 else NO_DATA) if ch['active'] else NO_DATA
+    # _slot_to_key에 있는 채널(활성 + 백그라운드): cur_y 유지
+    #   백그라운드 슬롯은 speed 누적이 없으므로 cur_y가 바뀌지 않아
+    #   자연스럽게 마지막 Y 값으로 수평 채움
+    # _slot_to_key에 없는 채널(끊김): NO_DATA → GLSL 스킵
+    active_keys = set(_slot_to_key.values())
+    for key, ch in _channels.items():
+        if key in active_keys:
+            val = ch['cur_y'] if ch['cur_y'] > 0.0 else NO_DATA
+        else:
+            val = NO_DATA
         ch['buf'].append(val)
         ch['times'].append(now)
 
@@ -227,17 +243,20 @@ def cook(scriptOp):
             continue
         ch     = _channels[key]
         output = [NO_DATA] * num_out
+        # 채널이 윈도우보다 짧으면 왼쪽부터 시작 (오른쪽 끝에서 시작하지 않음)
+        ch_created  = ch.get('created_at', t_start)
+        ch_t_start  = ch_created if (now - ch_created) < win_sec else t_start
         # 실제 샘플을 시간 기반으로 출력 인덱스에 매핑
         for t, v in zip(ch['times'], ch['buf']):
             if v < -0.5:
                 continue
-            frac = (t - t_start) / win_sec
+            frac = (t - ch_t_start) / win_sec
             idx  = int(frac * num_out)
             if 0 <= idx < num_out:
                 output[idx] = v
         # 데이터 구간 내 빈 bin 앞값으로 채움 (갭 방지)
         if ch['times']:
-            latest_idx = int(((ch['times'][-1] - t_start) / win_sec) * num_out)
+            latest_idx = int(((ch['times'][-1] - ch_t_start) / win_sec) * num_out)
             latest_idx = min(latest_idx, num_out - 1)
             last_v = NO_DATA
             for i in range(latest_idx + 1):

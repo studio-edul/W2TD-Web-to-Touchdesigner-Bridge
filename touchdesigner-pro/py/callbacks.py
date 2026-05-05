@@ -49,6 +49,7 @@ SENSOR_COLS = [
 	'physical_width', 'physical_height',
 	'screen_width', 'screen_height',
 	'device_pixel_ratio',
+	'visibility',
 ]
 WEBRTC_COLS = ['slot', 'name', 'conn_id', 'state']
 
@@ -245,6 +246,7 @@ def _release_slot(addr, slot):
 			t.deleteRow(row)
 	op('/').store(f'w2td_last_seen_{slot}', 0)
 	op('/').store(f'w2td_last_ack_{slot}', 0)
+	op('/').store(f'w2td_slot_hidden_{slot}', False)
 
 def _broadcast_msg(webServerDAT, msg_str):
 	"""Send a JSON message to all actually connected clients.
@@ -1180,7 +1182,9 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 		if t2 is not None and _find_row(t2, slot) is None:
 			names = _client_names()
 			client_name = names.get(slot, f'Slot {slot}')
-			t2.appendRow([slot, 1, client_name] + [0.0] * (len(SENSOR_COLS) - 3))
+			row_vals = [slot, 1, client_name] + [0.0] * (len(SENSOR_COLS) - 3)
+			row_vals[SENSOR_COLS.index('visibility')] = 1
+			t2.appendRow(row_vals)
 		print(f'[W2TD] Connected -> slot {slot} | {addr} | {len(slots)}/{MAX_CLIENTS} active')
 		op('/').store(f'w2td_last_seen_{slot}', time.time())
 		try:
@@ -1534,6 +1538,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 	elif msg_type == 'visibility':
 		state = msg.get('state')
 		if state == 'hidden':
+			op('/').store(f'w2td_slot_hidden_{slot}', True)
 			t = _op('sensor_table')
 			if t is not None:
 				row = _find_row(t, slot)
@@ -1543,6 +1548,10 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 							t[row, col] = 0
 						except Exception:
 							pass
+					try:
+						t[row, 'visibility'] = 0
+					except Exception:
+						pass
 			tt = _op('touch_table')
 			if tt is not None:
 				rows_to_delete = [r for r in range(1, tt.numRows) if int(tt[r, 'slot']) == slot]
@@ -1553,6 +1562,15 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			_save_touch(touch)
 			print(f'[W2TD] Slot {slot} backgrounded — sensor values zeroed')
 		elif state == 'visible':
+			op('/').store(f'w2td_slot_hidden_{slot}', False)
+			t = _op('sensor_table')
+			if t is not None:
+				row = _find_row(t, slot)
+				if row is not None:
+					try:
+						t[row, 'visibility'] = 1
+					except Exception:
+						pass
 			print(f'[W2TD] Slot {slot} foregrounded — resuming')
 
 	elif msg_type == 'canvas_error':
