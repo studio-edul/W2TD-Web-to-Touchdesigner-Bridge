@@ -279,9 +279,15 @@ def start_fixed_tunnel():
 	if platform.system() == 'Windows':
 		kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
 
+	port_val = cfg.get('Port') or cfg.get('port')
+	try:
+		port = int(port_val) if port_val else 9980
+	except (ValueError, TypeError):
+		port = 9980
+
 	try:
 		proc = subprocess.Popen(
-			[cloudflared_bin, 'tunnel', '--no-autoupdate', 'run', tunnel_name],
+			[cloudflared_bin, 'tunnel', '--no-autoupdate', 'run', '--url', f'http://localhost:{port}', tunnel_name],
 			stdout=subprocess.PIPE,
 			stderr=subprocess.STDOUT,
 			**kwargs
@@ -449,11 +455,8 @@ def generate():
 		if '?td=' in qr_url:
 			short_host = qr_url.split('?td=')[-1].strip()
 		else:
-			# 유저가 터널 호스트만 입력한 경우 → GitHub Pages URL + ?td= 조합
 			short_host = qr_url.replace('https://', '').replace('http://', '').strip()
-			GITHUB_PAGES_URL = 'https://w2td-pro-dev.studio-edul.com/'
-			qr_url = GITHUB_PAGES_URL + '?td=' + short_host
-		print(f'[W2TD] Fixed mode: {short_host}')
+		print(f'[W2TD] Fixed mode: {qr_url}')
 	else:
 		tunnel_url = None
 		os.environ['TQDM_DISABLE'] = '1'
