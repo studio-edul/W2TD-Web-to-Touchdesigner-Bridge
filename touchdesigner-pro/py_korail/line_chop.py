@@ -60,6 +60,7 @@ def _archive(key, excess_buf, folder):
     try:
         if not folder:
             folder = project.folder
+        _os.makedirs(folder, exist_ok=True)
         date_str    = _dt.datetime.now().strftime('%Y%m%d')
         filename    = f'{date_str}_{key}.csv'
         path        = _os.path.join(folder, filename)
