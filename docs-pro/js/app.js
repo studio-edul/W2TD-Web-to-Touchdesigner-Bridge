@@ -15,8 +15,8 @@ const W2TD_VERSION = '1.0.0';
   let bgColorEnabled = true;
   let flashlightEnabled = true;
   let hapticFeedbackEnabled = true;
-  let audioTxEnabled = true;
-  let videoTxEnabled = true;
+  let audioTxEnabled = false;  // enabled by TD config: audio_tx=1
+  let videoTxEnabled = false;  // enabled by TD config: video_tx=1
   let devMode = true; // true = full UI, false = minimal/auto mode
   let vizInitialized = false;
   let cameraFrontEnabled = false;
@@ -883,6 +883,7 @@ const W2TD_VERSION = '1.0.0';
   async function _maybeStartWebRTC() {
     if (!WSClient.isConnected() || !SensorModule.isEnabled() ||
       WebRTCModule.isPCActive() || !broadcasting) return;
+    if (!micEnabled && !audioTxEnabled && !videoTxEnabled) return;
     if (_isTunnelConnection()) {
       // Warning removed since TURN server is now built-in
     }
