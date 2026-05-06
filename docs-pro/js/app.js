@@ -1396,22 +1396,6 @@ const W2TD_VERSION = '1.0.0';
     }
   });
 
-  // ── iOS haptic (checkbox switch trick, Safari 17.4+) ──────────────────────
-  const _isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
-                 (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  let _iosHapticEl = null;
-
-  function _iosHaptic() {
-    if (!_iosHapticEl) {
-      _iosHapticEl = document.createElement('input');
-      _iosHapticEl.type = 'checkbox';
-      _iosHapticEl.setAttribute('switch', '');
-      _iosHapticEl.style.cssText = 'position:fixed;opacity:0;pointer-events:none;width:0;height:0;';
-      document.body.appendChild(_iosHapticEl);
-    }
-    _iosHapticEl.checked = !_iosHapticEl.checked;
-  }
-
   // Haptic state management (for CHOP-based continuous vibration)
   let hapticState = 0;  // 0 = stop, 1 = vibrate
   let hapticInterval = null;
@@ -1425,34 +1409,6 @@ const W2TD_VERSION = '1.0.0';
    */
   function handleHapticFeedback(data) {
     if (!hapticFeedbackEnabled) return;
-
-    // ── iOS: checkbox switch trick (one-shot repeated) ──────────────────────
-    if (_isIOS) {
-      if (data.state !== undefined) {
-        const newState = data.state === 1 ? 1 : 0;
-        if (newState !== hapticState) {
-          hapticState = newState;
-          if (hapticInterval !== null) { clearInterval(hapticInterval); hapticInterval = null; }
-          if (hapticState === 1) {
-            _iosHaptic();
-            hapticInterval = setInterval(() => {
-              if (hapticState === 1) _iosHaptic();
-              else { clearInterval(hapticInterval); hapticInterval = null; }
-            }, HAPTIC_INTERVAL_MS);
-            addLog('Haptic (iOS): ON', 'info');
-          } else {
-            addLog('Haptic (iOS): OFF', 'info');
-          }
-        }
-        return;
-      }
-      // Pattern mode: fire one haptic pulse
-      _iosHaptic();
-      addLog('Haptic (iOS): pulse', 'info');
-      return;
-    }
-
-    // ── Android / others: Vibration API ─────────────────────────────────────
     if (!navigator.vibrate) {
       console.log('[W2TD] Vibration API not supported');
       return;
