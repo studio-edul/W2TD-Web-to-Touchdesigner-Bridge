@@ -449,8 +449,11 @@ def generate():
 		if '?td=' in qr_url:
 			short_host = qr_url.split('?td=')[-1].strip()
 		else:
+			# 유저가 터널 호스트만 입력한 경우 → GitHub Pages URL + ?td= 조합
 			short_host = qr_url.replace('https://', '').replace('http://', '').strip()
-		print(f'[W2TD] Fixed mode: {qr_url}')
+			GITHUB_PAGES_URL = 'https://w2td-pro-dev.studio-edul.com/'
+			qr_url = GITHUB_PAGES_URL + '?td=' + short_host
+		print(f'[W2TD] Fixed mode: {short_host}')
 	else:
 		tunnel_url = None
 		os.environ['TQDM_DISABLE'] = '1'
