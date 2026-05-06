@@ -38,6 +38,10 @@ _dyn_max_y  = None
 _ease_start = None
 _ease_from  = None
 
+_paused_since  = None   # 마지막 클라이언트가 끊긴 monotonic 시각 (None = 활성 중)
+_pause_accum   = 0.0    # 누적 pause 시간(초)
+_session_start = None   # 첫 채널 생성 시 effective_now (윈도우 좌측 기준점)
+
 
 def _window_seconds(scriptOp):
     """Windowminutes → 윈도우 초. Fps 무관."""
@@ -74,6 +78,7 @@ def _archive(key, excess_buf, folder):
 def cook(scriptOp):
     global _last_cook_t, _ch_count, _frame_count
     global _dyn_max_y, _ease_start, _ease_from
+    global _paused_since, _pause_accum, _session_start
 
     scriptOp.rate = OUTPUT_FPS  # lock X-axis scale regardless of TD timeline FPS
 
@@ -84,6 +89,7 @@ def cook(scriptOp):
     # ── sensor_table에서 실제 연결된 슬롯 수집 ──────────────
     # az != 0 체크: 센서 비활성 시 az=0, 활성 시 중력가속도(~9.8)가 들어옴
     connected_slots = set()
+    any_connected   = False   # connected=1인 클라이언트가 하나라도 있으면 True
     st = op('sensor_table')
     if st is not None and st.numRows >= 2:
         st_h = {str(st[0, c]): c for c in range(st.numCols)}
@@ -92,12 +98,24 @@ def cook(scriptOp):
                 try:
                     if int(st[row, st_h['connected']]) != 1:
                         continue
+                    any_connected = True
                     sensor_axes = ('az', 'ga', 'gb', 'gg')
                     if not any(col in st_h and abs(float(st[row, st_h[col]])) > 0.1 for col in sensor_axes):
                         continue  # 센서 미활성 — az/ga/gb/gg 전부 0이면 선 그리기 시작 안 함
                     connected_slots.add(int(st[row, st_h['slot']]))
                 except Exception:
                     continue
+
+    # ── Pause / Resume — 연결 없으면 effective_now 정지 ──────
+    if any_connected:
+        if _paused_since is not None:
+            _pause_accum += now - _paused_since
+            _paused_since = None
+    elif _paused_since is None:
+        _paused_since = now
+
+    effective_now = (_paused_since - _pause_accum) if _paused_since is not None \
+                    else (now - _pause_accum)
 
     # ── position_table_merged 읽기 ───────────────────────────────────
     active_slots = {}
@@ -153,14 +171,15 @@ def cook(scriptOp):
             key = f'index_{_ch_count}'
             _ch_count += 1
             _channels[key] = {
-                'buf':        [],   # cur_y 값
-                'times':      [],   # monotonic 타임스탬프
-                'cur_y':      0.0,
-                'active':     True,
-                'created_at': now,
+                'buf':    [],   # cur_y 값
+                'times':  [],   # effective_now 타임스탬프
+                'cur_y':  0.0,
+                'active': True,
             }
             _key_order.append(key)
             _slot_to_key[slot] = key
+            if _session_start is None:
+                _session_start = effective_now  # 첫 채널: 윈도우 좌측 기준점 고정
 
     # ── 아카이브 저장 경로 ────────────────────────────────────
     try:
@@ -179,24 +198,21 @@ def cook(scriptOp):
             _channels[_slot_to_key[slot]]['active'] = False
             del _slot_to_key[slot]
 
-    # ── 모든 채널에 매 프레임 1샘플 append (타임스탬프 포함) ─
-    # 연결 중 + 화면 보임: cur_y 기록
-    # 끊김 또는 화면 숨김(hidden): NO_DATA → GLSL 스킵, 선 중단
-    # 재연결/복귀 시 fill-forward가 끊긴 구간을 소급해서 채움
-    active_visible_keys = {key for slot, key in _slot_to_key.items() if slot not in hidden_slots}
-    for key, ch in _channels.items():
-        if key in active_visible_keys:
-            val = ch['cur_y'] if ch['cur_y'] > 0.0 else NO_DATA
-        else:
-            val = NO_DATA
-        ch['buf'].append(val)
-        ch['times'].append(now)
-
-    _frame_count += 1
+    # ── 연결 중일 때만 샘플 append (pause 중엔 버퍼 정지) ────
+    if any_connected:
+        active_visible_keys = {key for slot, key in _slot_to_key.items() if slot not in hidden_slots}
+        for key, ch in _channels.items():
+            if key in active_visible_keys:
+                val = ch['cur_y'] if ch['cur_y'] > 0.0 else NO_DATA
+            else:
+                val = NO_DATA
+            ch['buf'].append(val)
+            ch['times'].append(effective_now)
+        _frame_count += 1
 
     # ── 시간 기반 트리밍 (윈도우 초과분 아카이브 후 제거) ────
     win_sec  = _window_seconds(scriptOp)
-    t_cutoff = now - win_sec
+    t_cutoff = effective_now - win_sec
     for key, ch in _channels.items():
         cut = 0
         while cut < len(ch['times']) and ch['times'][cut] < t_cutoff:
@@ -214,6 +230,11 @@ def cook(scriptOp):
         if all(v < -0.5 for v in ch['buf']):
             del _channels[key]
             _key_order.remove(key)
+
+    # index_* 채널이 하나도 없으면 _session_start 리셋
+    # → 다음 연결 시 왼쪽부터 다시 그려짐
+    if not _key_order:
+        _session_start = None
 
     # ── dynamic maxY 계산 ────────────────────────────────────
     peak = max((ch['cur_y'] for ch in _channels.values()), default=0.0)
@@ -239,8 +260,13 @@ def cook(scriptOp):
         _dyn_max_y = base_max_y
 
     # ── 시간 기반 리샘플링 출력 (numSamples 고정 — Fps 무관) ─
-    num_out  = _num_out_samples(scriptOp)
-    t_start  = now - win_sec
+    num_out = _num_out_samples(scriptOp)
+    # 세션 시작 후 첫 win_sec 동안은 윈도우 고정 (왼쪽부터 그려짐)
+    # 이후에는 effective_now 기준 슬라이딩 윈도우
+    if _session_start is not None and effective_now - _session_start < win_sec:
+        t_start = _session_start
+    else:
+        t_start = effective_now - win_sec
     scriptOp.clear()
     scriptOp.numSamples = max(num_out, 1)
 
@@ -249,9 +275,8 @@ def cook(scriptOp):
             continue
         ch     = _channels[key]
         output = [NO_DATA] * num_out
-        # 채널이 윈도우보다 짧으면 왼쪽부터 시작 (오른쪽 끝에서 시작하지 않음)
-        ch_created  = ch.get('created_at', t_start)
-        ch_t_start  = ch_created if (now - ch_created) < win_sec else t_start
+        # 모든 채널이 동일한 절대 타임라인 기준 사용
+        ch_t_start = t_start
         # 실제 샘플을 시간 기반으로 출력 인덱스에 매핑
         last_valid_idx = -1
         for t, v in zip(ch['times'], ch['buf']):

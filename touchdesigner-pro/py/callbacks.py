@@ -5,6 +5,9 @@ W2TD_VERSION = '1.0.0'
 GITHUB_PAGES_URL = 'https://w2td-pro-dev.studio-edul.com/'
 MAX_CLIENTS = 20
 ACK_INTERVAL = 1.0  # seconds between data_ack signals per slot
+STALE_TIMEOUT = 15.0  # seconds since last message before slot is considered stale (zombie)
+STALE_CHECK_INTERVAL = 5.0  # min seconds between stale-slot scans (rate limit)
+HIDDEN_TIMEOUT = 60.0  # seconds: hidden 상태가 이 시간 넘으면 강제종료된 것으로 간주
 
 W2TD_BASE = 'W2TD_Pro'
 W2TD_AUDIO = f'{W2TD_BASE}/webrtc_audio_container'
@@ -246,6 +249,94 @@ def _release_slot(addr, slot):
 			t.deleteRow(row)
 	op('/').store(f'w2td_last_seen_{slot}', 0)
 	op('/').store(f'w2td_last_ack_{slot}', 0)
+
+def _full_cleanup_slot(webServerDAT, addr, slot):
+	"""onWebSocketClose와 동일한 정리 로직 — stale 슬롯 회수에도 사용.
+	sensor_table, touch_table, webrtc 상태, pending cam, last_seen 모두 정리."""
+	slots = _slots()
+	slots.pop(addr, None)
+	_save_slots(slots)
+
+	free = _free()
+	if slot not in free:
+		free.append(slot)
+		free.sort()
+	_save_free(free)
+
+	touch = _touch()
+	touch.pop(slot, None)
+	_save_touch(touch)
+
+	t = _op('sensor_table')
+	if t is not None:
+		row = _find_row(t, slot)
+		if row is not None:
+			t.deleteRow(row)
+
+	tt = _op('touch_table')
+	if tt is not None:
+		rows_to_delete = [r for r in range(1, tt.numRows) if int(tt[r, 'slot']) == slot]
+		for r in reversed(rows_to_delete):
+			tt.deleteRow(r)
+
+	# WebRTC cleanup
+	conn_id = op('/').fetch(f'w2td_webrtc_slot_to_uuid_{slot}', None)
+	if conn_id:
+		wrtc = _wt_dat()
+		if wrtc is not None:
+			try:
+				wrtc.closeConnection(conn_id)
+			except Exception:
+				pass
+		op('/').store(f'w2td_webrtc_addr_{conn_id}', None)
+		op('/').store(f'w2td_webrtc_slot_to_uuid_{slot}', None)
+	_wt_remove_by_slot(slot)
+	_clear_pending_cam_for_slot(slot)
+
+	op('/').store(f'w2td_last_seen_{slot}', 0)
+	op('/').store(f'w2td_last_ack_{slot}', 0)
+	op('/').store(f'w2td_hidden_since_{slot}', 0)
+
+
+def cleanup_stale_slots(webServerDAT):
+	"""STALE_TIMEOUT 초 이상 메시지 없는 슬롯을 강제 정리.
+	모바일이 백그라운드 → 종료 시 close 이벤트가 안 와서 슬롯이 점유된 채로 남는 좀비 케이스 처리.
+
+	자동 호출: onWebSocketReceiveText에서 STALE_CHECK_INTERVAL 마다 1회.
+	수동 호출 (Timer CHOP 등): op('web_server_dat').module.cleanup_stale_slots(op('web_server_dat'))
+	"""
+	now_t = time.time()
+	stale = []
+	for addr, slot in list(_slots().items()):
+		last_seen = op('/').fetch(f'w2td_last_seen_{slot}', 0)
+		if last_seen == 0:
+			continue
+		age = now_t - last_seen
+
+		# 일반 stale: 마지막 메시지 후 STALE_TIMEOUT 경과
+		if age > STALE_TIMEOUT:
+			stale.append((addr, slot, age, 'no msg'))
+			continue
+
+		# Hidden stale: visibility=hidden 상태로 HIDDEN_TIMEOUT 경과
+		# (백그라운드에서 강제종료된 iOS Safari 케이스 빠르게 회수)
+		hidden_since = op('/').fetch(f'w2td_hidden_since_{slot}', 0)
+		if hidden_since > 0:
+			hidden_age = now_t - hidden_since
+			if hidden_age > HIDDEN_TIMEOUT:
+				stale.append((addr, slot, hidden_age, 'hidden too long'))
+
+	for addr, slot, age, reason in stale:
+		# WebSocket 강제 종료 시도 (TD 버전에 따라 메서드 미지원일 수 있음)
+		try:
+			webServerDAT.webSocketClose(addr)
+		except Exception:
+			pass
+		_full_cleanup_slot(webServerDAT, addr, slot)
+		print(f'[W2TD] Stale slot {slot} released ({addr}) — {reason} ({age:.0f}s)')
+
+	return len(stale)
+
 
 def _broadcast_msg(webServerDAT, msg_str):
 	"""Send a JSON message to all actually connected clients.
@@ -1091,6 +1182,16 @@ def onWebSocketClose(webServerDAT, client):
 def onWebSocketReceiveText(webServerDAT, client, data):
 	addr = str(client)
 
+	# Stale 슬롯 정리 (rate-limited) — 백그라운드 종료된 좀비 슬롯 회수
+	now_t = time.time()
+	last_check = op('/').fetch('w2td_last_stale_check', 0)
+	if now_t - last_check > STALE_CHECK_INTERVAL:
+		op('/').store('w2td_last_stale_check', now_t)
+		try:
+			cleanup_stale_slots(webServerDAT)
+		except Exception as e:
+			print(f'[W2TD Error] cleanup_stale_slots: {e}')
+
 	# cam_receiver.html messages are routed separately (no slot)
 	if _is_cam_receiver_addr(addr):
 		try:
@@ -1558,6 +1659,8 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			touch = _touch()
 			touch[slot] = 0
 			_save_touch(touch)
+			# Hidden 시작 시각 기록 — HIDDEN_TIMEOUT 초과 시 강제 회수 대상
+			op('/').store(f'w2td_hidden_since_{slot}', time.time())
 			print(f'[W2TD] Slot {slot} backgrounded — sensor values zeroed')
 		elif state == 'visible':
 			t = _op('sensor_table')
@@ -1568,7 +1671,20 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 						t[row, 'visibility'] = 1
 					except Exception:
 						pass
+			# Visible 복귀 시 hidden 타임아웃 리셋
+			op('/').store(f'w2td_hidden_since_{slot}', 0)
 			print(f'[W2TD] Slot {slot} foregrounded — resuming')
+
+	elif msg_type == 'bye':
+		# 클라이언트가 명시적 종료 신호 전송 (pagehide / beforeunload)
+		# → close 이벤트 안 와도 즉시 슬롯 회수
+		print(f'[W2TD] Bye received from slot {slot} ({addr}) — releasing immediately')
+		_full_cleanup_slot(webServerDAT, addr, slot)
+		try:
+			webServerDAT.webSocketClose(addr)
+		except Exception:
+			pass
+		return
 
 	elif msg_type == 'canvas_error':
 		# Runtime error from a CanvasRunner sketch on mobile
