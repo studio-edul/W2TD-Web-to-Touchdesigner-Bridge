@@ -230,14 +230,6 @@ const WSClient = (() => {
     document.addEventListener('visibilitychange', () => {
       send({ type: 'visibility', state: document.hidden ? 'hidden' : 'visible' });
     });
-    // Explicit disconnect signal — tab/browser 종료 시 TD에 즉시 슬롯 회수 요청
-    const sendBye = () => {
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        try { ws.send(JSON.stringify({ type: 'bye' })); } catch (e) { /* ignore */ }
-      }
-    };
-    window.addEventListener('pagehide', sendBye);
-    window.addEventListener('beforeunload', sendBye);
   }
 
   function _updatePacketRate() {
