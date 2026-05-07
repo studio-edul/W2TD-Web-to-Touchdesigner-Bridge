@@ -89,7 +89,6 @@ def cook(scriptOp):
     # ── sensor_table에서 실제 연결된 슬롯 수집 ──────────────
     # az != 0 체크: 센서 비활성 시 az=0, 활성 시 중력가속도(~9.8)가 들어옴
     connected_slots = set()
-    any_connected   = False   # connected=1인 클라이언트가 하나라도 있으면 True
     st = op('sensor_table')
     if st is not None and st.numRows >= 2:
         st_h = {str(st[0, c]): c for c in range(st.numCols)}
@@ -98,13 +97,18 @@ def cook(scriptOp):
                 try:
                     if int(st[row, st_h['connected']]) != 1:
                         continue
-                    any_connected = True
+                    # 백그라운드(visibility=hidden) 슬롯 제외
+                    # → 홈 버튼 누르면 visibility=0이 되고 frozen 센서값(az≈9.8)을 무시
+                    if 'visibility' in st_h and int(st[row, st_h['visibility']]) == 0:
+                        continue
                     sensor_axes = ('az', 'ga', 'gb', 'gg')
                     if not any(col in st_h and abs(float(st[row, st_h[col]])) > 0.1 for col in sensor_axes):
                         continue  # 센서 미활성 — az/ga/gb/gg 전부 0이면 선 그리기 시작 안 함
                     connected_slots.add(int(st[row, st_h['slot']]))
                 except Exception:
                     continue
+    # 센서가 실제로 활성화된 슬롯이 하나라도 있을 때만 타임라인 진행
+    any_connected = bool(connected_slots)
 
     # ── Pause / Resume — 연결 없으면 effective_now 정지 ──────
     if any_connected:
