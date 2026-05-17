@@ -142,6 +142,7 @@ Copy `touchdesigner/py/callbacks.py` (or the Pro equivalent) into the Web Server
 | `og` | Orientation gamma (left/right tilt) | -90 ~ 90° |
 | `lat` `lon` | GPS coordinates | degrees |
 | `touch_count` | Number of active touches | integer |
+| `visibility` | Foreground state (1 = visible, 0 = backgrounded) | 0 or 1 |
 | `css_width` `css_height` | Browser viewport size | px |
 | `physical_width` `physical_height` | Physical screen size | px |
 | `screen_width` `screen_height` | Screen resolution | px |
@@ -312,15 +313,23 @@ Inside `W2TD_Pro`, add an `In DAT` named `js_code_in` and a `DAT Execute` pointi
 | `touch_count` | Touch | integer |
 | `t0x t0y t0s` … | Touch points | x/y normalized 0–1, state 1=down |
 
-**Example sketch** — sensor test ball with inertia, holofoil, and heartbeat:
-`touchdesigner-examples/canvas_sketches/sensor_test.js`
+**Example sketches:**
 
-The holofoil effect uses 5 Canvas 2D layers driven by device orientation (beta/gamma):
-1. Narrow rainbow light streak (color-dodge) — tilts and shifts with device angle
-2. Holographic rainbow wash — hue-shifted gradient overlay
-3. Diffraction grating stripe texture — scrolls with tilt
-4. Sparkle particles — opacity varies with tilt angle
-5. Specular highlight — moves with device orientation
+- `touchdesigner-examples/canvas_sketches/sensor_test.js` — sensor test ball with inertia, holofoil (5 Canvas 2D layers driven by orientation), and heartbeat
+- `touchdesigner-pro/sketches/particle.js` — 3000-particle system with orientation-based gravity removal, z-axis shake → launch speed, and noise turbulence. Requires both `Motion = 1` and `Orientation = 1`.
+
+**Orientation-based gravity removal** (`particle.js`): Uses `ob` (beta) and `og` (gamma) to compute an exact gravity vector via the W3C DeviceOrientation rotation sequence and subtracts it from raw accelerometer values, giving accurate linear acceleration even at steep static tilt angles. The correct formulas derived from `g_device = Ry(-γ)·Rx(-β)·[0,0,-g]`:
+- `gx = +G·sin(γ)·cos(β)`
+- `gy = -G·sin(β)`
+- `gz = -G·cos(β)·cos(γ)`
+
+**z-axis → launch speed**: Linear z acceleration (phone shaken toward/away from surface) is mapped to particle initial speed via a configurable multiplier (`Z_SCALE`). A built-in debug overlay renders live linear acceleration values at the bottom of the canvas for tuning.
+
+**Reloading JS sketches from disk**: Set `Jsfile` in `w2td_config` to the `.js` file path (or directory). After editing the file, call from TD Textport:
+```python
+op('web_server_dat').module.reload_jsfile(op('web_server_dat'))
+```
+This re-reads the file and broadcasts the new code to all connected clients instantly.
 
 ## TD Flashlight API (Pro)
 
@@ -348,8 +357,8 @@ op('web_server_dat').module.send_flashlight_to_all(op('web_server_dat'), state=0
 4. Enable `Table Change`
 
 On the mobile side:
-- `dev_mode=1` → **"TD Stream" button appears** (does not auto-enter fullscreen). Tap the button to open the fullscreen monitor; tap "Exit" to return to the main UI
-- `dev_mode=0` → video plays as a fullscreen background behind the touch pad
+- `dev_mode=1` → **Fullscreen button always visible** in the top-right corner. Button label reflects the active mode (`TD Stream` / `JS Sketch` / `Color View`). Grayed-out (disabled) when `Videoout=none`. Tap to enter fullscreen; tap **Exit** to return to the main UI.
+- `dev_mode=0` → video plays as a fullscreen background automatically (no button shown)
 
 ---
 
@@ -365,7 +374,7 @@ On the mobile side:
 - **Video downlink** _(Pro)_ — TD Video Stream Out TOP → WebRTC → mobile `<video>` (source: `video_slot{N}` TOP; dev_mode=1: monitor overlay, dev_mode=0: fullscreen background). Requires `Videoout = td`. Managed by `webrtc_video_sync.py` (separate from audio sync).
 - **Background color** _(Pro)_ — broadcast via `w2td_background` or `w2td_color` (r/g/b) or per-slot via `w2td_bg_color_bus` (channels `slot{N}_r/g/b`). Requires `Videoout = color`. Last color is saved to localStorage and instantly applied on mode switch.
 - **Live JS canvas sketch** _(Pro)_ — inject JavaScript into mobile canvas from a Text DAT or `Jsfile` path. Sensor data (motion, orientation, touch) available inside the sketch via `getSensors()`. Auto-broadcast on edit via `canvas_code_dat_exec.py` or `config_watch.py` (when `Videoout=js` + `Jsfile` set). Requires `Videoout = js`.
-- **Haptic feedback** _(Pro)_ — pattern-based or continuous, driven by `w2td_haptic` CHOP or Python API
+- **Haptic feedback** — pattern-based or continuous, driven by `w2td_haptic` CHOP or Python API (available in both Free and Pro)
 - **Flashlight** _(Pro)_ — driven by `w2td_flashlight` CHOP (channels `slot{N}` or `all`)
 - **WebSocket Heartbeat** — auto-reconnect on connection loss
 - **Data Ack** — visual confirmation of TD reception (rate-limited 1 Hz)
@@ -424,13 +433,36 @@ touchdesigner-pro/py/        ← Pro TD scripts (W2TD_Pro base COMP)
   w2td_zombie_checker.py     ← Cleans up stale slots
   (config_watch, cam_render_sync, w2td_init same as free but with W2TD_Pro base)
 
+touchdesigner-pro/py_korail/ ← Korail project scripts (Script CHOP / GLSL)
+  line_chop.py               ← Velocity-integral sliding-window CHOP (sensor-active + visibility gate)
+  line_glsl.frag             ← Line render GLSL fragment
+  line_glsl_split.frag       ← Split line render GLSL fragment
+
+touchdesigner-pro/sketches/  ← Canvas runner sketch files (.js)
+  particle.js                ← Particle system with orientation-based gravity removal
+
 touchdesigner-examples/      ← Example projects
   canvas_sketches/
     sensor_test.js           ← Sensor test: inertia ball + holofoil + heartbeat (canvas_code sketch)
     sensor_diagnostic.js     ← Sensor diagnostic: THREE.js 3D phone model + gyro rings + 2D HUD sparklines
+
+dev-tools/load-test/
+  index.html                 ← Load test tool (single-file web app, deploy independently)
 ```
 
 > **Workflow:** Only `docs/` and `docs-pro/` are pushed to GitHub / hosted. Python files are applied directly in TD — TD reads them live from disk.
+
+---
+
+## Load Test Tool
+
+`dev-tools/load-test/index.html` — a single-file web app for stress-testing the TD WebSocket server with N simultaneous virtual mobile devices.
+
+- Enter the TD tunnel URL (`wss://xxxx.trycloudflare.com`) and set the number of virtual devices (1–30)
+- Each virtual client follows the exact W2TD mobile protocol: `hello` → `ack` → sensor loop
+- Automatically adapts to the server's `config` (sample rate, enabled sensors)
+- Staggered connection: clients connect at configurable intervals to avoid connection spikes
+- Deploy as a standalone HTML file — no dependencies, works from `file://` or any HTTPS host
 
 ---
 
