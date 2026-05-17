@@ -1,6 +1,6 @@
 # W2TD (Web-to-TouchDesigner Bridge) 개발 문서
 
-> 최종 업데이트: 2026-05-17 (Free 버전 haptic/stale cleanup 동기화 / Fullscreen 버튼 devMode 항상 표시 / devMode bg_color 게이트 / particle.js 중력 공식 수정 + z축 속도 연동 + 디버그 오버레이 / Jsfile 리로드 워크플로우 정리)
+> 최종 업데이트: 2026-05-17 (Free 버전 haptic/stale cleanup 동기화 / Fullscreen 버튼 devMode 항상 표시 / devMode bg_color 게이트 / Jsfile 리로드 워크플로우 정리)
 > 목적: 추후 세션에서 파일 위치·구현 방식을 빠르게 파악하기 위한 참고 문서
 
 ---
@@ -1639,84 +1639,9 @@ any_connected = bool(connected_slots)
 
 `Videoout = js` + `Jsfile` 조합으로 모바일에 라이브 인젝션하는 canvas_runner 스케치.
 
-**주요 특징**
-
-- `canvas`, `requestFrame`, `getSensors` — CanvasRunner API에서 전달받는 3개 인수만 사용
-- HTML 없음, `<script>` 없음, 마우스 폴백 없음
-- 3000개 파티클, 3개 타입(크기/투명도 다름), 노이즈 터뷸런스, 중심 오브
-- z축 선형가속도 → 파티클 초기속도 연동 (흔들기 강도 → 발사 속도)
-- 하단 디버그 오버레이: linX/linY/linZ/speedMult 실시간 표시
-
-**Jsfile 워크플로우 (파일 직접 수정 방식)**
-
-```
-w2td_config 테이블: Jsfile = /path/to/particle.js
-                    Videoout = js
-```
-
-파일 수정 후 TD Textport에서:
-```python
-op('web_server_dat').module.reload_jsfile(op('web_server_dat'))
-```
-이 한 줄이 파일을 읽어 현재 연결된 모든 클라이언트에 `canvas_code` 메시지로 즉시 전송.
-
-**튜닝 파라미터 (`let` 변수 — 추후 canvas_params 연결 예정)**
-
-| 변수 | 기본값 | 설명 |
-|------|-------|------|
-| `BASE_SPEED` | 1.67 | 파티클 기본 초기 속도 |
-| `FORCE_SCALE` | 0.14 | x/y 가속도 → 힘 민감도 |
-| `Z_SCALE` | 1.5 | z축 선형가속도 → 초기속도 민감도 |
-| `Z_SPEED_MIN` | 0.2 | z 속도 배율 최솟값 |
-| `Z_SPEED_MAX` | 3.0 | z 속도 배율 최댓값 |
-| `TURB_SCALE` | 0.05 | 노이즈 터뷸런스 강도 |
-| `EMIT_RATE` | 100 | 프레임당 파티클 생성 수 |
-
-**HiDPI 대응**
-
-```javascript
-const dpr = window.devicePixelRatio || 1;
-ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-const W = () => canvas.width  / dpr;
-const H = () => canvas.height / dpr;
-```
-
-**오리엔테이션 기반 중력 제거 (W3C 스펙 정확 구현)**
-
-저역통과필터 대신 `ob`(beta)·`og`(gamma)로 중력 벡터를 계산해 차감. W3C 회전 순서 `R = Rz(α)·Rx(β)·Ry(γ)` (device→world) 의 역변환 `g_device = Ry(-γ)·Rx(-β)·[0,0,-g]` 에서 유도:
-
-```javascript
-function gravityFromOrientation(beta_deg, gamma_deg) {
-  const b = beta_deg  * DEG;
-  const g = gamma_deg * DEG;
-  return {
-    x:  G * Math.sin(g) * Math.cos(b),  // +G (이전 -G 오류 수정), cos(b) 항 추가
-    y: -G * Math.sin(b),                 // cos(g) 항 제거
-    z: -G * Math.cos(b) * Math.cos(g),  // -G (브라우저 az≈-9.8 face-up 기준)
-  };
-}
-
-// 매 프레임
-const s    = getSensors();
-const grav = gravityFromOrientation(s.ob, s.og);
-const linX = (s.ax || 0) - grav.x;
-const linY = (s.ay || 0) - grav.y;
-const linZ = (s.az || 0) - grav.z;
-force.x = -linX / G;
-force.y = -linY / G;
-// z축 → 초기속도
-const zNorm     = linZ / G;
-force.speedMult = clamp(1 + zNorm * Z_SCALE, Z_SPEED_MIN, Z_SPEED_MAX);
-```
-
-**검증 케이스** (폰을 정지 상태 → linX/Y/Z ≈ 0):
-- 평면 face-up (β=0, γ=0): gz=-9.8, az≈-9.8 → linZ=0 ✓
-- 세로 portrait (β=90, γ=0): gy=-9.8, ay≈-9.8 → linY=0 ✓
-- 우측 90° 기울임 (β=0, γ=90): gx=+9.8, ax≈+9.8 → linX=0 ✓
-
-**필요 센서**: `Motion = 1`, `Orientation = 1` 모두 활성화. `ob/og=0`이면 수평 기준 폴백(정확도 저하).
-
-**디버그 오버레이**: 하단 반투명 패널에 linX(흰), linY(흰), linZ(주황), speedMult(하늘색) 실시간 표시. 정지 상태에서 모두 0에 가까우면 중력 제거 정상.
+- `canvas`, `requestFrame`, `getSensors` — CanvasRunner API 인수만 사용
+- 3000개 파티클, 3개 타입, 노이즈 터뷸런스, 중심 오브
+- **필요 센서**: `Motion = 1`, `Orientation = 1` 모두 활성화
 
 ---
 

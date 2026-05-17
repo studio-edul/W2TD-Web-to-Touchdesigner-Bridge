@@ -316,14 +316,7 @@ Inside `W2TD_Pro`, add an `In DAT` named `js_code_in` and a `DAT Execute` pointi
 **Example sketches:**
 
 - `touchdesigner-examples/canvas_sketches/sensor_test.js` — sensor test ball with inertia, holofoil (5 Canvas 2D layers driven by orientation), and heartbeat
-- `touchdesigner-pro/sketches/particle.js` — 3000-particle system with orientation-based gravity removal, z-axis shake → launch speed, and noise turbulence. Requires both `Motion = 1` and `Orientation = 1`.
-
-**Orientation-based gravity removal** (`particle.js`): Uses `ob` (beta) and `og` (gamma) to compute an exact gravity vector via the W3C DeviceOrientation rotation sequence and subtracts it from raw accelerometer values, giving accurate linear acceleration even at steep static tilt angles. The correct formulas derived from `g_device = Ry(-γ)·Rx(-β)·[0,0,-g]`:
-- `gx = +G·sin(γ)·cos(β)`
-- `gy = -G·sin(β)`
-- `gz = -G·cos(β)·cos(γ)`
-
-**z-axis → launch speed**: Linear z acceleration (phone shaken toward/away from surface) is mapped to particle initial speed via a configurable multiplier (`Z_SCALE`). A built-in debug overlay renders live linear acceleration values at the bottom of the canvas for tuning.
+- `touchdesigner-pro/sketches/particle.js` — 3000-particle system with orientation-based gravity removal and noise turbulence. Requires both `Motion = 1` and `Orientation = 1`.
 
 **Reloading JS sketches from disk**: Set `Jsfile` in `w2td_config` to the `.js` file path (or directory). After editing the file, call from TD Textport:
 ```python
