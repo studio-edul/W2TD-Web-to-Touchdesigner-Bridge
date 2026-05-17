@@ -452,13 +452,10 @@ const W2TD_VERSION = '1.0.0';
       });
     }
 
-    TouchModule.init(els.touchCanvas, (snapshot) => {
+    // Events on touchPad (not touchCanvas) so display:none on canvas doesn't break touch tracking
+    TouchModule.init(els.touchPad, (snapshot) => {
       if (showTouchPoints) {
         Visualization.drawTouches(els.touchCanvas, snapshot.touches, false);
-      } else {
-        // Clear canvas if touch points are hidden
-        const ctx = els.touchCanvas.getContext('2d');
-        ctx.clearRect(0, 0, els.touchCanvas.width, els.touchCanvas.height);
       }
       handleTouchData(snapshot);
     });
@@ -1141,13 +1138,10 @@ const W2TD_VERSION = '1.0.0';
     }
     resizeTouchCanvas();
 
-    TouchModule.init(els.touchCanvas, (snapshot) => {
+    // Events on touchPad (not touchCanvas) so display:none on canvas doesn't break touch tracking
+    TouchModule.init(els.touchPad, (snapshot) => {
       if (showTouchPoints) {
         Visualization.drawTouches(els.touchCanvas, snapshot.touches, devMode);
-      } else {
-        // Clear canvas if touch points are hidden
-        const ctx = els.touchCanvas.getContext('2d');
-        ctx.clearRect(0, 0, els.touchCanvas.width, els.touchCanvas.height);
       }
       handleTouchData(snapshot);
     });
@@ -1717,12 +1711,13 @@ const W2TD_VERSION = '1.0.0';
   function _applyTouchDotsVisibility() {
     if (!els.touchCanvas) return;
     if (!showTouchPoints) {
-      els.touchCanvas.style.visibility = 'hidden';
-      // Clear so no stale dots appear when re-enabled
+      // display:none is safe: touch events are on #touch-pad, not #touch-canvas
+      els.touchCanvas.classList.add('touch-dots-hidden');
+      // Also clear canvas content so no stale dots show when re-enabled
       const ctx = els.touchCanvas.getContext('2d');
       ctx.clearRect(0, 0, els.touchCanvas.width, els.touchCanvas.height);
     } else {
-      els.touchCanvas.style.visibility = '';
+      els.touchCanvas.classList.remove('touch-dots-hidden');
       // Redraw current touches if pad is active
       if (touchPadActive) {
         const snap = TouchModule.getSnapshot();

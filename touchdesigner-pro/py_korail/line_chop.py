@@ -256,9 +256,14 @@ def cook(scriptOp):
     for slot, speed in active_slots.items():
         if slot not in _slot_to_key:
             continue  # 아직 채널 없는 슬롯 (race condition 방어)
+        ch = _channels[_slot_to_key[slot]]
+        # warmup 프레임(재연결 첫 1프레임)은 cur_y 적산 스킵
+        # — position_table_merged의 speed가 이전-현재 위치 차분 기반이라
+        #   재연결 직후 첫 speed 값이 비정상적으로 크게 튀는 경우를 차단
+        if ch.get('warmup'):
+            continue
         if max_speed > 0.0:
             speed = min(speed, max_speed)
-        ch = _channels[_slot_to_key[slot]]
         ch['cur_y'] += speed * dt
 
     # ── 끊긴 슬롯: 윈도우 내 버퍼 전체 저장 후 inactive 마킹 ───

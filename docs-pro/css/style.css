@@ -644,6 +644,10 @@ body.sketch-fullscreen #broadcast-bar {
   display: block;
   touch-action: none;
 }
+/* show_dots=0: hide canvas (display:none OK because touch events are on #touch-pad) */
+#touch-canvas.touch-dots-hidden {
+  display: none;
+}
 
 .touch-pad-controls {
   position: absolute;
