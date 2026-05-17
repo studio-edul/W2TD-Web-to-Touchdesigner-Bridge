@@ -373,6 +373,8 @@ const W2TD_VERSION = '1.0.0';
 
     if (on) {
       // Full UI: show sensor panel, transition out of non-dev touch pad
+      // Stop any running JS sketch so render-canvas doesn't bleed through dev UI
+      if (typeof CanvasRunner !== 'undefined') CanvasRunner.stop();
       if (els.sensorPanel) els.sensorPanel.style.display = '';
       _removeDevOverlay();
       els.userStartOverlay.classList.add('hidden'); // clean up if switching from user mode

@@ -89,7 +89,7 @@ def _build_config_msg(cfg):
 		'audio_echo_cancellation': _cfg_val(cfg, 'Echocancellation', 'echocancellation', 'audio_echo_cancellation', default=0),
 		'audio_noise_suppression': _cfg_val(cfg, 'Noisesuppression', 'noisesuppression', 'audio_noise_suppression', default=0),
 		'audio_auto_gain': _cfg_val(cfg, 'Audiogain', 'audiogain', 'audio_auto_gain', default=0),
-		'show_dots': _cfg_val(cfg, 'Showdots', 'showdots', 'show_dots', default=1),
+		'show_dots': _cfg_val(cfg, 'Showtouchdots', 'showtouchdots', 'Showdots', 'showdots', 'show_dots', default=1),
 		'backgroundcolor': _cfg_val(cfg, 'Backgroundcolor', 'backgroundcolor', 'background_color', default=1),
 		'flashlight': _cfg_val(cfg, 'Flashlight', 'flashlight', default=1),
 		'hapticfeedback': _cfg_val(cfg, 'Hapticfeedback', 'hapticfeedback', 'Haptic', 'haptic', default=1),
