@@ -227,18 +227,7 @@ const W2TD_VERSION = '1.0.0';
     if (cfg.show_dots != null) {
       showTouchPoints = !!parseInt(cfg.show_dots);
       updateTouchPointsToggleUI();
-      // config가 바뀌면 캔버스 즉시 반영 — 꺼질 때 clearRect, 켜질 때 현재 터치 재드로우
-      if (els.touchCanvas) {
-        if (!showTouchPoints) {
-          const _ctx = els.touchCanvas.getContext('2d');
-          _ctx.clearRect(0, 0, els.touchCanvas.width, els.touchCanvas.height);
-        } else if (touchPadActive) {
-          const _snap = TouchModule.getSnapshot();
-          if (_snap && _snap.touches.length > 0) {
-            Visualization.drawTouches(els.touchCanvas, _snap.touches, devMode);
-          }
-        }
-      }
+      _applyTouchDotsVisibility();
     }
     if (cfg.cam_resolution != null) {
       WebRTCModule.setResolution(cfg.cam_resolution);
@@ -474,6 +463,7 @@ const W2TD_VERSION = '1.0.0';
       handleTouchData(snapshot);
     });
     updateTouchPointsToggleUI();
+    _applyTouchDotsVisibility();
   }
 
   function init() {
@@ -1162,6 +1152,7 @@ const W2TD_VERSION = '1.0.0';
       handleTouchData(snapshot);
     });
     updateTouchPointsToggleUI();
+    _applyTouchDotsVisibility();
     _enableTouchLock();
     haptic();
   }
@@ -1698,19 +1689,7 @@ const W2TD_VERSION = '1.0.0';
     saveSettings();
     updateTouchPointsToggleUI();
     haptic();
-
-    // If touchpad is active, clear or redraw immediately
-    if (touchPadActive) {
-      const snapshot = TouchModule.getSnapshot();
-      if (snapshot) {
-        if (showTouchPoints) {
-          Visualization.drawTouches(els.touchCanvas, snapshot.touches, devMode);
-        } else {
-          const ctx = els.touchCanvas.getContext('2d');
-          ctx.clearRect(0, 0, els.touchCanvas.width, els.touchCanvas.height);
-        }
-      }
-    }
+    _applyTouchDotsVisibility();
   }
 
   /**
@@ -1727,6 +1706,30 @@ const W2TD_VERSION = '1.0.0';
       els.btnToggleTouchPoints.classList.remove('active');
       els.btnToggleTouchPoints.textContent = 'Show Dots';
       els.btnToggleTouchPoints.setAttribute('title', 'Show dots');
+    }
+  }
+
+  /**
+   * Apply show_dots state to the touch canvas.
+   * Uses visibility:hidden (not display:none) so touch events still fire.
+   * Also clears canvas content when hiding to avoid stale dots on re-show.
+   */
+  function _applyTouchDotsVisibility() {
+    if (!els.touchCanvas) return;
+    if (!showTouchPoints) {
+      els.touchCanvas.style.visibility = 'hidden';
+      // Clear so no stale dots appear when re-enabled
+      const ctx = els.touchCanvas.getContext('2d');
+      ctx.clearRect(0, 0, els.touchCanvas.width, els.touchCanvas.height);
+    } else {
+      els.touchCanvas.style.visibility = '';
+      // Redraw current touches if pad is active
+      if (touchPadActive) {
+        const snap = TouchModule.getSnapshot();
+        if (snap && snap.touches.length > 0) {
+          Visualization.drawTouches(els.touchCanvas, snap.touches, devMode);
+        }
+      }
     }
   }
 
