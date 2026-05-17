@@ -788,6 +788,9 @@ const W2TD_VERSION = '1.0.0';
         // videoout gate: bg color only applies in 'color' mode
         if (displayMode !== 'color') return;
 
+        // devMode gate: color 전체화면 진입 전까지는 메인 UI 배경에 적용 안 함
+        if (devMode && _devFullscreenMode !== 'color') return;
+
         document.body.style.backgroundColor = color;
         // Apply to touch pad overlay as well (it covers body with its own background)
         const tp = $('touch-pad');
