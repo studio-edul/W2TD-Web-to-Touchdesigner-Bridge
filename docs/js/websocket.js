@@ -15,6 +15,7 @@ const WSClient = (() => {
   let onErrorDetail = null;
   let onConfig = null;
   let onWebRTCSignal = null; // callback(msg) for webrtc_answer / webrtc_ice / webrtc_state
+  let onHaptic = null; // callback(data) for haptic feedback
   let onDataAck = null; // callback() for data acknowledgment
   
   // Heartbeat
@@ -39,6 +40,7 @@ const WSClient = (() => {
     onErrorDetail = callbacks.onErrorDetail || null;
     onConfig = callbacks.onConfig || null;
     onWebRTCSignal = callbacks.onWebRTCSignal || null;
+    onHaptic = callbacks.onHaptic || null;
     onDataAck = callbacks.onDataAck || null;
     reconnectAttempts = 0; // reset in case previous session was rejected
 
@@ -89,6 +91,8 @@ const WSClient = (() => {
         } else if (msg.type === 'webrtc_answer' || msg.type === 'webrtc_ice' || msg.type === 'webrtc_state' ||
                    msg.type === 'webrtc_answer_cam' || msg.type === 'webrtc_ice_cam' || msg.type === 'cam_receiver_ready') {
           if (onWebRTCSignal) onWebRTCSignal(msg);
+        } else if (msg.type === 'haptic') {
+          if (onHaptic) onHaptic(msg);
         } else if (msg.type === 'ping') {
           // TD heartbeat ping → respond with pong
           send({ type: 'pong' });

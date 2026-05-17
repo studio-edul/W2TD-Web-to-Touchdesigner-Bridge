@@ -564,6 +564,9 @@ const W2TD_VERSION = '1.0.0';
         else if (msg.type === 'webrtc_ice_cam') WebRTCModule.handleCameraIce(msg);
         else if (msg.type === 'cam_receiver_ready') _maybeStartCamera();
       },
+      onHaptic: (data) => {
+        handleHapticFeedback(data);
+      },
       onDataAck: () => {
         updateDataAckIndicator();
       },
@@ -1023,6 +1026,50 @@ const W2TD_VERSION = '1.0.0';
       requestWakeLock();
     }
   });
+
+  // Haptic state management (for CHOP-based continuous vibration)
+  let hapticState = 0;  // 0 = stop, 1 = vibrate
+  let hapticInterval = null;
+  const HAPTIC_INTERVAL_MS = 100;  // Vibrate every 100ms when state=1
+
+  /**
+   * Handle haptic feedback from TD.
+   * Supports two modes:
+   * 1. State mode: {"type": "haptic", "state": 0 or 1} (CHOP-based)
+   * 2. Pattern mode: {"type": "haptic", "pattern": [200, 100, 200]}
+   */
+  function handleHapticFeedback(data) {
+    if (!hapticEnabled) return;
+    if (!navigator.vibrate) return;
+
+    // State-based mode (CHOP): state = 0 (stop) or 1 (vibrate continuously)
+    if (data.state !== undefined) {
+      const newState = data.state === 1 ? 1 : 0;
+      if (newState !== hapticState) {
+        hapticState = newState;
+        if (hapticInterval !== null) { clearInterval(hapticInterval); hapticInterval = null; navigator.vibrate(0); }
+        if (hapticState === 1) {
+          navigator.vibrate(HAPTIC_INTERVAL_MS);
+          hapticInterval = setInterval(() => {
+            if (hapticState === 1) navigator.vibrate(HAPTIC_INTERVAL_MS);
+            else { clearInterval(hapticInterval); hapticInterval = null; }
+          }, HAPTIC_INTERVAL_MS);
+        }
+      }
+      return;
+    }
+
+    // Pattern-based mode: pattern = [200, 100, 200]
+    const pattern = data.pattern;
+    if (!pattern || !Array.isArray(pattern) || pattern.length === 0) return;
+    if (hapticInterval !== null) { clearInterval(hapticInterval); hapticInterval = null; hapticState = 0; }
+    try {
+      const intPattern = pattern.map(v => Math.max(0, Math.min(Number(v) || 0, 10000)));
+      navigator.vibrate(intPattern);
+    } catch (e) {
+      console.error('[W2TD] Haptic error:', e);
+    }
+  }
 
   function haptic(duration = 30) {
     // Temporarily disabled: local UI tap vibration feedback.

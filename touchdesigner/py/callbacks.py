@@ -6,6 +6,8 @@ W2TD_VERSION = '1.0.0'
 GITHUB_PAGES_URL = 'https://w2td-dev.studio-edul.com/'
 MAX_CLIENTS = 20
 ACK_INTERVAL = 1.0  # seconds between data_ack signals per slot
+STALE_TIMEOUT_DEFAULT = 30.0  # default seconds; overridden by w2td_config 'Disconnecttimeout'
+STALE_CHECK_INTERVAL = 5.0    # min seconds between stale-slot scans (rate limit)
 
 W2TD_BASE = 'W2TD'
 W2TD_AUDIO = f'{W2TD_BASE}/webrtc_audio_container'
@@ -217,6 +219,88 @@ def _addr_for_slot(slot):
 		if s == slot:
 			return addr
 	return None
+
+def _full_cleanup_slot(webServerDAT, addr, slot):
+	"""onWebSocketClose와 동일한 정리 로직 — stale 슬롯 회수에도 사용.
+	sensor_table, touch_table, webrtc 상태, pending cam, last_seen 모두 정리."""
+	slots = _slots()
+	slots.pop(addr, None)
+	_save_slots(slots)
+
+	free = _free()
+	if slot not in free:
+		free.append(slot)
+		free.sort()
+	_save_free(free)
+
+	touch = _touch()
+	touch.pop(slot, None)
+	_save_touch(touch)
+
+	t = _op('sensor_table')
+	if t is not None:
+		row = _find_row(t, slot)
+		if row is not None:
+			t.deleteRow(row)
+
+	tt = _op('touch_table')
+	if tt is not None:
+		rows_to_delete = [r for r in range(1, tt.numRows) if int(tt[r, 'slot']) == slot]
+		for r in reversed(rows_to_delete):
+			tt.deleteRow(r)
+
+	# WebRTC cleanup
+	conn_id = op('/').fetch(f'w2td_webrtc_slot_to_uuid_{slot}', None)
+	if conn_id:
+		wrtc = _wt_dat()
+		if wrtc is not None:
+			try:
+				wrtc.closeConnection(conn_id)
+			except Exception:
+				pass
+		op('/').store(f'w2td_webrtc_addr_{conn_id}', None)
+		op('/').store(f'w2td_webrtc_slot_to_uuid_{slot}', None)
+	_wt_remove_by_slot(slot)
+	_clear_pending_cam_for_slot(slot)
+
+	op('/').store(f'w2td_last_seen_{slot}', 0)
+	op('/').store(f'w2td_last_ack_{slot}', 0)
+
+
+def cleanup_stale_slots(webServerDAT):
+	"""마지막 메시지 후 Disconnecttimeout(config) 초 경과한 슬롯 강제 정리.
+	모바일이 백그라운드 → 종료/네트워크 끊김 등 close 이벤트가 안 오는 모든 케이스 커버.
+	(JS suspend되면 heartbeat ping도 멈추므로 같은 메커니즘으로 감지됨)
+
+	자동 호출: onWebSocketReceiveText에서 STALE_CHECK_INTERVAL 마다 1회.
+	수동 호출 (Timer CHOP 등): op('web_server_dat').module.cleanup_stale_slots(op('web_server_dat'))
+	"""
+	cfg = _read_config()
+	try:
+		timeout = float(cfg.get('Disconnecttimeout') or cfg.get('disconnecttimeout') or STALE_TIMEOUT_DEFAULT)
+	except (ValueError, TypeError):
+		timeout = STALE_TIMEOUT_DEFAULT
+
+	now_t = time.time()
+	stale = []
+	for addr, slot in list(_slots().items()):
+		last_seen = op('/').fetch(f'w2td_last_seen_{slot}', 0)
+		if last_seen == 0:
+			continue
+		age = now_t - last_seen
+		if age > timeout:
+			stale.append((addr, slot, age))
+
+	for addr, slot, age in stale:
+		try:
+			webServerDAT.webSocketClose(addr)
+		except Exception:
+			pass
+		_full_cleanup_slot(webServerDAT, addr, slot)
+		print(f'[W2TD] Stale slot {slot} released ({addr}) — no msg in {age:.0f}s (timeout={timeout:.0f}s)')
+
+	return len(stale)
+
 
 def _send_data_ack(webServerDAT, addr, slot):
 	"""Send data_ack at most once per ACK_INTERVAL seconds per slot."""
@@ -637,6 +721,16 @@ def onWebSocketClose(webServerDAT, client):
 
 def onWebSocketReceiveText(webServerDAT, client, data):
 	addr = str(client)
+
+	# Stale 슬롯 정리 (rate-limited) — 백그라운드 종료된 좀비 슬롯 회수
+	now_t = time.time()
+	last_check = op('/').fetch('w2td_last_stale_check', 0)
+	if now_t - last_check > STALE_CHECK_INTERVAL:
+		op('/').store('w2td_last_stale_check', now_t)
+		try:
+			cleanup_stale_slots(webServerDAT)
+		except Exception as e:
+			print(f'[W2TD Error] cleanup_stale_slots: {e}')
 
 	# cam_receiver.html messages are routed separately (no slot)
 	if _is_cam_receiver_addr(addr):

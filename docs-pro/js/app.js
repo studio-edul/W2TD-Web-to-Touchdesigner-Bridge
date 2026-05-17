@@ -237,7 +237,7 @@ const W2TD_VERSION = '1.0.0';
       _applyCanvasTopbarVisibility();
     }
     if (cfg.videoout != null) {
-      const next = String(cfg.videoout);
+      const next = String(cfg.videoout).trim().toLowerCase();
       if (next !== displayMode) {
         displayMode = next;
         addLog(`Config: videoout=${next}`, 'info');
@@ -288,8 +288,8 @@ const W2TD_VERSION = '1.0.0';
       document.body.style.backgroundColor = colorToApply;
       const tp = $('touch-pad');
       if (tp) tp.style.backgroundColor = colorToApply;
-    } else if (!isTd) {
-      // td 모드가 아닌 경우 body 배경 초기화 (td 모드일 때는 video가 덮으므로 유지)
+    } else {
+      // td, js, none 모드 모두 body 배경 초기화
       document.body.style.backgroundColor = '';
       const tp = $('touch-pad');
       if (tp) tp.style.backgroundColor = '';
@@ -397,6 +397,8 @@ const W2TD_VERSION = '1.0.0';
       els.mainUI.classList.add('hidden');
       if (!touchPadActive) _showTouchPadDirectly();
     }
+    // devMode가 바뀌면 displayMode가 이미 설정된 경우에도 버튼 가시성 즉시 동기화
+    _updateFullscreenButtonVisibility();
   }
 
   function _removeDevOverlay() {
@@ -776,13 +778,16 @@ const W2TD_VERSION = '1.0.0';
       onBgColor: (color, duration) => {
         if (!bgColorEnabled) return;
         if (typeof AudioModule === 'undefined') return; // Pro feature check
-        // videoout gate: bg color only applies in 'color' mode (or when unset)
-        if (displayMode !== null && displayMode !== 'color') return;
-        // Store last color for instant apply on mode switch
+
+        // Always store last color for instant apply on mode switch
         if (color) {
           lastBgColor = color;
           localStorage.setItem('w2td-last-bg-color', color);
         }
+
+        // videoout gate: bg color only applies in 'color' mode
+        if (displayMode !== 'color') return;
+
         document.body.style.backgroundColor = color;
         // Apply to touch pad overlay as well (it covers body with its own background)
         const tp = $('touch-pad');
