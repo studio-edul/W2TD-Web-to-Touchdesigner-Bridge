@@ -168,7 +168,16 @@ const W2TD_VERSION = '1.0.0';
     if (sensorChanged) renderSensorList();
     if (cfg.dev_mode != null) {
       localStorage.setItem('w2td-dev-mode', String(cfg.dev_mode));
-      applyDevMode(!!parseInt(cfg.dev_mode));
+      const newDevMode = !!parseInt(cfg.dev_mode);
+      // Only trigger full mode transition when dev_mode actually changes.
+      // If already in the same mode (e.g. config re-broadcast from another key change),
+      // skip applyDevMode so touch pad / current UI state is preserved.
+      if (newDevMode !== devMode) {
+        applyDevMode(newDevMode);
+      } else {
+        // Still hide loading screen in case this is the very first config on reconnect
+        els.w2tdLoading.classList.add('hidden');
+      }
     }
     if (cfg.sensor_rear_camera != null) {
       const on = !!parseInt(cfg.sensor_rear_camera);
