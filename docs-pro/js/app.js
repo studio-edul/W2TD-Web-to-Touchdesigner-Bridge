@@ -227,6 +227,18 @@ const W2TD_VERSION = '1.0.0';
     if (cfg.show_dots != null) {
       showTouchPoints = !!parseInt(cfg.show_dots);
       updateTouchPointsToggleUI();
+      // config가 바뀌면 캔버스 즉시 반영 — 꺼질 때 clearRect, 켜질 때 현재 터치 재드로우
+      if (els.touchCanvas) {
+        if (!showTouchPoints) {
+          const _ctx = els.touchCanvas.getContext('2d');
+          _ctx.clearRect(0, 0, els.touchCanvas.width, els.touchCanvas.height);
+        } else if (touchPadActive) {
+          const _snap = TouchModule.getSnapshot();
+          if (_snap && _snap.touches.length > 0) {
+            Visualization.drawTouches(els.touchCanvas, _snap.touches, devMode);
+          }
+        }
+      }
     }
     if (cfg.cam_resolution != null) {
       WebRTCModule.setResolution(cfg.cam_resolution);
