@@ -17,7 +17,7 @@ const W2TD_VERSION = '1.0.0';
   let hapticFeedbackEnabled = true;
   let audioTxEnabled = false;  // enabled by TD config: audio_tx=1
   let videoTxEnabled = false;  // enabled by TD config: video_tx=1
-  let devMode = true; // true = full UI, false = minimal/auto mode
+  let devMode = false; // true = full UI, false = minimal/auto mode
   let vizInitialized = false;
   let cameraFrontEnabled = false;
   let cameraRearEnabled = false;
@@ -863,19 +863,10 @@ const W2TD_VERSION = '1.0.0';
     resizeTouchCanvas();
     window.addEventListener('resize', resizeTouchCanvas);
 
-    // On first QR-scan (no cached devMode), we don't know user vs dev mode yet.
-    // Show a loading screen so config can arrive before any UI is shown — prevents flash.
-    const hasCachedMode = localStorage.getItem('w2td-dev-mode') !== null;
-    if (autoConnect && !hasCachedMode) {
-      els.w2tdLoading.classList.remove('hidden'); // applyDevMode() will hide it
-    } else if (devMode) {
-      // Full UI: show main interface + initialize visualization
-      els.mainUI.classList.remove('hidden');
-      _initViz();
-    } else {
-      // Minimal mode: skip main UI, go straight to touch pad
-      _showTouchPadDirectly();
-    }
+    // Always show loading screen until config arrives — applyDevMode() will hide it.
+    // This prevents any flash of wrong UI (dev mode showing briefly in user mode, etc.)
+    // regardless of cached dev mode state or connection method (QR / manual).
+    els.w2tdLoading.classList.remove('hidden');
 
     requestWakeLock(); // default on; TD can override via config
   }
