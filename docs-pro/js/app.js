@@ -226,6 +226,7 @@ const W2TD_VERSION = '1.0.0';
     }
     if (cfg.show_dots != null) {
       showTouchPoints = !!parseInt(cfg.show_dots);
+      addLog(`Config: show_dots=${cfg.show_dots} → showTouchPoints=${showTouchPoints}`, 'info');
       updateTouchPointsToggleUI();
       _applyTouchDotsVisibility();
     }
@@ -1711,14 +1712,15 @@ const W2TD_VERSION = '1.0.0';
   function _applyTouchDotsVisibility() {
     if (!els.touchCanvas) return;
     if (!showTouchPoints) {
-      // display:none is safe: touch events are on #touch-pad, not #touch-canvas
-      els.touchCanvas.classList.add('touch-dots-hidden');
-      // Also clear canvas content so no stale dots show when re-enabled
+      // Inline style: highest CSS priority, cannot be overridden by any rule
+      els.touchCanvas.style.display = 'none';
+      // Also clear so no stale dots on re-show
       const ctx = els.touchCanvas.getContext('2d');
       ctx.clearRect(0, 0, els.touchCanvas.width, els.touchCanvas.height);
+      addLog('TouchDots: hidden (display:none)', 'info');
     } else {
-      els.touchCanvas.classList.remove('touch-dots-hidden');
-      // Redraw current touches if pad is active
+      els.touchCanvas.style.display = '';  // restore CSS default (block)
+      addLog('TouchDots: visible', 'info');
       if (touchPadActive) {
         const snap = TouchModule.getSnapshot();
         if (snap && snap.touches.length > 0) {
