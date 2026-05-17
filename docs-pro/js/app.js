@@ -1166,6 +1166,10 @@ const W2TD_VERSION = '1.0.0';
    *   otherwise: toast "nothing to show"
    */
   function enterTdStreamMonitor() {
+    if (displayMode !== 'td' && displayMode !== 'js' && displayMode !== 'color') {
+      showToast('No video mode set (videoout=none)');
+      return;
+    }
     haptic();
     if (displayMode === 'td') {
       // TD 영상 모드: td-stream-monitor 열기
@@ -1239,15 +1243,19 @@ const W2TD_VERSION = '1.0.0';
 
   function _updateFullscreenButtonVisibility() {
     if (!els.btnTdStream) return;
-    if (devMode && (displayMode === 'td' || displayMode === 'js' || displayMode === 'color')) {
-      // dev_mode=1: 모드가 설정된 순간 버튼 노출 (수동 진입 대기)
-      els.btnTdStream.classList.remove('hidden');
-      const labels = { td: 'TD Stream', js: 'JS Sketch', color: 'Color View' };
-      els.btnTdStream.textContent = labels[displayMode] || 'Fullscreen';
-    } else {
+    if (!devMode) {
+      // dev_mode=0: 버튼 완전 숨김
       els.btnTdStream.classList.add('hidden');
       document.body.classList.remove('sketch-fullscreen');
+      return;
     }
+    // dev_mode=1: 버튼 항상 표시 — 모드에 따라 활성/비활성
+    els.btnTdStream.classList.remove('hidden');
+    const activeMode = displayMode === 'td' || displayMode === 'js' || displayMode === 'color';
+    const labels = { td: 'TD Stream', js: 'JS Sketch', color: 'Color View' };
+    els.btnTdStream.textContent = activeMode ? (labels[displayMode] || 'Fullscreen') : 'Fullscreen';
+    els.btnTdStream.disabled = !activeMode;
+    els.btnTdStream.style.opacity = activeMode ? '' : '0.35';
   }
 
   function enterCameraMonitor() {
