@@ -447,7 +447,10 @@ const W2TD_VERSION = '1.0.0';
       if (WSClient.isConnected()) _startDataBroadcast();
     };
 
-    if (SensorModule.needsPermissionRequest()) {
+    if (SensorModule.isEnabled()) {
+      // Sensors already active (e.g. switching from dev mode) — skip permission flow entirely
+      startSensorsAndBroadcast();
+    } else if (SensorModule.needsPermissionRequest()) {
       // iOS: DeviceMotionEvent.requestPermission() must be in a direct button-click handler.
       // Show a dedicated START button — this is the most reliable iOS gesture trigger.
       els.userStartOverlay.classList.remove('hidden');
