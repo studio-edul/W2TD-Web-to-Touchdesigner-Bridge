@@ -71,6 +71,29 @@ def _read_config_values():
 	return res_key, dim, screenmode
 
 
+def _read_camera_enabled():
+	"""Return (rear_enabled, front_enabled) booleans from w2td_config.
+	Returns (True, True) as safe default when config is unavailable."""
+	rear = True
+	front = True
+	try:
+		cfg = _find_config()
+		if cfg and cfg.numRows >= 2:
+			for r in range(1, cfg.numRows):
+				try:
+					k = str(cfg[r, 0]).strip().lower()
+					v = str(cfg[r, 1]).strip()
+					if k == 'rearcamera':
+						rear = v not in ('0', 'false', 'off', '')
+					elif k == 'frontcamera':
+						front = v not in ('0', 'false', 'off', '')
+				except Exception:
+					pass
+	except Exception:
+		pass
+	return rear, front
+
+
 def _w2td_video():
 	"""Find webrtc_video_container. Uses me.parent() if DAT Execute is inside it."""
 	try:
@@ -192,6 +215,43 @@ def _find_layout1(container):
 	return layout1
 
 
+def _destroy_all_cam_nodes(container):
+	"""Destroy all cam render nodes (web_render_top, transform_top, crop_top,
+	camera_slot null TOPs, layout1) and clear stored mappings."""
+	if container is None:
+		return
+	prev_slots = tuple(op('/').fetch('w2td_cam_render_last_slots', ()))
+	for i in range(1, 32):
+		idx_str = str(i)
+		for prefix in ('web_render_top_', 'transform_top_', 'crop_top_'):
+			node = container.op(f'{prefix}{idx_str}')
+			if node:
+				try:
+					node.destroy()
+					print(f'[Cam Render Sync] Destroyed {prefix}{idx_str} (camera disabled)')
+				except Exception:
+					pass
+	for slot in prev_slots:
+		n = container.op(f'camera_slot{slot}')
+		if n:
+			try:
+				n.destroy()
+				print(f'[Cam Render Sync] Destroyed camera_slot{slot} (camera disabled)')
+			except Exception:
+				pass
+		op('/').store(f'w2td_web_render_slot_{slot}', None)
+		op('/').store(f'w2td_cam_res_logged_{slot}', False)
+		op('/').store(f'w2td_cam_receiver_addr_{slot}', None)
+	layout1 = container.op('layout1')
+	if layout1:
+		try:
+			layout1.destroy()
+			print('[Cam Render Sync] Destroyed layout1 (camera disabled)')
+		except Exception:
+			pass
+	op('/').store('w2td_cam_render_last_slots', ())
+
+
 def sync(table_dat=None):
 	"""Sync Web Render TOPs with sensor_table. Creates/destroys nodes and sets URLs."""
 	container = _get_container()
@@ -203,6 +263,19 @@ def sync(table_dat=None):
 		return
 
 	op('/').store('w2td_cam_render_container_err', False)
+
+	# --- Camera config gate ---
+	rear_on, front_on = _read_camera_enabled()
+	if not rear_on and not front_on:
+		# Both cameras disabled — destroy any existing nodes and stop
+		_destroy_all_cam_nodes(container)
+		shown = op('/').fetch('w2td_cam_render_disabled_logged', False)
+		if not shown:
+			print('[Cam Render Sync] Camera disabled (Rearcamera=0, Frontcamera=0) — skipping node creation')
+			op('/').store('w2td_cam_render_disabled_logged', True)
+		return
+	op('/').store('w2td_cam_render_disabled_logged', False)
+
 	res_key, sq, screenmode = _read_config_values()
 	rotate_deg = 90 if screenmode == 'landscape' else 0
 	slots = _read_connected_slots(table_dat)

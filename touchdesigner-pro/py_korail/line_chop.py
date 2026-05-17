@@ -11,11 +11,17 @@ Script CHOP — 속도 실시간 적분, 슬라이딩 윈도우 출력
   - 재접속 시 새 채널 추가, 이전 프레임 구간은 NO_DATA
   - 채널명: index_0, index_1, ... (접속 순)
   - 출력: 최근 Windowminutes 분 분량의 샘플만 출력
-  - 초과 데이터: .npy 파일로 아카이브 후 버퍼에서 제거
+  - 초과 데이터: CSV 파일로 아카이브 후 버퍼에서 제거
+  - 끊긴 슬롯: 윈도우 내 잔존 데이터까지 포함하여 CSV 저장
 
-Parent COMP 파라미터:
-  Speepdscale    float  (미사용 — GLSL uSpeedScale로 처리)
-  Windowminutes  int    출력 윈도우 분 단위  기본값 30
+커스텀 파라미터:
+  Reset          Toggle   1로 하면 다음 cook()에서 전체 초기화 후 0으로 복귀
+  Archivepath    Folder   CSV 저장 경로
+  Maxspeed       Float    0 = 제한없음 / > 0 = 속도 클램프 상한
+  Maxy           Float    Y축 최대값 기준
+  Adaptivescale  Toggle   1 = maxY 적응형 / 0 = maxY 고정 (초과값은 GLSL에서 클립)
+  Fps            Int      (미사용 — OUTPUT_FPS 30 고정)
+  Windowminutes  Int      출력 윈도우 분 단위, 기본값 30
 """
 
 import time as _time
@@ -30,7 +36,7 @@ _last_cook_t = None
 _ch_count    = 0
 _frame_count = 0
 
-_channels    = {}  # { key: {'buf': list, 'times': list, 'cur_y': float, 'active': bool} }
+_channels    = {}  # { key: {'buf': list, 'times': list, 'cur_y': float, 'active': bool, 'warmup': bool} }
 _key_order   = []
 _slot_to_key = {}  # { slot: key }
 
@@ -57,37 +63,82 @@ def _num_out_samples(scriptOp):
     return max(int(_window_seconds(scriptOp) * OUTPUT_FPS), 60)
 
 
-def _archive(key, excess_buf, folder):
-    """초과 버퍼를 CSV 파일에 append 저장."""
-    if not excess_buf:
+def _archive(key, buf, folder):
+    """버퍼를 CSV 파일에 append 저장."""
+    if not buf:
         return
     try:
         if not folder:
             folder = project.folder
         _os.makedirs(folder, exist_ok=True)
-        date_str    = _dt.datetime.now().strftime('%Y%m%d')
-        filename    = f'{date_str}_{key}.csv'
-        path        = _os.path.join(folder, filename)
+        date_str = _dt.datetime.now().strftime('%Y%m%d')
+        filename = f'{date_str}_{key}.csv'
+        path     = _os.path.join(folder, filename)
         with open(path, 'a') as f:
-            for v in excess_buf:
+            for v in buf:
                 f.write(f'{v}\n')
     except Exception as e:
         print(f'[line_chop] archive error: {e}')
 
 
-def cook(scriptOp):
+def _do_reset(scriptOp):
+    """전역 상태 전체 초기화. cook() 안에서만 호출."""
     global _last_cook_t, _ch_count, _frame_count
+    global _channels, _key_order, _slot_to_key
     global _dyn_max_y, _ease_start, _ease_from
     global _paused_since, _pause_accum, _session_start
 
-    scriptOp.rate = OUTPUT_FPS  # lock X-axis scale regardless of TD timeline FPS
+    _last_cook_t   = None
+    _ch_count      = 0
+    _frame_count   = 0
+    _channels      = {}
+    _key_order     = []
+    _slot_to_key   = {}
+    _dyn_max_y     = None
+    _ease_start    = None
+    _ease_from     = None
+    _paused_since  = None
+    _pause_accum   = 0.0
+    _session_start = None
+
+    # Reset 파라미터를 0으로 복귀 (Toggle 방식)
+    try:
+        scriptOp.par.Reset = 0
+    except Exception:
+        pass
+
+    scriptOp.clear()
+    scriptOp.numSamples = 1
+    scriptOp.appendChan('_highlight')[0] = 0.0
+    out_max      = scriptOp.appendChan('_maxY')
+    try:
+        out_max[0] = float(scriptOp.par.Maxy) or 100.0
+    except Exception:
+        out_max[0] = 100.0
+    print('[line_chop] Reset — all graph data cleared')
+
+
+def cook(scriptOp):
+    global _last_cook_t, _ch_count, _frame_count
+    global _channels, _key_order, _slot_to_key
+    global _dyn_max_y, _ease_start, _ease_from
+    global _paused_since, _pause_accum, _session_start
+
+    scriptOp.rate = OUTPUT_FPS
+
+    # ── Reset 체크 (Toggle par: 1 → 리셋 → 0으로 복귀) ─────────
+    try:
+        if int(scriptOp.par.Reset) == 1:
+            _do_reset(scriptOp)
+            return
+    except Exception:
+        pass
 
     now          = _time.monotonic()
     dt           = (now - _last_cook_t) if _last_cook_t is not None else 0.0
     _last_cook_t = now
 
-    # ── sensor_table에서 실제 연결된 슬롯 수집 ──────────────
-    # az != 0 체크: 센서 비활성 시 az=0, 활성 시 중력가속도(~9.8)가 들어옴
+    # ── sensor_table에서 실제 연결된 슬롯 수집 ──────────────────
     connected_slots = set()
     st = op('sensor_table')
     if st is not None and st.numRows >= 2:
@@ -97,20 +148,17 @@ def cook(scriptOp):
                 try:
                     if int(st[row, st_h['connected']]) != 1:
                         continue
-                    # 백그라운드(visibility=hidden) 슬롯 제외
-                    # → 홈 버튼 누르면 visibility=0이 되고 frozen 센서값(az≈9.8)을 무시
                     if 'visibility' in st_h and int(st[row, st_h['visibility']]) == 0:
                         continue
                     sensor_axes = ('az', 'ga', 'gb', 'gg')
                     if not any(col in st_h and abs(float(st[row, st_h[col]])) > 0.1 for col in sensor_axes):
-                        continue  # 센서 미활성 — az/ga/gb/gg 전부 0이면 선 그리기 시작 안 함
+                        continue
                     connected_slots.add(int(st[row, st_h['slot']]))
                 except Exception:
                     continue
-    # 센서가 실제로 활성화된 슬롯이 하나라도 있을 때만 타임라인 진행
     any_connected = bool(connected_slots)
 
-    # ── Pause / Resume — 연결 없으면 effective_now 정지 ──────
+    # ── Pause / Resume ───────────────────────────────────────────
     if any_connected:
         if _paused_since is not None:
             _pause_accum += now - _paused_since
@@ -121,7 +169,7 @@ def cook(scriptOp):
     effective_now = (_paused_since - _pause_accum) if _paused_since is not None \
                     else (now - _pause_accum)
 
-    # ── position_table_merged 읽기 ───────────────────────────────────
+    # ── position_table_merged 읽기 ───────────────────────────────
     active_slots = {}
     pt = op('position_table_merged')
     if pt is not None and pt.numRows >= 2:
@@ -129,7 +177,7 @@ def cook(scriptOp):
         if 'slot' in headers and 'speed' in headers:
             for row in range(1, pt.numRows):
                 try:
-                    slot  = int(pt[row, headers['slot']])
+                    slot = int(pt[row, headers['slot']])
                     if slot not in connected_slots:
                         continue
                     speed = float(pt[row, headers['speed']])
@@ -137,7 +185,7 @@ def cook(scriptOp):
                 except Exception:
                     continue
 
-    # ── 백그라운드(visibility:hidden) 슬롯 수집 — sensor_table.visibility 기준 ──
+    # ── 백그라운드 슬롯 수집 ────────────────────────────────────
     hidden_slots = set()
     if st is not None and st.numRows >= 2:
         st_hv = {str(st[0, c]): c for c in range(st.numCols)}
@@ -149,7 +197,7 @@ def cook(scriptOp):
                 except Exception:
                     continue
 
-    # ── base maxY 파라미터 ────────────────────────────────────
+    # ── 파라미터 읽기 ────────────────────────────────────────────
     try:
         base_max_y = float(scriptOp.par.Maxy)
         if base_max_y <= 0:
@@ -157,11 +205,27 @@ def cook(scriptOp):
     except Exception:
         base_max_y = 100.0
 
+    try:
+        max_speed = float(scriptOp.par.Maxspeed)  # 0 = 제한없음
+    except Exception:
+        max_speed = 0.0
+
+    try:
+        adaptive_scale = int(scriptOp.par.Adaptivescale)  # 1 = 적응형, 0 = 고정
+    except Exception:
+        adaptive_scale = 1
+
+    try:
+        archive_folder = str(scriptOp.par.Archivepath).strip()
+    except Exception:
+        archive_folder = ''
+
     if _dyn_max_y is None:
         _dyn_max_y = base_max_y
 
-    # 아직 아무도 접속 안 했으면 대기
-    if not active_slots and not _channels:
+    # ── 대기 중 (센서 연결 없고 채널도 없음) ────────────────────
+    # connected_slots 기준 — position_table_merged가 잠시 비어도 채널 유지
+    if not connected_slots and not _channels:
         scriptOp.clear()
         scriptOp.numSamples = 1
         scriptOp.appendChan('_highlight')[0] = 0.0
@@ -169,52 +233,59 @@ def cook(scriptOp):
         out_max[0] = _dyn_max_y
         return
 
-    # ── 새 채널 생성 ─────────────────────────────────────────
-    for slot in active_slots:
+    # ── 새 채널 생성 (connected_slots 기준) ──────────────────────
+    # active_slots(position_table_merged)가 리셋 직후 잠시 비어도
+    # 센서 데이터(connected_slots)가 있으면 채널을 즉시 생성
+    for slot in connected_slots:
         if slot not in _slot_to_key:
             key = f'index_{_ch_count}'
             _ch_count += 1
             _channels[key] = {
-                'buf':    [],   # cur_y 값
-                'times':  [],   # effective_now 타임스탬프
+                'buf':    [],
+                'times':  [],
                 'cur_y':  0.0,
                 'active': True,
+                'warmup': True,   # 첫 1프레임은 출력 제외 — GLSL 텍스처 크기 변화로 인한 깜빡임 방지
             }
             _key_order.append(key)
             _slot_to_key[slot] = key
             if _session_start is None:
-                _session_start = effective_now  # 첫 채널: 윈도우 좌측 기준점 고정
+                _session_start = effective_now
 
-    # ── 아카이브 저장 경로 ────────────────────────────────────
-    try:
-        archive_folder = str(scriptOp.par.Archivepath).strip()
-    except Exception:
-        archive_folder = ''
-
-    # ── cur_y 업데이트 (speed_scale 미적용 — 원본 데이터 보존) ──
+    # ── cur_y 업데이트 (Maxspeed 클램프 적용) ───────────────────
     for slot, speed in active_slots.items():
+        if slot not in _slot_to_key:
+            continue  # 아직 채널 없는 슬롯 (race condition 방어)
+        if max_speed > 0.0:
+            speed = min(speed, max_speed)
         ch = _channels[_slot_to_key[slot]]
         ch['cur_y'] += speed * dt
 
-    # ── 끊긴 슬롯: inactive 마킹 (백그라운드 슬롯은 유지) ───
+    # ── 끊긴 슬롯: 윈도우 내 버퍼 전체 저장 후 inactive 마킹 ───
     for slot in list(_slot_to_key.keys()):
         if slot not in active_slots and slot not in connected_slots and slot not in hidden_slots:
-            _channels[_slot_to_key[slot]]['active'] = False
+            key = _slot_to_key[slot]
+            ch  = _channels[key]
+            valid = [v for v in ch['buf'] if v > -0.5]
+            if valid:
+                _archive(key, ch['buf'], archive_folder)
+                print(f'[line_chop] slot {slot} disconnected — saved {len(valid)} samples → {key}.csv')
+            ch['active'] = False
             del _slot_to_key[slot]
 
-    # ── 연결 중일 때만 샘플 append (pause 중엔 버퍼 정지) ────
+    # ── 연결 중일 때만 샘플 append ──────────────────────────────
     if any_connected:
         active_visible_keys = {key for slot, key in _slot_to_key.items() if slot not in hidden_slots}
         for key, ch in _channels.items():
             if key in active_visible_keys:
-                val = ch['cur_y'] if ch['cur_y'] > 0.0 else NO_DATA
+                val = ch['cur_y']   # 0도 유효값 — 리셋 직후 cur_y=0부터 즉시 그리기 시작
             else:
                 val = NO_DATA
             ch['buf'].append(val)
             ch['times'].append(effective_now)
         _frame_count += 1
 
-    # ── 시간 기반 트리밍 (윈도우 초과분 아카이브 후 제거) ────
+    # ── 시간 기반 트리밍 (윈도우 초과분 아카이브 후 제거) ────────
     win_sec  = _window_seconds(scriptOp)
     t_cutoff = effective_now - win_sec
     for key, ch in _channels.items():
@@ -226,7 +297,7 @@ def cook(scriptOp):
             ch['buf']   = ch['buf'][cut:]
             ch['times'] = ch['times'][cut:]
 
-    # ── 윈도우 전체가 NO_DATA인 비활성 채널 제거 ─────────────
+    # ── 윈도우 전체가 NO_DATA인 비활성 채널 제거 ────────────────
     for key in list(_key_order):
         ch = _channels.get(key)
         if ch is None or ch['active']:
@@ -235,65 +306,68 @@ def cook(scriptOp):
             del _channels[key]
             _key_order.remove(key)
 
-    # index_* 채널이 하나도 없으면 _session_start 리셋
-    # → 다음 연결 시 왼쪽부터 다시 그려짐
     if not _key_order:
         _session_start = None
 
-    # ── dynamic maxY 계산 ────────────────────────────────────
+    # ── dynamic maxY 계산 ────────────────────────────────────────
     peak = max((ch['cur_y'] for ch in _channels.values()), default=0.0)
 
-    if peak > base_max_y:
-        # 최대값 초과 → 즉시 snap up, easing 취소
-        _dyn_max_y  = max(peak, _dyn_max_y)
+    if adaptive_scale:
+        # 적응형: peak에 맞게 scale up, 이후 easing으로 복귀
+        if peak > base_max_y:
+            _dyn_max_y  = max(peak, _dyn_max_y)
+            _ease_start = None
+            _ease_from  = None
+        elif _dyn_max_y > base_max_y:
+            if _ease_start is None:
+                _ease_start = now
+                _ease_from  = _dyn_max_y
+            t      = min((now - _ease_start) / EASE_DURATION, 1.0)
+            t_ease = t * t * (3.0 - 2.0 * t)
+            _dyn_max_y = _ease_from * (1.0 - t_ease) + base_max_y * t_ease
+            if t >= 1.0:
+                _dyn_max_y  = base_max_y
+                _ease_start = None
+        else:
+            _dyn_max_y = base_max_y
+    else:
+        # 고정: 항상 base_max_y. 초과값은 GLSL에서 자연 클립
+        _dyn_max_y  = base_max_y
         _ease_start = None
         _ease_from  = None
-    elif _dyn_max_y > base_max_y:
-        # 초과값 없음 → base_max_y 로 easing 복귀
-        if _ease_start is None:
-            _ease_start = now
-            _ease_from  = _dyn_max_y
-        t          = min((now - _ease_start) / EASE_DURATION, 1.0)
-        # ease in/out (smoothstep): t^2 * (3 - 2t)
-        t_ease     = t * t * (3.0 - 2.0 * t)
-        _dyn_max_y = _ease_from * (1.0 - t_ease) + base_max_y * t_ease
-        if t >= 1.0:
-            _dyn_max_y  = base_max_y
-            _ease_start = None
-    else:
-        _dyn_max_y = base_max_y
 
-    # ── 시간 기반 리샘플링 출력 (numSamples 고정 — Fps 무관) ─
+    # ── 시간 기반 리샘플링 출력 ──────────────────────────────────
     num_out = _num_out_samples(scriptOp)
-    # 세션 시작 후 첫 win_sec 동안은 윈도우 고정 (왼쪽부터 그려짐)
-    # 이후에는 effective_now 기준 슬라이딩 윈도우
     if _session_start is not None and effective_now - _session_start < win_sec:
         t_start = _session_start
     else:
         t_start = effective_now - win_sec
+
     scriptOp.clear()
     scriptOp.numSamples = max(num_out, 1)
 
     for key in _key_order:
         if key not in _channels:
             continue
-        ch     = _channels[key]
+        ch = _channels[key]
+
+        # warmup: 첫 1프레임은 all-NO_DATA로 출력 (GLSL 텍스처 크기 안정화)
+        if ch.get('warmup'):
+            ch['warmup'] = False
+            out_ch = scriptOp.appendChan(key)
+            out_ch.vals = [NO_DATA] * num_out
+            continue
+
         output = [NO_DATA] * num_out
-        # 모든 채널이 동일한 절대 타임라인 기준 사용
-        ch_t_start = t_start
-        # 실제 샘플을 시간 기반으로 출력 인덱스에 매핑
         last_valid_idx = -1
         for t, v in zip(ch['times'], ch['buf']):
             if v < -0.5:
                 continue
-            frac = (t - ch_t_start) / win_sec
+            frac = (t - t_start) / win_sec
             idx  = int(frac * num_out)
             if 0 <= idx < num_out:
                 output[idx] = v
                 last_valid_idx = max(last_valid_idx, idx)
-        # 마지막 유효 샘플까지만 갭 채움
-        # 끊김/숨김 이후 구간은 채우지 않음 → 선 중단
-        # 재연결 시 새 유효 샘플이 생기면 그 사이가 소급 채워짐
         if last_valid_idx >= 0:
             last_v = NO_DATA
             for i in range(last_valid_idx + 1):
@@ -304,7 +378,7 @@ def cook(scriptOp):
         out_ch = scriptOp.appendChan(key)
         out_ch.vals = output
 
-    # ── highlight 비트마스크 계산 (sensor_table touch_count) ─
+    # ── highlight 비트마스크 ─────────────────────────────────────
     highlight_mask = 0
     if st is not None and st.numRows >= 2:
         st_h2 = {str(st[0, c]): c for c in range(st.numCols)}
@@ -321,13 +395,20 @@ def cook(scriptOp):
                 except Exception:
                     continue
 
-    # ── _highlight 채널 출력 (GLSL이 마지막-1 row에서 읽음) ─
     out_hl      = scriptOp.appendChan('_highlight')
     out_hl.vals = [float(highlight_mask)] * max(num_out, 1)
 
-    # ── _maxY 채널 출력 (GLSL이 마지막 row에서 읽음) ─────────
     out_max      = scriptOp.appendChan('_maxY')
     out_max.vals = [_dyn_max_y] * max(num_out, 1)
+
+
+def onPulse(scriptOp, channel):
+    """Reset이 Pulse 타입으로 설정된 경우를 위한 fallback."""
+    if channel.name == 'Reset':
+        try:
+            scriptOp.par.Reset = 1  # cook()에서 Toggle처럼 감지
+        except Exception:
+            _do_reset(scriptOp)
 
 def onSetupParameters(scriptOp):
 	"""Auto-generated by Component Editor"""
@@ -355,6 +436,48 @@ def onSetupParameters(scriptOp):
 				"enableExpr": null,
 				"help": ""
 			},
+			"Reset": {
+				"name": "Reset",
+				"tupletName": "Reset",
+				"label": "Reset",
+				"page": "Custom",
+				"sequence": null,
+				"style": "Toggle",
+				"size": 1,
+				"defaultMode": "CONSTANT",
+				"default": false,
+				"defaultExpr": "",
+				"defaultBindExpr": "",
+				"enable": true,
+				"startSection": false,
+				"readOnly": false,
+				"enableExpr": null,
+				"help": ""
+			},
+			"Maxspeed": {
+				"name": "Maxspeed",
+				"tupletName": "Maxspeed",
+				"label": "Max Speed",
+				"page": "Custom",
+				"sequence": null,
+				"style": "Float",
+				"size": 1,
+				"defaultMode": "CONSTANT",
+				"default": 0.0,
+				"defaultExpr": "",
+				"defaultBindExpr": "",
+				"enable": true,
+				"startSection": false,
+				"readOnly": false,
+				"enableExpr": null,
+				"help": "",
+				"min": 0.0,
+				"max": 1.0,
+				"normMin": 0.0,
+				"normMax": 1.0,
+				"clampMin": false,
+				"clampMax": false
+			},
 			"Maxy": {
 				"name": "Maxy",
 				"tupletName": "Maxy",
@@ -378,6 +501,24 @@ def onSetupParameters(scriptOp):
 				"normMax": 1.0,
 				"clampMin": false,
 				"clampMax": false
+			},
+			"Adaptivescale": {
+				"name": "Adaptivescale",
+				"tupletName": "Adaptivescale",
+				"label": "Adaptive Scale",
+				"page": "Custom",
+				"sequence": null,
+				"style": "Toggle",
+				"size": 1,
+				"defaultMode": "CONSTANT",
+				"default": true,
+				"defaultExpr": "",
+				"defaultBindExpr": "",
+				"enable": true,
+				"startSection": false,
+				"readOnly": false,
+				"enableExpr": null,
+				"help": ""
 			},
 			"Fps": {
 				"name": "Fps",

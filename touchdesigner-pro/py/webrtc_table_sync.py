@@ -189,6 +189,31 @@ def _set_audio_chop_params(chop, conn_id):
 	return False
 
 
+def _read_mic_rx_enabled():
+	"""Read Microphone RX flag from w2td_config. Returns bool.
+	Checks 'Microphone' key. Returns True (safe default) if key absent."""
+	base = _w2td_base()
+	cfg_dat = None
+	if base:
+		cfg_dat = base.op('w2td_config')
+	if cfg_dat is None:
+		cfg_dat = op('w2td_config')
+	if cfg_dat is None:
+		return True
+	for r in range(1, cfg_dat.numRows):
+		try:
+			key = str(cfg_dat[r, 0]).strip().lower()
+			val = str(cfg_dat[r, 1]).strip()
+			if key in ('microphone', 'mic'):
+				try:
+					return bool(int(float(val)))
+				except (ValueError, TypeError):
+					return val.lower() not in ('none', '0', 'false', 'off', '')
+		except Exception:
+			pass
+	return True
+
+
 def _read_audio_tx_enabled():
 	"""Read Audio TX flag from w2td_config. Returns bool."""
 	base = _w2td_base()
@@ -308,11 +333,14 @@ def sync():
 		print('[W2TD WebRTC Sync] Error webrtc_audio_merge not found - create Merge CHOP under W2TD/webrtc_audio_container')
 		return
 
-	rows = _read_rows()
+	mic_rx = _read_mic_rx_enabled()
+	rows = _read_rows() if mic_rx else []
 	target_names = [f'webrtc_audio_{i}' for i in range(1, len(rows) + 1)]
 	slot_conn = {r[0]: r[1] for r in rows}
 
 	# ── RX: Audio Stream In CHOPs ─────────────────────────────────────────────
+	if not mic_rx:
+		print('[W2TD WebRTC Sync RX] Microphone disabled — skipping Audio Stream In node creation')
 	existing = {}
 	for chop in (container.ops('webrtc_audio_*') if hasattr(container, 'ops') else []):
 		if chop.name.startswith('webrtc_audio_') and chop.name[14:].isdigit():
@@ -416,9 +444,11 @@ def sync():
 	if w2td_audio_c is None:
 		return
 
+	# TX uses all connected slots regardless of mic_rx flag
+	tx_rows = rows if mic_rx else _read_rows()
 	active_slots = set()
 	slot_to_conn = {}
-	for slot, conn_id, _ in rows:
+	for slot, conn_id, _ in tx_rows:
 		active_slots.add(slot)
 		slot_to_conn[slot] = conn_id
 
