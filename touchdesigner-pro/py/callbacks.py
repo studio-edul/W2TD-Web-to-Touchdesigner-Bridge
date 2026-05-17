@@ -649,28 +649,28 @@ def _config_msg(cfg):
 	"""Build config JSON dict from w2td_config (Samplerate, Wakelock, Motion, Geolocation, ...)."""
 	out = {
 		'type':			   'config',
-		'sample_rate':		_config_val(cfg, 'Samplerate', 'samplerate', 'sample_rate', default=30),
-		'wake_lock':		  _config_val(cfg, 'Wakelock', 'wakelock', 'wake_lock', default=1),
-		'haptic':			 _config_val(cfg, 'Haptic', 'haptic', default=1),
-		'sensor_motion':	  _config_val(cfg, 'Motion', 'motion', 'sensor_motion', default=1),
-		'sensor_orientation': _config_val(cfg, 'Orientation', 'orientation', 'sensor_orientation', default=1),
-		'sensor_geolocation': _config_val(cfg, 'Geolocation', 'geolocation', 'sensor_geolocation', default=1),
-		'sensor_touch':	   _config_val(cfg, 'Touch', 'touch', 'sensor_touch', default=1),
-		'dev_mode':		   _config_val(cfg, 'Devmode', 'devmode', 'dev_mode', default=1),
-		'sensor_rear_camera': _config_val(cfg, 'Rearcamera', 'rearcamera', 'sensor_rear_camera', default=0),
-		'sensor_front_camera': _config_val(cfg, 'Frontcamera', 'frontcamera', 'sensor_front_camera', default=0),
-		'sensor_microphone':  _config_val(cfg, 'Microphone', 'microphone', 'sensor_microphone', default=0),
-		'audio_echo_cancellation': _config_val(cfg, 'Echocancellation', 'echocancellation', 'audio_echo_cancellation', default=0),
-		'audio_noise_suppression': _config_val(cfg, 'Noisesuppression', 'noisesuppression', 'audio_noise_suppression', default=0),
-		'audio_auto_gain':	_config_val(cfg, 'Audiogain', 'audiogain', 'audio_auto_gain', default=0),
-		'show_dots':		  _config_val(cfg, 'Showtouchdots', 'showtouchdots', 'Showdots', 'showdots', 'show_dots', default=1),
+		'sample_rate':		_config_val(cfg, 'Samplerate', default=30),
+		'wake_lock':		  _config_val(cfg, 'Wakelock', default=1),
+		'haptic':			 _config_val(cfg, 'Haptic', default=1),
+		'sensor_motion':	  _config_val(cfg, 'Motion', default=1),
+		'sensor_orientation': _config_val(cfg, 'Orientation', default=1),
+		'sensor_geolocation': _config_val(cfg, 'Geolocation', default=1),
+		'sensor_touch':	   _config_val(cfg, 'Touch', default=1),
+		'dev_mode':		   _config_val(cfg, 'Devmode', default=1),
+		'sensor_rear_camera': _config_val(cfg, 'Rearcamera', default=0),
+		'sensor_front_camera': _config_val(cfg, 'Frontcamera', default=0),
+		'sensor_microphone':  _config_val(cfg, 'Microphone', default=0),
+		'audio_echo_cancellation': _config_val(cfg, 'Echocancellation', default=0),
+		'audio_noise_suppression': _config_val(cfg, 'Noisesuppression', default=0),
+		'audio_auto_gain':	_config_val(cfg, 'Audiogain', default=0),
+		'show_dots':		  _config_val(cfg, 'Showdots', 'Showtouchdots', default=1),
 		# Videoout: none=off, td=TD video stream, js=JS canvas sketch, color=bg color
-		'videoout':		   _config_val(cfg, 'Videoout', 'videoout', 'Video', 'display_mode', default='none'),
+		'videoout':		   _config_val(cfg, 'Videoout', default='none'),
 		# Show top status bar while a JS sketch is rendering (0=hide, 1=show)
-		'canvas_topbar':	  _config_val(cfg, 'Canvastopbar', 'canvastopbar', 'canvas_topbar', default=1),
+		'canvas_topbar':	  _config_val(cfg, 'Canvastopbar', default=1),
 	}
-	ice_srv = (cfg.get('ice_servers') or cfg.get('Ice_servers') or '').strip()
-	turn_srv = (cfg.get('Turnserver') or cfg.get('turn_server') or '').strip()
+	ice_srv = cfg.get('Iceservers', '').strip()
+	turn_srv = cfg.get('Turnserver', '').strip()
 	if turn_srv or ice_srv:
 		servers = []
 		if ice_srv:
@@ -684,8 +684,8 @@ def _config_msg(cfg):
 				{'urls': 'stun:stun1.l.google.com:19302'}
 			]
 		if turn_srv:
-			turn_user = (cfg.get('Turnusername') or cfg.get('turn_username') or '').strip()
-			turn_pass = (cfg.get('Turnpassword') or cfg.get('turn_password') or '').strip()
+			turn_user = cfg.get('Turnusername', '').strip()
+			turn_pass = cfg.get('Turnpassword', '').strip()
 			servers.append({
 				'urls': turn_srv,
 				'username': turn_user,
@@ -693,7 +693,7 @@ def _config_msg(cfg):
 			})
 		out['ice_servers'] = servers
 
-	if (cfg.get('ice_transport_policy') or cfg.get('Ice_transport_policy') or '').strip() == 'relay':
+	if cfg.get('Icetransportpolicy', '').strip() == 'relay':
 		out['ice_transport_policy'] = 'relay'
 	return out
 

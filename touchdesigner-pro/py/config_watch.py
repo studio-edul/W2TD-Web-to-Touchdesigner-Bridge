@@ -75,46 +75,37 @@ def _build_config_msg(cfg):
 	"""Build config JSON dict matching w2td_config key names."""
 	out = {
 		'type': 'config',
-		'sample_rate': _cfg_val(cfg, 'Samplerate', 'samplerate', 'sample_rate', default=30),
-		'wake_lock': _cfg_val(cfg, 'Wakelock', 'wakelock', 'wake_lock', default=1),
-		'haptic': _cfg_val(cfg, 'Haptic', 'haptic', default=1),
-		'sensor_motion': _cfg_val(cfg, 'Motion', 'motion', 'sensor_motion', default=1),
-		'sensor_orientation': _cfg_val(cfg, 'Orientation', 'orientation', 'sensor_orientation', default=1),
-		'sensor_geolocation': _cfg_val(cfg, 'Geolocation', 'geolocation', 'sensor_geolocation', default=1),
-		'sensor_touch': _cfg_val(cfg, 'Touch', 'touch', 'sensor_touch', default=1),
-		'dev_mode': _cfg_val(cfg, 'Devmode', 'devmode', 'dev_mode', default=1),
-		'sensor_rear_camera': _cfg_val(cfg, 'Rearcamera', 'rearcamera', 'sensor_rear_camera', default=0),
-		'sensor_front_camera': _cfg_val(cfg, 'Frontcamera', 'frontcamera', 'sensor_front_camera', default=0),
-		'sensor_microphone': _cfg_val(cfg, 'Microphone', 'microphone', 'sensor_microphone', default=1),
-		'audio_echo_cancellation': _cfg_val(cfg, 'Echocancellation', 'echocancellation', 'audio_echo_cancellation', default=0),
-		'audio_noise_suppression': _cfg_val(cfg, 'Noisesuppression', 'noisesuppression', 'audio_noise_suppression', default=0),
-		'audio_auto_gain': _cfg_val(cfg, 'Audiogain', 'audiogain', 'audio_auto_gain', default=0),
-		'show_dots': _cfg_val(cfg, 'Showtouchdots', 'showtouchdots', 'Showdots', 'showdots', 'show_dots', default=1),
-		'backgroundcolor': _cfg_val(cfg, 'Backgroundcolor', 'backgroundcolor', 'background_color', default=1),
-		'flashlight': _cfg_val(cfg, 'Flashlight', 'flashlight', default=1),
-		'hapticfeedback': _cfg_val(cfg, 'Hapticfeedback', 'hapticfeedback', 'Haptic', 'haptic', default=1),
-		'audio_tx': _cfg_val(cfg, 'Audio', 'audio_tx', default=1),
-		'video_tx': _cfg_val(cfg, 'Video', 'video_tx', default=1),
+		'sample_rate': _cfg_val(cfg, 'Samplerate', default=30),
+		'wake_lock': _cfg_val(cfg, 'Wakelock', default=1),
+		'haptic': _cfg_val(cfg, 'Haptic', default=1),
+		'sensor_motion': _cfg_val(cfg, 'Motion', default=1),
+		'sensor_orientation': _cfg_val(cfg, 'Orientation', default=1),
+		'sensor_geolocation': _cfg_val(cfg, 'Geolocation', default=1),
+		'sensor_touch': _cfg_val(cfg, 'Touch', default=1),
+		'dev_mode': _cfg_val(cfg, 'Devmode', default=1),
+		'sensor_rear_camera': _cfg_val(cfg, 'Rearcamera', default=0),
+		'sensor_front_camera': _cfg_val(cfg, 'Frontcamera', default=0),
+		'sensor_microphone': _cfg_val(cfg, 'Microphone', default=1),
+		'audio_echo_cancellation': _cfg_val(cfg, 'Echocancellation', default=0),
+		'audio_noise_suppression': _cfg_val(cfg, 'Noisesuppression', default=0),
+		'audio_auto_gain': _cfg_val(cfg, 'Audiogain', default=0),
+		'show_dots': _cfg_val(cfg, 'Showdots', 'Showtouchdots', default=1),
+		'backgroundcolor': _cfg_val(cfg, 'Backgroundcolor', default=1),
+		'flashlight': _cfg_val(cfg, 'Flashlight', default=1),
+		'hapticfeedback': _cfg_val(cfg, 'Hapticfeedback', 'Haptic', default=1),
+		'audio_tx': _cfg_val(cfg, 'Audio', default=1),
+		'video_tx': _cfg_val(cfg, 'Video', default=1),
 		# videoout: 'none' | 'td' | 'js' | 'color' — string value, not int
-		'videoout': next(
-			(cfg[k].strip().lower() for k in ('Videoout', 'videoout', 'Video', 'display_mode')
-			 if k in cfg and cfg[k].strip()),
-			'none'
-		),
+		'videoout': cfg.get('Videoout', 'none').strip().lower() or 'none',
 		# canvas_topbar: show/hide top bar during JS sketch (0=hide, 1=show)
-		'canvas_topbar': _cfg_val(cfg, 'Canvastopbar', 'canvastopbar', 'canvas_topbar', default=1),
+		'canvas_topbar': _cfg_val(cfg, 'Canvastopbar', default=1),
 	}
-	ice_srv = (cfg.get('ice_servers') or cfg.get('Ice_servers') or '').strip()
+	ice_srv = cfg.get('Iceservers', '').strip()
 	if ice_srv:
 		out['ice_servers'] = ice_srv
-	if (cfg.get('ice_transport_policy') or cfg.get('Ice_transport_policy') or '').strip() == 'relay':
+	if cfg.get('Icetransportpolicy', '').strip() == 'relay':
 		out['ice_transport_policy'] = 'relay'
-	cam_res = 'non-commercial'
-	for k, v in cfg.items():
-		if k.lower() == 'resolution':
-			cam_res = v.strip().lower()
-			break
-	out['cam_resolution'] = cam_res
+	out['cam_resolution'] = cfg.get('Resolution', 'non-commercial').strip().lower() or 'non-commercial'
 	return out
 
 
