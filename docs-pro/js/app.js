@@ -242,6 +242,10 @@ const W2TD_VERSION = '1.0.0';
         displayMode = next;
         addLog(`Config: videoout=${next}`, 'info');
         _applyDisplayMode();
+        // videoout=td: broadcasting 중이면 video recvonly WebRTC 즉시 시작
+        if (next === 'td' && broadcasting && !WebRTCModule.isPCActive()) {
+          _maybeStartWebRTC();
+        }
       }
     }
   }
@@ -891,7 +895,8 @@ const W2TD_VERSION = '1.0.0';
   async function _maybeStartWebRTC() {
     if (!WSClient.isConnected() || !SensorModule.isEnabled() ||
       WebRTCModule.isPCActive() || !broadcasting) return;
-    if (!micEnabled && !audioTxEnabled && !videoTxEnabled) return;
+    // videoout=td 모드면 video recvonly transceiver가 필요하므로 자동 포함
+    if (!micEnabled && !audioTxEnabled && !videoTxEnabled && displayMode !== 'td') return;
     if (_isTunnelConnection()) {
       // Warning removed since TURN server is now built-in
     }
@@ -901,7 +906,8 @@ const W2TD_VERSION = '1.0.0';
       noiseSuppression: audioNoiseSuppression,
       autoGainControl: audioAutoGain,
       audioTx: audioTxEnabled,
-      videoTx: videoTxEnabled,
+      // videoout=td 모드면 video recvonly transceiver 자동 추가 (video_tx 설정 없어도 동작)
+      videoTx: videoTxEnabled || displayMode === 'td',
     }));
     if (ok === false) {
       micEnabled = false;

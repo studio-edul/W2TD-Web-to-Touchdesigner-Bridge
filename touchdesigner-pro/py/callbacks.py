@@ -663,7 +663,7 @@ def _config_msg(cfg):
 		'audio_echo_cancellation': _config_val(cfg, 'Echocancellation', 'echocancellation', 'audio_echo_cancellation', default=0),
 		'audio_noise_suppression': _config_val(cfg, 'Noisesuppression', 'noisesuppression', 'audio_noise_suppression', default=0),
 		'audio_auto_gain':	_config_val(cfg, 'Audiogain', 'audiogain', 'audio_auto_gain', default=0),
-		'show_dots':		  _config_val(cfg, 'Showdots', 'showdots', 'show_dots', default=1),
+		'show_dots':		  _config_val(cfg, 'Showtouchdots', 'showtouchdots', 'Showdots', 'showdots', 'show_dots', default=1),
 		# Videoout: none=off, td=TD video stream, js=JS canvas sketch, color=bg color
 		'videoout':		   _config_val(cfg, 'Videoout', 'videoout', 'Video', 'display_mode', default='none'),
 		# Show top status bar while a JS sketch is rendering (0=hide, 1=show)

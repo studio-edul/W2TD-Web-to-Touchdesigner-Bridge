@@ -554,14 +554,15 @@ input[type="checkbox"] {
   display: block;
 }
 
-/* Live sketch surface — full-viewport, below touch-pad (500) */
+/* Live sketch surface — full-viewport, above touch-pad (500) so JS sketch is visible in user mode.
+   pointer-events: none ensures touch events pass through to the touch-pad below. */
 #render-canvas {
   position: fixed;
   top: 0;
   left: 0;
   width: 100vw;
   height: 100vh;
-  z-index: 50;
+  z-index: 510;
   display: block;
   pointer-events: none;
   background: transparent;
