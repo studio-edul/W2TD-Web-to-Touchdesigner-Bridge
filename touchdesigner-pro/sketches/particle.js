@@ -28,9 +28,9 @@ let PARTICLE_COUNT = 2000;
 let EMIT_RATE = 100;
 let BASE_SPEED = 1;    // 파티클 기본 초기 속도
 let LIFE_MAX = 220;
-let FORCE_SCALE = 0.5;    // x/y 가속도 → 파티클 힘 민감도
-let FORCE_MAX   = 1.0;    // 선형가속도 클램핑 최대값 (단위: G, 1.0 = 9.8 m/s²)
-let SMOOTH_ALPHA = 0.03;  // 저역통과 필터 계수 (0~1, 낮을수록 더 부드럽고 지연 큼)
+let FORCE_SCALE = 2;    // x/y 가속도 → 파티클 힘 민감도
+let FORCE_MAX = 3.0;    // 선형가속도 클램핑 최대값 (단위: G, 1.0 = 9.8 m/s²)
+let SMOOTH_ALPHA = 0.15;  // 저역통과 필터 계수 (0~1, 낮을수록 더 부드럽고 지연 큼)
 let TURB_SCALE = 0.05;    // 노이즈 난류 강도
 let TURB_FREQ = 0.008;   // 노이즈 난류 주파수
 let Z_SCALE = 1.5;     // z축 선형가속도 → 초기속도 민감도
@@ -38,9 +38,9 @@ let Z_SPEED_MIN = 0.2;     // z축 multiplier 최솟값 (정지 시 하한)
 let Z_SPEED_MAX = 3.0;     // z축 multiplier 최댓값
 
 // 파티클 타입별 크기 범위 (타입0=소, 타입1=중, 타입2=대)
-let SIZE_0_MIN = 0.5;  let SIZE_0_MAX = 1.0;
-let SIZE_1_MIN = 1.0;  let SIZE_1_MAX = 2.0;
-let SIZE_2_MIN = 2.0;  let SIZE_2_MAX = 3.0;
+let SIZE_0_MIN = 0.5; let SIZE_0_MAX = 1.0;
+let SIZE_1_MIN = 1.0; let SIZE_1_MAX = 2.0;
+let SIZE_2_MIN = 2.0; let SIZE_2_MAX = 3.0;
 
 // ── Constants (변경 불필요) ───────────────────────────────────────────────────
 const G = 9.8;
@@ -48,7 +48,7 @@ const DEG = Math.PI / 180;
 
 // 크기 변수를 참조하는 getter로 정의 — 변수 수정 즉시 반영됨
 const TYPES = [
-  { get sizeMin() { return SIZE_0_MIN; }, get sizeMax() { return SIZE_0_MAX; }, alphaMax: 1.0  },
+  { get sizeMin() { return SIZE_0_MIN; }, get sizeMax() { return SIZE_0_MAX; }, alphaMax: 1.0 },
   { get sizeMin() { return SIZE_1_MIN; }, get sizeMax() { return SIZE_1_MAX; }, alphaMax: 0.55 },
   { get sizeMin() { return SIZE_2_MIN; }, get sizeMax() { return SIZE_2_MAX; }, alphaMax: 0.18 },
 ];
@@ -234,10 +234,10 @@ function loop() {
   smoothX = smoothX * (1 - SMOOTH_ALPHA) + linX * SMOOTH_ALPHA;
   smoothY = smoothY * (1 - SMOOTH_ALPHA) + linY * SMOOTH_ALPHA;
   force.x = clamp(smoothX / G, -FORCE_MAX, FORCE_MAX);
-  force.y = clamp(smoothY / G, -FORCE_MAX, FORCE_MAX);
-  // Option A: 원래 방식 (즉각 반응) — 되돌리려면 위 4줄 주석하고 아래 2줄 활성화:
+  force.y = clamp(-smoothY / G, -FORCE_MAX, FORCE_MAX); // Y축 반전: 캔버스 Y(아래+) vs 센서 Y 방향 보정
+  // Option A: 필터 없이 즉각 반응 — 되돌리려면 위 4줄 주석하고 아래 2줄 활성화:
   // force.x = clamp(linX / G, -FORCE_MAX, FORCE_MAX);
-  // force.y = clamp(linY / G, -FORCE_MAX, FORCE_MAX);
+  // force.y = clamp(-linY / G, -FORCE_MAX, FORCE_MAX);
 
   // z축 선형가속도 → 파티클 초기속도 multiplier
   // 앞뒤로 흔들수록(az 큰 변화) 파티클이 더 빠르게 튀어나옴
