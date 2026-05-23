@@ -16,6 +16,9 @@ node_modules/
 # Development planning (not for production)
 development/
 
+# Dev tools (local only)
+dev-tools/
+
 # TouchDesigner
 touchdesigner/qr.png
 touchdesigner-pro/qr.png

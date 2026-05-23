@@ -483,23 +483,23 @@ def _config_msg(cfg):
 	"""Build config JSON dict from w2td_config (Samplerate, Wakelock, Motion, Geolocation, ...)."""
 	out = {
 		'type':               'config',
-		'sample_rate':        _config_val(cfg, 'Samplerate', 'samplerate', 'sample_rate', default=30),
-		'wake_lock':          _config_val(cfg, 'Wakelock', 'wakelock', 'wake_lock', default=1),
-		'sensor_motion':      _config_val(cfg, 'Motion', 'motion', 'sensor_motion', default=1),
-		'sensor_orientation': _config_val(cfg, 'Orientation', 'orientation', 'sensor_orientation', default=1),
-		'sensor_geolocation': _config_val(cfg, 'Geolocation', 'geolocation', 'sensor_geolocation', default=1),
-		'sensor_touch':       _config_val(cfg, 'Touch', 'touch', 'sensor_touch', default=1),
-		'dev_mode':           _config_val(cfg, 'Devmode', 'devmode', 'dev_mode', default=1),
-		'sensor_rear_camera': _config_val(cfg, 'Rearcamera', 'rearcamera', 'sensor_rear_camera', default=0),
-		'sensor_front_camera': _config_val(cfg, 'Frontcamera', 'frontcamera', 'sensor_front_camera', default=0),
-		'sensor_microphone':  _config_val(cfg, 'Microphone', 'microphone', 'sensor_microphone', default=1),
-		'audio_echo_cancellation': _config_val(cfg, 'Echocancellation', 'echocancellation', 'audio_echo_cancellation', default=0),
-		'audio_noise_suppression': _config_val(cfg, 'Noisesuppression', 'noisesuppression', 'audio_noise_suppression', default=0),
-		'audio_auto_gain':    _config_val(cfg, 'Audiogain', 'audiogain', 'audio_auto_gain', default=0),
-		'show_dots':          _config_val(cfg, 'Showdots', 'showdots', 'show_dots', default=1),
+		'sample_rate':        _config_val(cfg, 'Samplerate', default=30),
+		'wake_lock':          _config_val(cfg, 'Wakelock', default=1),
+		'sensor_motion':      _config_val(cfg, 'Motion', default=1),
+		'sensor_orientation': _config_val(cfg, 'Orientation', default=1),
+		'sensor_geolocation': _config_val(cfg, 'Geolocation', default=1),
+		'sensor_touch':       _config_val(cfg, 'Touch', default=1),
+		'dev_mode':           _config_val(cfg, 'Devmode', default=1),
+		'sensor_rear_camera': _config_val(cfg, 'Rearcamera', default=0),
+		'sensor_front_camera': _config_val(cfg, 'Frontcamera', default=0),
+		'sensor_microphone':  _config_val(cfg, 'Microphone', default=1),
+		'audio_echo_cancellation': _config_val(cfg, 'Echocancellation', default=0),
+		'audio_noise_suppression': _config_val(cfg, 'Noisesuppression', default=0),
+		'audio_auto_gain':    _config_val(cfg, 'Audiogain', default=0),
+		'show_dots':          _config_val(cfg, 'Showdots', default=1),
 	}
-	ice_srv = (cfg.get('ice_servers') or cfg.get('Ice_servers') or '').strip()
-	turn_srv = (cfg.get('Turnserver') or cfg.get('turn_server') or '').strip()
+	ice_srv = cfg.get('Iceservers', '').strip()
+	turn_srv = cfg.get('Turnserver', '').strip()
 	if turn_srv or ice_srv:
 		servers = []
 		if ice_srv:
@@ -513,8 +513,8 @@ def _config_msg(cfg):
 				{'urls': 'stun:stun1.l.google.com:19302'}
 			]
 		if turn_srv:
-			turn_user = (cfg.get('Turnusername') or cfg.get('turn_username') or '').strip()
-			turn_pass = (cfg.get('Turnpassword') or cfg.get('turn_password') or '').strip()
+			turn_user = cfg.get('Turnusername', '').strip()
+			turn_pass = cfg.get('Turnpassword', '').strip()
 			servers.append({
 				'urls': turn_srv,
 				'username': turn_user,
@@ -522,7 +522,7 @@ def _config_msg(cfg):
 			})
 		out['ice_servers'] = servers
 
-	if (cfg.get('ice_transport_policy') or cfg.get('Ice_transport_policy') or '').strip() == 'relay':
+	if cfg.get('Icetransportpolicy', '').strip() == 'relay':
 		out['ice_transport_policy'] = 'relay'
 	return out
 
@@ -603,8 +603,9 @@ def onHTTPRequest(webServerDAT, request, response):
 	host = stored_url.replace('https://', '').replace('http://', '').strip()
 	if not host:
 		host = request.get('headers', {}).get('Host', '')
-	print(f'[W2TD] HTTP request -> host: {host}')
-	redirect_url = GITHUB_PAGES_URL + ('?td=' + host if host else '')
+	short_host = host.replace('.trycloudflare.com', '') if host.endswith('.trycloudflare.com') else host
+	print(f'[W2TD] HTTP request -> host: {short_host}')
+	redirect_url = GITHUB_PAGES_URL + ('?td=' + short_host if short_host else '')
 
 	response['statusCode'] = 200
 	response['statusReason'] = 'OK'
@@ -1068,7 +1069,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 				t[row, 'screen_height'] = screen_height
 				t[row, 'device_pixel_ratio'] = device_pixel_ratio
 		
-		print(f'[W2TD] Screen info updated: slot {slot} -> CSS: {css_width}x{css_height}, Physical: {physical_width}x{physical_height}, Screen: {screen_width}x{screen_height} (DPR: {device_pixel_ratio})')
+		print(f'[W2TD] Screen info: slot {slot} | CSS {css_width}x{css_height} / Physical {physical_width}x{physical_height} (DPR {device_pixel_ratio})')
 
 	elif msg_type == 'visibility':
 		state = msg.get('state')

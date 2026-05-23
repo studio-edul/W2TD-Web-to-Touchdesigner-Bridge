@@ -26,7 +26,8 @@ const W2TD_VERSION = '1.0.0';
 
   function _isTunnelConnection() {
     const addr = (els.tdAddress && els.tdAddress.value || '').toLowerCase();
-    return addr.includes('trycloudflare.com') || addr.includes('cloudflare') || addr.includes('.cfargotunnel.com');
+    const noProt = addr.replace(/^(wss?|https?):\/\//, '');
+    return !noProt.includes('.') || addr.includes('trycloudflare.com') || addr.includes('cloudflare') || addr.includes('.cfargotunnel.com');
   }
 
   const $ = (id) => document.getElementById(id);
@@ -141,7 +142,11 @@ const W2TD_VERSION = '1.0.0';
     if (sensorChanged) renderSensorList();
     if (cfg.dev_mode != null) {
       localStorage.setItem('w2td-dev-mode', String(cfg.dev_mode));
-      applyDevMode(!!parseInt(cfg.dev_mode));
+      const newDevMode = !!parseInt(cfg.dev_mode);
+      const isInitialConfig = !els.w2tdLoading.classList.contains('hidden');
+      if (isInitialConfig || newDevMode !== devMode) {
+        applyDevMode(newDevMode);
+      }
     }
     if (cfg.sensor_rear_camera != null) {
       const on = !!parseInt(cfg.sensor_rear_camera);
@@ -301,13 +306,15 @@ const W2TD_VERSION = '1.0.0';
       if (WSClient.isConnected()) _startDataBroadcast();
     };
 
-    if (SensorModule.needsPermissionRequest()) {
+    if (SensorModule.isEnabled()) {
+      // Sensors already active (e.g. switching from dev mode) — skip permission flow entirely
+      startSensorsAndBroadcast();
+    } else if (SensorModule.needsPermissionRequest()) {
       // iOS: DeviceMotionEvent.requestPermission() must be in a direct button-click handler.
       // Show a dedicated START button — this is the most reliable iOS gesture trigger.
       els.userStartOverlay.classList.remove('hidden');
       els.btnUserStart.addEventListener('click', async function () {
         els.userStartOverlay.classList.add('hidden');
-        // Integrated permission request: sensors + mic + wakeLock
         await requestAllPermissions();
         startSensorsAndBroadcast();
       }, { once: true });
@@ -318,17 +325,15 @@ const W2TD_VERSION = '1.0.0';
       });
     }
 
-    TouchModule.init(els.touchCanvas, (snapshot) => {
+    // Events on touchPad (not touchCanvas) so display:none on canvas doesn't break touch tracking
+    TouchModule.init(els.touchPad, (snapshot) => {
       if (showTouchPoints) {
         Visualization.drawTouches(els.touchCanvas, snapshot.touches, false);
-      } else {
-        // Clear canvas if touch points are hidden
-        const ctx = els.touchCanvas.getContext('2d');
-        ctx.clearRect(0, 0, els.touchCanvas.width, els.touchCanvas.height);
       }
       handleTouchData(snapshot);
     });
     updateTouchPointsToggleUI();
+    _applyTouchDotsVisibility();
   }
 
   function init() {
@@ -482,10 +487,16 @@ const W2TD_VERSION = '1.0.0';
   }
 
   function handleConnect(autoConnect = false) {
-    const addr = els.tdAddress.value.trim();
+    let addr = els.tdAddress.value.trim();
     if (!addr) {
       alert('Please enter the TouchDesigner address.');
       return;
+    }
+
+    // Auto-append .trycloudflare.com if address has no dot (short tunnel ID)
+    const addrNoProt = addr.replace(/^(wss?|https?):\/\//, '');
+    if (!addrNoProt.includes('.')) {
+      addr = addrNoProt + '.trycloudflare.com';
     }
 
     saveSettings();
@@ -500,7 +511,7 @@ const W2TD_VERSION = '1.0.0';
         addLog('WS status: ' + status, status === 'connected' ? 'info' : status === 'error' ? 'error' : 'warn');
         if (status === 'connected') {
           WSClient.send({ type: 'hello' });
-          addLog('Hello sent to TD', 'info');
+          console.log('[W2TD] Hello sent to TD');
           if (SensorModule.isEnabled() && WSClient.isConnected()) {
             _startDataBroadcast();
           }
@@ -511,35 +522,25 @@ const W2TD_VERSION = '1.0.0';
             addLog(`Client name sent: ${clientName}`, 'info');
           }
 
-          // Send screen resolution info
-          // CSS pixel dimensions (viewport size)
           const cssWidth = window.innerWidth;
           const cssHeight = window.innerHeight;
           const devicePixelRatio = window.devicePixelRatio || 1.0;
-
-          // Physical pixel dimensions (actual screen resolution)
           const physicalWidth = Math.round(cssWidth * devicePixelRatio);
           const physicalHeight = Math.round(cssHeight * devicePixelRatio);
-
-          // Screen dimensions (device screen size)
           const screenWidth = window.screen.width;
           const screenHeight = window.screen.height;
 
-          const screenInfo = {
+          WSClient.send({
             type: 'screen_info',
-            // CSS viewport size (web-optimized resolution)
             width: cssWidth,
             height: cssHeight,
-            // Physical pixel resolution
             physicalWidth: physicalWidth,
             physicalHeight: physicalHeight,
-            // Device screen size
             screenWidth: screenWidth,
             screenHeight: screenHeight,
-            devicePixelRatio: devicePixelRatio
-          };
-          WSClient.send(screenInfo);
-          addLog(`Screen info sent: ${cssWidth}x${cssHeight} CSS (${physicalWidth}x${physicalHeight} physical, DPR: ${devicePixelRatio})`, 'info');
+            devicePixelRatio: devicePixelRatio,
+          });
+          console.log(`[W2TD] Screen info: ${cssWidth}x${cssHeight} (DPR: ${devicePixelRatio})`);
 
           if (!SensorModule.isEnabled() && devMode) {
             addLog('Press Enable Sensors to start broadcasting', 'warn');
@@ -576,19 +577,8 @@ const W2TD_VERSION = '1.0.0';
     resizeTouchCanvas();
     window.addEventListener('resize', resizeTouchCanvas);
 
-    // On first QR-scan (no cached devMode), we don't know user vs dev mode yet.
-    // Show a loading screen so config can arrive before any UI is shown — prevents flash.
-    const hasCachedMode = localStorage.getItem('w2td-dev-mode') !== null;
-    if (autoConnect && !hasCachedMode) {
-      els.w2tdLoading.classList.remove('hidden'); // applyDevMode() will hide it
-    } else if (devMode) {
-      // Full UI: show main interface + initialize visualization
-      els.mainUI.classList.remove('hidden');
-      _initViz();
-    } else {
-      // Minimal mode: skip main UI, go straight to touch pad
-      _showTouchPadDirectly();
-    }
+    // Always show loading screen until config arrives — applyDevMode() will hide it.
+    els.w2tdLoading.classList.remove('hidden');
 
     requestWakeLock(); // default on; TD can override via config
   }
@@ -606,6 +596,14 @@ const W2TD_VERSION = '1.0.0';
     els.userStartOverlay.classList.add('hidden');
     els.w2tdLoading.classList.add('hidden');
     els.mainUI.classList.add('hidden');
+
+    // Stop haptic vibration on disconnect
+    if (hapticInterval !== null) {
+      clearInterval(hapticInterval);
+      hapticInterval = null;
+      hapticState = 0;
+      if (navigator.vibrate) navigator.vibrate(0);
+    }
     els.modal.classList.add('active');
   }
 
@@ -660,11 +658,12 @@ const W2TD_VERSION = '1.0.0';
       }
     }
 
-    // Always call requestPermissions: handles iOS motion/orientation popups
-    // and triggers geolocation popup on Android if GPS sensor is selected.
-    updateDebug('Requesting permissions...');
-    const perms = await SensorModule.requestPermissions();
-    updateDebug('Permissions: ' + JSON.stringify(perms));
+    const _sel = SensorModule.getSelected();
+    if (_sel.motion || _sel.orientation || _sel.geolocation) {
+      console.log('[W2TD] Requesting permissions...');
+      const perms = await SensorModule.requestPermissions();
+      console.log('[W2TD] Permissions:', perms);
+    }
 
     SensorModule.startListening();
 
@@ -842,6 +841,7 @@ const W2TD_VERSION = '1.0.0';
   function enterTouchPad() {
     touchPadActive = true;
     stopVizTouch();
+    if (els.mainUI) els.mainUI.classList.add('hidden');
     els.touchPad.classList.remove('hidden');
     els.btnExitTouch.classList.remove('hidden'); // always visible in dev_mode=1
     if (els.btnToggleTouchPoints) {
@@ -849,17 +849,15 @@ const W2TD_VERSION = '1.0.0';
     }
     resizeTouchCanvas();
 
-    TouchModule.init(els.touchCanvas, (snapshot) => {
+    // Events on touchPad (not touchCanvas) so display:none on canvas doesn't break touch tracking
+    TouchModule.init(els.touchPad, (snapshot) => {
       if (showTouchPoints) {
         Visualization.drawTouches(els.touchCanvas, snapshot.touches, devMode);
-      } else {
-        // Clear canvas if touch points are hidden
-        const ctx = els.touchCanvas.getContext('2d');
-        ctx.clearRect(0, 0, els.touchCanvas.width, els.touchCanvas.height);
       }
       handleTouchData(snapshot);
     });
     updateTouchPointsToggleUI();
+    _applyTouchDotsVisibility();
     _enableTouchLock();
     haptic();
   }
@@ -867,6 +865,7 @@ const W2TD_VERSION = '1.0.0';
   function exitTouchPad() {
     touchPadActive = false;
     els.touchPad.classList.add('hidden');
+    if (els.mainUI) els.mainUI.classList.remove('hidden');
     if (els.btnToggleTouchPoints) {
       els.btnToggleTouchPoints.classList.add('hidden'); // hide toggle button
     }
@@ -1208,22 +1207,17 @@ const W2TD_VERSION = '1.0.0';
     };
 
     try {
-      // 1. Sensor permissions (DeviceMotion, DeviceOrientation)
-      if (SensorModule.needsPermissionRequest()) {
+      // 1. Sensor permissions (DeviceMotion, DeviceOrientation) — only if needed
+      const _sel = SensorModule.getSelected();
+      if ((_sel.motion || _sel.orientation || _sel.geolocation) && SensorModule.needsPermissionRequest()) {
         await SensorModule.requestPermissions();
         results.sensors = true;
         addLog('Sensor permissions granted', 'info');
       } else {
-        // Non-iOS: sensors work without explicit permission
         results.sensors = true;
       }
 
-      // 2. Microphone — NOT acquired here to avoid unwanted permission popups.
-      //    Mic is acquired later by _maybeStartWebRTC() → WebRTCModule.start()
-      //    only when micEnabled=true AND broadcasting is active.
-      //    On iOS 15+, getUserMedia works in async chains after user gesture.
-
-      // 3. Camera permission — if rear or front enabled (from config)
+      // 2. Camera permission — if rear or front enabled (from config)
       if (cameraRearEnabled || cameraFrontEnabled) {
         try {
           const mode = cameraRearEnabled ? 'environment' : 'user';
@@ -1239,23 +1233,18 @@ const W2TD_VERSION = '1.0.0';
         }
       }
 
-      // 4. WakeLock permission (Screen Wake Lock API)
-      // Note: WakeLock doesn't require explicit permission, but needs user gesture
+      // 3. WakeLock (no explicit permission, but needs user gesture)
       try {
         if ('wakeLock' in navigator) {
           const lock = await navigator.wakeLock.request('screen');
           results.wakeLock = true;
-          addLog('WakeLock activated', 'info');
-          // Release immediately - will be requested again when broadcasting
+          console.log('[W2TD] WakeLock activated');
           lock.release();
-        } else {
-          addLog('WakeLock not supported', 'info');
         }
       } catch (e) {
-        addLog('WakeLock error: ' + (e.message || e.name), 'warn');
+        console.warn('[W2TD] WakeLock error:', e);
       }
 
-      // Summary
       const granted = Object.values(results).filter(v => v).length;
       const total = Object.keys(results).length;
       addLog(`Permissions: ${granted}/${total} granted`, granted === total ? 'info' : 'warn');
@@ -1285,16 +1274,25 @@ const W2TD_VERSION = '1.0.0';
     saveSettings();
     updateTouchPointsToggleUI();
     haptic();
+    _applyTouchDotsVisibility();
+  }
 
-    // If touchpad is active, clear or redraw immediately
-    if (touchPadActive) {
-      const snapshot = TouchModule.getSnapshot();
-      if (snapshot) {
-        if (showTouchPoints) {
-          Visualization.drawTouches(els.touchCanvas, snapshot.touches, devMode);
-        } else {
-          const ctx = els.touchCanvas.getContext('2d');
-          ctx.clearRect(0, 0, els.touchCanvas.width, els.touchCanvas.height);
+  /**
+   * Apply show_dots state to the touch canvas.
+   * Uses display:none so touch events still fire on touchPad.
+   */
+  function _applyTouchDotsVisibility() {
+    if (!els.touchCanvas) return;
+    if (!showTouchPoints) {
+      els.touchCanvas.style.display = 'none';
+      const ctx = els.touchCanvas.getContext('2d');
+      ctx.clearRect(0, 0, els.touchCanvas.width, els.touchCanvas.height);
+    } else {
+      els.touchCanvas.style.display = '';
+      if (touchPadActive) {
+        const snap = TouchModule.getSnapshot();
+        if (snap && snap.touches.length > 0) {
+          Visualization.drawTouches(els.touchCanvas, snap.touches, devMode);
         }
       }
     }
