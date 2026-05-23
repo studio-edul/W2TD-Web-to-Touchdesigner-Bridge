@@ -6,7 +6,6 @@ docs/              Free 버전 웹 클라이언트 (JS/HTML)
 docs-pro/          Pro 버전 웹 클라이언트 (JS/HTML)
 touchdesigner/py/          Free 버전 TD Python
 touchdesigner-pro/py/      Pro 버전 TD Python
-touchdesigner-pro/py_korail/  Korail 전용 (line_chop.py 등)
 touchdesigner-examples/    예제 프로젝트
 development/       개발 문서 (DEV_DOCS.md 등)
 .claude/commands/  프로젝트 슬래시 커맨드
