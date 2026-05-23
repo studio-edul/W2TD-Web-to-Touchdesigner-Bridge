@@ -27,6 +27,7 @@ Script CHOP — 속도 실시간 적분, 슬라이딩 윈도우 출력
 import time as _time
 import os as _os
 import datetime as _dt
+import numpy as _np
 
 NO_DATA       = -1.0
 EASE_DURATION = 2.0   # maxY 복귀 easing 시간(초)
@@ -363,25 +364,31 @@ def cook(scriptOp):
             out_ch.vals = [NO_DATA] * num_out
             continue
 
-        output = [NO_DATA] * num_out
-        last_valid_idx = -1
-        for t, v in zip(ch['times'], ch['buf']):
-            if v < -0.5:
-                continue
-            frac = (t - t_start) / win_sec
-            idx  = int(frac * num_out)
-            if 0 <= idx < num_out:
-                output[idx] = v
-                last_valid_idx = max(last_valid_idx, idx)
-        if last_valid_idx >= 0:
-            last_v = NO_DATA
-            for i in range(last_valid_idx + 1):
-                if output[i] > -0.5:
-                    last_v = output[i]
-                elif last_v > -0.5:
-                    output[i] = last_v
+        buf_np   = _np.array(ch['buf'],   dtype=_np.float32)
+        times_np = _np.array(ch['times'], dtype=_np.float64)
+        valid    = buf_np > -0.5
+
+        output = _np.full(num_out, NO_DATA, dtype=_np.float32)
+
+        if valid.any():
+            fracs    = (times_np[valid] - t_start) / win_sec
+            in_range = (fracs >= 0.0) & (fracs < 1.0)
+            if in_range.any():
+                idxs = _np.clip(
+                    (fracs[in_range] * num_out).astype(_np.int32), 0, num_out - 1
+                )
+                output[idxs] = buf_np[valid][in_range]
+                last_valid_idx = int(idxs.max())
+
+                # forward-fill: 첫 유효값 이전은 NO_DATA 유지
+                sub  = output[:last_valid_idx + 1]
+                mask = sub > -0.5
+                fi   = _np.where(mask, _np.arange(last_valid_idx + 1), 0)
+                _np.maximum.accumulate(fi, out=fi)
+                output[:last_valid_idx + 1] = sub[fi]
+
         out_ch = scriptOp.appendChan(key)
-        out_ch.vals = output
+        out_ch.vals = output        # numpy 직접 대입 — .tolist() 없음
 
     # ── highlight 비트마스크 ─────────────────────────────────────
     highlight_mask = 0
