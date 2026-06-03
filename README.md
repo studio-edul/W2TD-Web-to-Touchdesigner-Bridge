@@ -90,7 +90,6 @@ Columns: `key` | `value`. Changes are debounced and broadcast automatically by `
 | `Motion` `Orientation` `Geolocation` `Touch` | `1` / `1` / `0` / `1` | Per-sensor enable |
 | `Rearcamera` `Frontcamera` `Microphone` | `0` / `0` / `1` | Per-stream auto-enable |
 | `Echocancellation` `Noisesuppression` `Audiogain` | `0` | Mic processing (`0` = raw) |
-| `Showdots` | `1` | Draw touch points on touch pad |
 | `Resolution` | `Non-Commercial` | Camera square: `Non-Commercial` (1280×1280), `FHD` (1920×1920) |
 | `Screenmode` | `Portrait` | Camera: `Portrait`, `Landscape` |
 | `Port` | `9980` | Web server port |
@@ -227,7 +226,7 @@ Client slot assignments are stored via `op('/').store/fetch` and survive script 
 { "type": "ack", "slot": 1, "td_version": "1.0.0" }
 { "type": "rejected", "reason": "Server is currently full..." }
 
-{ "type": "config", "sample_rate": 30, "dev_mode": 1, "show_dots": 1,
+{ "type": "config", "sample_rate": 30, "dev_mode": 1,
   "audio_tx": 1, "video_tx": 1, "cam_resolution": "non-commercial", ... }
 
 { "type": "haptic", "pattern": [200, 100, 200] }   // vibration pattern
@@ -316,7 +315,6 @@ Inside `W2TD_Pro`, add an `In DAT` named `js_code_in` and a `DAT Execute` pointi
 **Example sketches:**
 
 - `touchdesigner-examples/canvas_sketches/sensor_test.js` — sensor test ball with inertia, holofoil (5 Canvas 2D layers driven by orientation), and heartbeat
-- `touchdesigner-pro/sketches/particle.js` — 3000-particle system with orientation-based gravity removal and noise turbulence. Requires both `Motion = 1` and `Orientation = 1`.
 
 **Reloading JS sketches from disk**: Set `Jsfile` in `w2td_config` to the `.js` file path (or directory). After editing the file, call from TD Textport:
 ```python
@@ -425,14 +423,6 @@ touchdesigner-pro/py/        ← Pro TD scripts (W2TD_Pro base COMP)
   update_execs.py            ← Dev utility (touch Execute DAT files to reload)
   w2td_zombie_checker.py     ← Cleans up stale slots
   (config_watch, cam_render_sync, w2td_init same as free but with W2TD_Pro base)
-
-touchdesigner-pro/py_korail/ ← Korail project scripts (Script CHOP / GLSL)
-  line_chop.py               ← Velocity-integral sliding-window CHOP (sensor-active + visibility gate)
-  line_glsl.frag             ← Line render GLSL fragment
-  line_glsl_split.frag       ← Split line render GLSL fragment
-
-touchdesigner-pro/sketches/  ← Canvas runner sketch files (.js)
-  particle.js                ← Particle system with orientation-based gravity removal
 
 touchdesigner-examples/      ← Example projects
   canvas_sketches/
