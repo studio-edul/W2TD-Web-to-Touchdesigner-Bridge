@@ -449,6 +449,85 @@ dev-tools/load-test/
 
 ---
 
+## TD Textport Logs
+
+정상 동작 시 Textport에 출력되는 로그는 핵심 이벤트만 표시됩니다. 내부 디버그 로그는 주석 처리되어 있으며, 필요 시 해당 `.py` 파일에서 `# print(` → `print(`로 복원할 수 있습니다.
+
+### Startup
+
+```
+[W2TD] onCreate triggered - installing packages...
+[W2TD Setup] All packages installed.
+[W2TD] onStart — SSL, 테이블 초기화, WebRTC ICE, 터널/QR 생성
+[W2TD] Starting Cloudflare tunnel...
+[W2TD] Cloudflare URL: https://xxx.trycloudflare.com
+[W2TD] QR URL: https://w2td-pro.studio-edul.com/?td=xxx
+```
+
+### Runtime
+
+```
+[W2TD] Connected -> slot 1 | ws://... | 1/20 active
+[W2TD] Disconnected -> slot 1 | ws://... | 0/20 active
+[W2TD] Stale slot 2 released (...) — no msg in 30s
+[W2TD Zombie] Slot 3 (...) silent for 60s - releasing
+```
+
+### Errors
+
+문제 발생 시에만 출력. prefix: `[W2TD Error]`, `[W2TD ... Error]`
+
+```
+[W2TD Error] sensor_table DAT not found - create a Table DAT named "sensor_table"
+[W2TD Error] pycloudflared not installed.
+[W2TD Error] Cloudflare tunnel failed: ...
+[W2TD WebRTC Error] Offer handling error: ...
+[W2TD Cam Error] cam_offer relay error: ...
+```
+
+### TD 노드에 에러 표시하기 (Script Error)
+
+Textport 대신 네트워크 에디터에서 노드에 직접 에러를 표시할 수 있습니다. 노드 아래에 빨간색(에러) 또는 노란색(경고) 삼각형 아이콘이 나타나며, 마우스를 올리면 메시지가 표시됩니다.
+
+```python
+# 에러 표시 (빨간 삼각형)
+me.addScriptError('sensor_table not found')
+
+# 경고 표시 (노란 삼각형)
+me.addWarning('Tunnel connection slow')
+
+# 에러 해제 (정상 복구 시)
+me.clearScriptErrors()
+
+# 다른 노드에 에러 표시
+op('web_server_dat').addScriptError('Connection failed')
+op('web_server_dat').clearScriptErrors()
+```
+
+**적용 예시 — `callbacks.py`에서 노드 에러 표시:**
+
+기존 에러 로그를 노드 표시로 전환하려면 `print()`와 함께 `addScriptError()`를 호출합니다:
+
+```python
+# Before (Textport only)
+print('[W2TD Error] sensor_table DAT not found')
+
+# After (Textport + node badge)
+msg = 'sensor_table DAT not found'
+print(f'[W2TD Error] {msg}')
+me.addScriptError(msg)
+```
+
+정상 복구 시점(예: 테이블이 정상 생성된 직후)에 `me.clearScriptErrors()`를 호출하면 에러 배지가 사라집니다.
+
+**`me` vs `op('...')`:**
+- `me` — 현재 스크립트가 실행 중인 DAT 자신에 에러 표시
+- `op('web_server_dat')` — 지정한 다른 노드에 에러 표시
+
+**참고:** `addScriptError()`는 누적됩니다. 같은 메시지를 반복 호출하면 중복 표시되므로, 반복 호출 전에 `clearScriptErrors()`로 초기화하거나 조건부로 호출하는 것을 권장합니다.
+
+---
+
 ## References
 
 - [Web Server DAT — TouchDesigner Docs](https://docs.derivative.ca/Web_Server_DAT)
