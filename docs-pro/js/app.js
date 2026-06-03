@@ -512,6 +512,12 @@ const W2TD_VERSION = '1.0.0';
     els.btnEnableSensors.addEventListener('click', handleEnableSensors);
     els.btnFullscreenTouch.addEventListener('click', enterTouchPad);
     els.btnExitTouch.addEventListener('click', exitTouchPad);
+    els.btnExitTouch.addEventListener('touchstart', (e) => e.stopPropagation());
+    els.btnExitTouch.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      exitTouchPad();
+    });
     if (els.btnCameraMonitor) els.btnCameraMonitor.addEventListener('click', enterCameraMonitor);
     if (els.btnExitCameraMonitor) els.btnExitCameraMonitor.addEventListener('click', exitCameraMonitor);
     if (els.btnTdStream) els.btnTdStream.addEventListener('click', enterTdStreamMonitor);
