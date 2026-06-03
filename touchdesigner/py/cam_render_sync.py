@@ -249,7 +249,7 @@ def sync(table_dat=None):
 				pass
 			try:
 				existing[name].destroy()
-				print(f'[Cam Render Sync] Destroyed {name}')
+				# print(f'[Cam Render Sync] Destroyed {name}')
 			except Exception as e:
 				print(f'[Cam Render Sync] Error destroying {name}: {e}')
 
@@ -262,7 +262,7 @@ def sync(table_dat=None):
 		if top is None:
 			try:
 				top = container.create('webrenderTOP', name)
-				print(f'[Cam Render Sync] Created {name}')
+				# print(f'[Cam Render Sync] Created {name}')
 			except Exception as e:
 				print(f'[Cam Render Sync] Error creating {name}: {e}')
 				continue
@@ -298,7 +298,7 @@ def sync(table_dat=None):
 		if t_top is None:
 			try:
 				t_top = container.create('transformTOP', t_name)
-				print(f'[Cam Render Sync] Created {t_name}')
+				# print(f'[Cam Render Sync] Created {t_name}')
 			except Exception as e:
 				print(f'[Cam Render Sync] Error creating {t_name}: {e}')
 				t_top = None
@@ -323,7 +323,7 @@ def sync(table_dat=None):
 		if c_top is None:
 			try:
 				c_top = container.create('cropTOP', c_name)
-				print(f'[Cam Render Sync] Created {c_name}')
+				# print(f'[Cam Render Sync] Created {c_name}')
 			except Exception as e:
 				print(f'[Cam Render Sync] Error creating {c_name}: {e}')
 				c_top = None
@@ -369,7 +369,7 @@ def sync(table_dat=None):
 		if n_top is None:
 			try:
 				n_top = container.create('nullTOP', n_name)
-				print(f'[Cam Render Sync] Created {n_name}')
+				# print(f'[Cam Render Sync] Created {n_name}')
 			except Exception as e:
 				print(f'[Cam Render Sync] Error creating {n_name}: {e}')
 				n_top = None
@@ -402,7 +402,7 @@ def sync(table_dat=None):
 	if slots:
 		prev = tuple(op('/').fetch('w2td_cam_render_last_slots', ()))
 		if tuple(slots) != prev:
-			print(f'[Cam Render Sync] {len(slots)} web render TOPs synced (slots {slots})')
+			# print(f'[Cam Render Sync] {len(slots)} web render TOPs synced (slots {slots})')
 			op('/').store('w2td_cam_render_last_slots', tuple(slots))
 		# Set layout1 resolution based on cropped output size
 		try:

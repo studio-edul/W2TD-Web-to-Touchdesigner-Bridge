@@ -125,8 +125,8 @@ def _do_broadcast():
 		except Exception:
 			pass
 	if valid or slots:
-		print(f'[W2TD] Config broadcast -> {len(valid)} clients' + (f' ({len(slots) - len(valid)} stale)' if len(slots) > len(valid) else ''))
-	# Update web_render_top resolution + transform_top rotation inside webrtc_video_container
+		# print(f'[W2TD] Config broadcast -> {len(valid)} clients' + (f' ({len(slots) - len(valid)} stale)' if len(slots) > len(valid) else ''))
+	# # Update web_render_top resolution + transform_top rotation inside webrtc_video_container
 	_dim_map = {'non-commercial': 1280, 'fhd': 1920}
 	try:
 		res_str = ''
@@ -186,7 +186,7 @@ def _do_broadcast():
 					except Exception as e:
 						print(f'[W2TD] Error setting crop_top_{i} values: {e}')
 			if updated:
-				print(f'[W2TD] web_render_top resolution -> {sq}x{sq}, transform rotate -> {rotate_deg} ({updated} TOPs)')
+				# print(f'[W2TD] web_render_top resolution -> {sq}x{sq}, transform rotate -> {rotate_deg} ({updated} TOPs)')
 	except Exception:
 		pass
 

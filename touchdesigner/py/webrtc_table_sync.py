@@ -97,7 +97,7 @@ def _read_rows():
 	t = _get_table()
 	if t is None or t.numRows < 2:
 		return []
-	print(f'[W2TD WebRTC Sync] webrtc_table numRows={t.numRows}')
+	# print(f'[W2TD WebRTC Sync] webrtc_table numRows={t.numRows}')
 	seen = {}
 	for r in range(1, t.numRows):
 		try:
@@ -217,7 +217,7 @@ def sync():
 	for name in to_delete:
 		try:
 			existing[name].destroy()
-			print(f'[W2TD WebRTC Sync] Destroyed {name}')
+			# print(f'[W2TD WebRTC Sync] Destroyed {name}')
 		except Exception as e:
 			print(f'[W2TD WebRTC Sync] Error Destroy {name} failed: {e}')
 
@@ -228,7 +228,7 @@ def sync():
 		if chop is None:
 			try:
 				chop = container.create('audiostreaminCHOP', name)
-				print(f'[W2TD WebRTC Sync] Created {name}')
+				# print(f'[W2TD WebRTC Sync] Created {name}')
 			except Exception as e:
 				print(f'[W2TD WebRTC Sync] Error Create {name} failed: {e}')
 				continue
@@ -286,9 +286,9 @@ def sync():
 						pass
 
 	if rows:
-		print(f'[W2TD WebRTC Sync] {len(rows)} audio chops synced')
+		# print(f'[W2TD WebRTC Sync] {len(rows)} audio chops synced')
 	else:
-		print('[W2TD WebRTC Sync] No connections - all audio chops removed')
+		# print('[W2TD WebRTC Sync] No connections - all audio chops removed')
 
 
 def onTableChange(dat, prevDAT, info):

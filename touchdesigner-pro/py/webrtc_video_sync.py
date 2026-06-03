@@ -197,7 +197,7 @@ def _auto_select_video_track(vout, track_name, attempt=1, max_attempts=15):
 				if menu_names:
 					chosen = track_name if track_name in menu_names else menu_names[0]
 					setattr(vout.par, par_name, chosen)
-					print(f'[W2TD Video Sync] Auto-selected video track "{chosen}" on {vout.name} (attempt {attempt})')
+					# print(f'[W2TD Video Sync] Auto-selected video track "{chosen}" on {vout.name} (attempt {attempt})')
 					return
 			except Exception:
 				pass
@@ -210,7 +210,7 @@ def _auto_select_video_track(vout, track_name, attempt=1, max_attempts=15):
 			_auto_select_video_track(_vout, _tn, _att + 1, max_attempts)
 		run(_retry, delayFrames=5, fromOP=_vout)
 	else:
-		print(f'[W2TD Video Sync] Warning: could not auto-select video track on {vout.name} after {max_attempts} attempts')
+		# print(f'[W2TD Video Sync] Warning: could not auto-select video track on {vout.name} after {max_attempts} attempts')
 
 
 # ── 메인 sync ─────────────────────────────────────────────────────────────────
@@ -218,7 +218,7 @@ def _auto_select_video_track(vout, track_name, attempt=1, max_attempts=15):
 def sync():
 	"""webrtc_video_container 안의 비디오 TX 노드를 webrtc_table에 맞게 동기화."""
 	if not _read_video_tx_enabled():
-		print('[W2TD Video Sync] Video TX disabled in config — skipping')
+		# print('[W2TD Video Sync] Video TX disabled in config — skipping')
 		return
 
 	container = _this_container()
@@ -250,7 +250,7 @@ def sync():
 			if node:
 				try:
 					node.destroy()
-					print(f'[W2TD Video Sync] Destroyed nodes for slot {slot}')
+					# print(f'[W2TD Video Sync] Destroyed nodes for slot {slot}')
 				except Exception as e:
 					print(f'[W2TD Video Sync] Error destroying node slot {slot}: {e}')
 
@@ -266,7 +266,7 @@ def sync():
 		if is_new_sel:
 			try:
 				vsel = container.create('selectTOP', f'select_video_slot{slot}')
-				print(f'[W2TD Video Sync] Created select_video_slot{slot}')
+				# print(f'[W2TD Video Sync] Created select_video_slot{slot}')
 			except Exception as e:
 				print(f'[W2TD Video Sync] Error creating select_video_slot{slot}: {e}')
 				continue
@@ -281,7 +281,7 @@ def sync():
 			try:
 				vsel.nodeX = 0
 				vsel.nodeY = -idx * BLOCK_HEIGHT - CAM_ROW_H
-				print(f'[W2TD Video Sync] select_video_slot{slot} nodeY={vsel.nodeY}')
+				# print(f'[W2TD Video Sync] select_video_slot{slot} nodeY={vsel.nodeY}')
 			except Exception as e:
 				print(f'[W2TD Video Sync] select_video_slot{slot} nodeY error: {e}')
 
@@ -291,7 +291,7 @@ def sync():
 		if is_new_flip:
 			try:
 				vflip = container.create('flipTOP', f'flip_top_{slot}')
-				print(f'[W2TD Video Sync] Created flip_top_{slot}')
+				# print(f'[W2TD Video Sync] Created flip_top_{slot}')
 			except Exception as e:
 				print(f'[W2TD Video Sync] Error creating flip_top_{slot}: {e}')
 				vflip = None
@@ -307,7 +307,7 @@ def sync():
 			try:
 				vflip.nodeX = 150
 				vflip.nodeY = -idx * BLOCK_HEIGHT - CAM_ROW_H
-				print(f'[W2TD Video Sync] flip_top_{slot} nodeY={vflip.nodeY}')
+				# print(f'[W2TD Video Sync] flip_top_{slot} nodeY={vflip.nodeY}')
 			except Exception as e:
 				print(f'[W2TD Video Sync] flip_top_{slot} nodeY error: {e}')
 
@@ -317,7 +317,7 @@ def sync():
 		if is_new_out:
 			try:
 				vout = container.create('videostreamoutTOP', f'video_stream_out_{slot}')
-				print(f'[W2TD Video Sync] Created video_stream_out_{slot}')
+				# print(f'[W2TD Video Sync] Created video_stream_out_{slot}')
 			except Exception as e:
 				print(f'[W2TD Video Sync] Error creating video_stream_out_{slot}: {e}')
 				vout = None
@@ -335,7 +335,7 @@ def sync():
 			try:
 				vout.nodeX = 300
 				vout.nodeY = -idx * BLOCK_HEIGHT - CAM_ROW_H
-				print(f'[W2TD Video Sync] video_stream_out_{slot} nodeY={vout.nodeY}')
+				# print(f'[W2TD Video Sync] video_stream_out_{slot} nodeY={vout.nodeY}')
 			except Exception as e:
 				print(f'[W2TD Video Sync] video_stream_out_{slot} nodeY error: {e}')
 			_set_video_out_params(vout, conn_id)
@@ -362,9 +362,9 @@ def sync():
 					try:
 						track_name = f'video_out_{s}'
 						_wrtc.addTrack(cid, track_name, 'video')
-						print(f'[W2TD Video Sync] addTrack("{track_name}", video) slot {s}')
+						# print(f'[W2TD Video Sync] addTrack("{track_name}", video) slot {s}')
 						_wrtc.createOffer(cid)
-						print(f'[W2TD Video Sync] createOffer slot {s}')
+						# print(f'[W2TD Video Sync] createOffer slot {s}')
 					except Exception as ex:
 						print(f'[W2TD Video Sync] addTrack/createOffer error slot {s}: {ex}')
 						continue
@@ -376,9 +376,9 @@ def sync():
 			run(_trigger_video_offers, delayFrames=5, fromOP=_wrtc)
 
 	if rows:
-		print(f'[W2TD Video Sync] {len(rows)} slot(s) synced, {len(newly_created)} new')
+		# print(f'[W2TD Video Sync] {len(rows)} slot(s) synced, {len(newly_created)} new')
 	else:
-		print('[W2TD Video Sync] No connections — all video TX nodes removed')
+		# print('[W2TD Video Sync] No connections — all video TX nodes removed')
 
 
 def onTableChange(dat, prevDAT, info):

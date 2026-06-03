@@ -347,7 +347,7 @@ def _broadcast_msg(webServerDAT, msg_str):
 			stale.append((addr, slot))
 	for addr, slot in stale:
 		_release_slot(addr, slot)
-		print(f'[W2TD] Cleaned stale slot {slot}')
+		# print(f'[W2TD] Cleaned stale slot {slot}')
 	return success
 
 
@@ -375,7 +375,7 @@ def send_canvas_code_to_all(webServerDAT, source):
 	op('/').store('w2td_canvas_code', code)
 	msg = json.dumps({'type': 'canvas_code', 'code': code})
 	sent = _broadcast_msg(webServerDAT, msg)
-	print(f'[W2TD Canvas] canvas_code broadcast -> {sent} client(s) ({len(code)} chars)')
+	# print(f'[W2TD Canvas] canvas_code broadcast -> {sent} client(s) ({len(code)} chars)')
 
 
 def send_canvas_code_to_slot(webServerDAT, slot, source):
@@ -389,11 +389,11 @@ def send_canvas_code_to_slot(webServerDAT, slot, source):
 	op('/').store(f'w2td_canvas_code_slot_{slot}', code)
 	addr = _addr_for_slot(slot)
 	if addr is None:
-		print(f'[W2TD Canvas] slot {slot} has no active client; cached for later')
+		# print(f'[W2TD Canvas] slot {slot} has no active client; cached for later')
 		return
 	try:
 		webServerDAT.webSocketSendText(addr, json.dumps({'type': 'canvas_code', 'code': code}))
-		print(f'[W2TD Canvas] canvas_code -> slot {slot} ({len(code)} chars)')
+		# print(f'[W2TD Canvas] canvas_code -> slot {slot} ({len(code)} chars)')
 	except Exception as e:
 		print(f'[W2TD Canvas Error] send to slot {slot}: {e}')
 
@@ -408,7 +408,7 @@ def clear_canvas_code(webServerDAT, slot=None):
 		for s in range(1, MAX_CLIENTS + 1):
 			op('/').store(f'w2td_canvas_code_slot_{s}', '')
 		sent = _broadcast_msg(webServerDAT, empty)
-		print(f'[W2TD Canvas] cleared (all) -> {sent} client(s)')
+		# print(f'[W2TD Canvas] cleared (all) -> {sent} client(s)')
 	else:
 		try:
 			slot = int(slot)
@@ -421,7 +421,7 @@ def clear_canvas_code(webServerDAT, slot=None):
 				webServerDAT.webSocketSendText(addr, empty)
 			except Exception:
 				pass
-		print(f'[W2TD Canvas] cleared (slot {slot})')
+		# print(f'[W2TD Canvas] cleared (slot {slot})')
 
 
 def _read_jsfile(path):
@@ -461,7 +461,7 @@ def reload_jsfile(webServerDAT):
 	op('/').store('w2td_canvas_code', code)
 	msg = json.dumps({'type': 'canvas_code', 'code': code})
 	sent = _broadcast_msg(webServerDAT, msg)
-	print(f'[W2TD Canvas] jsfile broadcast -> {sent} client(s) ({len(code)} chars)')
+	# print(f'[W2TD Canvas] jsfile broadcast -> {sent} client(s) ({len(code)} chars)')
 
 
 def _replay_canvas_code(webServerDAT, client, slot):
@@ -483,7 +483,7 @@ def _replay_canvas_code(webServerDAT, client, slot):
 		if code:
 			webServerDAT.webSocketSendText(client, json.dumps({'type': 'canvas_code', 'code': code}))
 	except Exception as e:
-		print(f'[W2TD Canvas Error] replay to slot {slot}: {e}')
+		# print(f'[W2TD Canvas Error] replay to slot {slot}: {e}')
 
 
 def _handle_cam_receiver_msg(webServerDAT, addr, msg):
@@ -506,7 +506,7 @@ def _handle_cam_receiver_msg(webServerDAT, addr, msg):
 				'sdp': sdp,
 				'camType': cam_type,
 			}))
-			print(f'[W2TD Cam] cam_answer relayed -> slot {slot} ({cam_type})')
+			# print(f'[W2TD Cam] cam_answer relayed -> slot {slot} ({cam_type})')
 		except Exception as e:
 			print(f'[W2TD Cam Error] cam_answer relay error: {e}')
 
@@ -553,14 +553,14 @@ def _handle_cam_receiver_msg(webServerDAT, addr, msg):
 						top.par.resolutionh = sq
 						logged = op('/').fetch(f'w2td_cam_res_logged_{slot}', False)
 						if not logged:
-							print(f'[W2TD Cam] web_render_top (slot {slot}) -> {sq}x{sq} ({res_key}), source: {int(w)}x{int(h)}')
+							# print(f'[W2TD Cam] web_render_top (slot {slot}) -> {sq}x{sq} ({res_key}), source: {int(w)}x{int(h)}')
 							op('/').store(f'w2td_cam_res_logged_{slot}', True)
 					except Exception as e:
 						print(f'[W2TD Cam Error] Resolution set failed for slot {slot}: {e}')
 				else:
 					print(f'[W2TD Cam Error] web_render_top for slot {slot} not found')
 			else:
-				print(f'[W2TD Cam] Received video resolution: {int(w)}x{int(h)} (slot {slot}, web_render not yet synced)')
+				# print(f'[W2TD Cam] Received video resolution: {int(w)}x{int(h)} (slot {slot}, web_render not yet synced)')
 
 # ------------------------------------------------------------------------------
 
@@ -601,7 +601,7 @@ def init_tables():
 	if t is not None:
 		t.clear()
 		t.appendRow(SENSOR_COLS)
-		print(f'[W2TD] sensor_table initialized (dynamic rows, max {MAX_CLIENTS} slots)')
+		# print(f'[W2TD] sensor_table initialized (dynamic rows, max {MAX_CLIENTS} slots)')
 	else:
 		print('[W2TD Error] sensor_table DAT not found - create a Table DAT named "sensor_table"')
 
@@ -609,7 +609,7 @@ def init_tables():
 	if tt is not None:
 		tt.clear()
 		tt.appendRow(['slot', 'touch_id', 'x', 'y', 'state'])
-		print('[W2TD] touch_table initialized')
+		# print('[W2TD] touch_table initialized')
 	else:
 		print('[W2TD Error] touch_table DAT not found - create a Table DAT named "touch_table"')
 
@@ -617,7 +617,7 @@ def init_tables():
 	if wt is not None:
 		wt.clear()
 		wt.appendRow(WEBRTC_COLS)
-		print('[W2TD] webrtc_table initialized')
+		# print('[W2TD] webrtc_table initialized')
 	else:
 		print('[W2TD Error] webrtc_table DAT not found - create a Table DAT named "webrtc_table"')
 
@@ -711,18 +711,18 @@ def broadcast_config(webServerDAT):
 			webServerDAT.webSocketSendText(addr, msg)
 		except Exception:
 			pass
-	print(f'[W2TD] Config broadcast -> {len(_slots())} clients')
+	# print(f'[W2TD] Config broadcast -> {len(_slots())} clients')
 
 	# If videoout=js, also push jsfile code so the sketch shows immediately on mode switch
 	videoout = _get_videoout(cfg)
-	print(f'[W2TD] videoout mode resolved: "{videoout}" (Videoout={repr(cfg.get("Videoout"))}, Video={repr(cfg.get("Video"))})')
+	# print(f'[W2TD] videoout mode resolved: "{videoout}" (Videoout={repr(cfg.get("Videoout"))}, Video={repr(cfg.get("Video"))})')
 	if videoout == 'js':
 		reload_jsfile(webServerDAT)
 
 	try:
 		_op('w2td_init').module._init_webrtc_ice()
 	except Exception as e:
-		print(f'[W2TD Error] Failed to update WebRTC ICE on config broadcast: {e}')
+		# print(f'[W2TD Error] Failed to update WebRTC ICE on config broadcast: {e}')
 
 
 def send_haptic_to_client(webServerDAT, slot, pattern):
@@ -754,7 +754,7 @@ def send_haptic_to_client(webServerDAT, slot, pattern):
 			'pattern': pattern
 		})
 		webServerDAT.webSocketSendText(addr, msg)
-		print(f'[W2TD Haptic] Sent pattern {pattern} to slot {slot}')
+		# print(f'[W2TD Haptic] Sent pattern {pattern} to slot {slot}')
 		return True
 	except Exception as e:
 		print(f'[W2TD Haptic Error] Send failed for slot {slot}: {e}')
@@ -773,7 +773,7 @@ def send_haptic_to_all(webServerDAT, pattern):
 	"""
 	msg = json.dumps({'type': 'haptic', 'pattern': [int(d) for d in pattern]})
 	count = _broadcast_msg(webServerDAT, msg)
-	print(f'[W2TD Haptic] Sent pattern {pattern} to {count} clients')
+	# print(f'[W2TD Haptic] Sent pattern {pattern} to {count} clients')
 	return count
 
 
@@ -818,7 +818,7 @@ def send_haptic_state_to_all(webServerDAT, state):
 	"""
 	msg = json.dumps({'type': 'haptic', 'state': state})
 	count = _broadcast_msg(webServerDAT, msg)
-	print(f'[W2TD Haptic] Sent state {state} to {count} clients')
+	# print(f'[W2TD Haptic] Sent state {state} to {count} clients')
 	return count
 
 
@@ -923,7 +923,7 @@ def send_bg_color_to_client(webServerDAT, slot, color, duration=0):
 			'duration': int(duration)
 		})
 		webServerDAT.webSocketSendText(addr, msg)
-		print(f'[W2TD Pro] Sent bg_color {color} (duration={duration}ms) to slot {slot}')
+		# print(f'[W2TD Pro] Sent bg_color {color} (duration={duration}ms) to slot {slot}')
 		return True
 	except Exception as e:
 		print(f'[W2TD Pro Error] bg_color send failed for slot {slot}: {e}')
@@ -943,7 +943,7 @@ def send_bg_color_to_all(webServerDAT, color, duration=0):
 	"""
 	msg = json.dumps({'type': 'bg_color', 'color': color, 'duration': int(duration)})
 	count = _broadcast_msg(webServerDAT, msg)
-	print(f'[W2TD Pro] Sent bg_color {color} to {count} clients')
+	# print(f'[W2TD Pro] Sent bg_color {color} to {count} clients')
 	return count
 
 
@@ -995,7 +995,7 @@ def send_flashlight_to_all(webServerDAT, state):
 	"""
 	msg = json.dumps({'type': 'flashlight', 'state': state})
 	count = _broadcast_msg(webServerDAT, msg)
-	print(f'[W2TD Pro] Sent flashlight {state} to {count} clients')
+	# print(f'[W2TD Pro] Sent flashlight {state} to {count} clients')
 	return count
 
 
@@ -1057,7 +1057,7 @@ def onHTTPRequest(webServerDAT, request, response):
 		host = request.get('headers', {}).get('Host', '')
 	# Use short tunnel ID (without .trycloudflare.com)
 	short_host = host.replace('.trycloudflare.com', '') if host.endswith('.trycloudflare.com') else host
-	print(f'[W2TD] HTTP request -> host: {short_host}')
+	# print(f'[W2TD] HTTP request -> host: {short_host}')
 	redirect_url = GITHUB_PAGES_URL + ('?td=' + short_host if short_host else '')
 
 	response['statusCode'] = 200
@@ -1104,7 +1104,7 @@ def onWebSocketClose(webServerDAT, client):
 	# cam_receiver disconnect
 	if _is_cam_receiver_addr(addr):
 		_clear_cam_receiver_addr(addr)
-		print(f'[W2TD Cam] cam_receiver disconnected: {addr}')
+		# print(f'[W2TD Cam] cam_receiver disconnected: {addr}')
 		return
 
 	slots = _slots()
@@ -1166,7 +1166,7 @@ def onWebSocketClose(webServerDAT, client):
 			except Exception:
 				pass
 		if slots:
-			print(f'[W2TD Cam] cam_receiver_ready broadcast -> {len(slots)} remaining clients (after disconnect)')
+			# print(f'[W2TD Cam] cam_receiver_ready broadcast -> {len(slots)} remaining clients (after disconnect)')
 	except Exception:
 		pass
 
@@ -1208,7 +1208,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			_save_cam_receiver_addr(addr, cr_slot)
 		else:
 			_save_cam_receiver_addr(addr)
-		print(f'[W2TD Cam] cam_receiver registered: {addr}' + (f' (slot {cr_slot})' if cr_slot else ''))
+		# print(f'[W2TD Cam] cam_receiver registered: {addr}' + (f' (slot {cr_slot})' if cr_slot else ''))
 		# Replay pending cam offers/ICE
 		pending_offers = op('/').fetch('w2td_pending_cam_offers', {})
 		pending_ice = op('/').fetch('w2td_pending_cam_ice', {})
@@ -1221,7 +1221,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 					webServerDAT.webSocketSendText(addr, json.dumps({
 						'type': 'cam_offer', 'slot': offer['slot'], 'sdp': offer['sdp'], 'camType': offer['camType'],
 					}))
-					print(f'[W2TD Cam] Replayed pending offer -> slot {offer["slot"]} ({offer["camType"]})')
+					# print(f'[W2TD Cam] Replayed pending offer -> slot {offer["slot"]} ({offer["camType"]})')
 					sent_keys.append(key)
 				except Exception as e:
 					print(f'[W2TD Cam Error] Pending offer replay error: {e}')
@@ -1244,14 +1244,14 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 				webServerDAT.webSocketSendText(mobile_addr, json.dumps({'type': 'cam_receiver_ready'}))
 			except Exception:
 				pass
-		print(f'[W2TD Cam] cam_receiver_ready broadcast -> {len(_slots())} clients')
+		# print(f'[W2TD Cam] cam_receiver_ready broadcast -> {len(_slots())} clients')
 		# Send current config to newly connected cam_receiver so it knows resolution immediately
 		try:
 			cfg = _read_config()
 			config_msg = json.dumps(_config_msg(cfg))
 			webServerDAT.webSocketSendText(addr, config_msg)
 		except Exception as e:
-			print(f'[W2TD Cam Error] config send to cam_receiver failed: {e}')
+			# print(f'[W2TD Cam Error] config send to cam_receiver failed: {e}')
 		return
 
 	slots = _slots()
@@ -1375,7 +1375,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 		_send_data_ack(webServerDAT, addr, slot)
 
 	elif msg_type == 'hello':
-		print(f'[W2TD] Hello from slot {slot} - OK')
+		# print(f'[W2TD] Hello from slot {slot} - OK')
 
 	elif msg_type == 'webrtc_offer':
 		sdp = msg.get('sdp')
@@ -1400,7 +1400,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			wrtc.setRemoteDescription(conn_id, 'offer', sdp)
 			wrtc.createAnswer(conn_id)
 			_wt_add(slot, conn_id)
-			print(f'[W2TD WebRTC] Offer received from slot {slot}, conn_id={conn_id}, creating answer...')
+			# print(f'[W2TD WebRTC] Offer received from slot {slot}, conn_id={conn_id}, creating answer...')
 		except Exception as e:
 			print(f'[W2TD WebRTC Error] Offer handling error: {e}')
 
@@ -1419,7 +1419,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 		try:
 			wrtc.setRemoteDescription(conn_id, 'offer', sdp)
 			wrtc.createAnswer(conn_id)
-			print(f'[W2TD WebRTC] Reoffer from slot {slot}, conn_id={conn_id}')
+			# print(f'[W2TD WebRTC] Reoffer from slot {slot}, conn_id={conn_id}')
 		except Exception as e:
 			print(f'[W2TD WebRTC Error] Reoffer handling error: {e}')
 
@@ -1438,7 +1438,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			return
 		try:
 			wrtc.setRemoteDescription(conn_id, 'answer', sdp)
-			print(f'[W2TD WebRTC] Reanswer from slot {slot}, conn_id={conn_id} — audio track negotiated')
+			# print(f'[W2TD WebRTC] Reanswer from slot {slot}, conn_id={conn_id} — audio track negotiated')
 			_slot = slot
 			_wrtc = wrtc
 			_cfg = _read_config()
@@ -1455,14 +1455,14 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 						menus = getattr(p, 'menuNames', []) or []
 						if track_name in menus:
 							setattr(out_chop.par, par_name, track_name)
-							print(f'[W2TD WebRTC] Auto-selected track "{track_name}" on webrtc_audio_out_{_slot} (attempt {_attempt[0]})')
+							# print(f'[W2TD WebRTC] Auto-selected track "{track_name}" on webrtc_audio_out_{_slot} (attempt {_attempt[0]})')
 						elif menus:
 							setattr(out_chop.par, par_name, menus[0])
-							print(f'[W2TD WebRTC] Auto-selected track "{menus[0]}" on webrtc_audio_out_{_slot} (attempt {_attempt[0]})')
+							# print(f'[W2TD WebRTC] Auto-selected track "{menus[0]}" on webrtc_audio_out_{_slot} (attempt {_attempt[0]})')
 						elif _attempt[0] < 15:
 							run(_auto_select_tx_track, delayFrames=5, fromOP=_wrtc)
 						else:
-							print(f'[W2TD WebRTC] No tracks on webrtc_audio_out_{_slot} after {_attempt[0]} attempts')
+							# print(f'[W2TD WebRTC] No tracks on webrtc_audio_out_{_slot} after {_attempt[0]} attempts')
 						break
 			run(_auto_select_tx_track, delayFrames=5, fromOP=wrtc)
 			# Auto-select WebRTC Track on Video Stream Out TOP (only when videoout == 'td')
@@ -1480,14 +1480,14 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 							menus = getattr(p, 'menuNames', []) or []
 							if track_name in menus:
 								setattr(video_top.par, par_name, track_name)
-								print(f'[W2TD WebRTC] Auto-selected video track "{track_name}" on video_stream_out_{_slot} (attempt {_video_attempt[0]})')
+								# print(f'[W2TD WebRTC] Auto-selected video track "{track_name}" on video_stream_out_{_slot} (attempt {_video_attempt[0]})')
 							elif menus:
 								setattr(video_top.par, par_name, menus[0])
-								print(f'[W2TD WebRTC] Auto-selected video track "{menus[0]}" on video_stream_out_{_slot} (attempt {_video_attempt[0]})')
+								# print(f'[W2TD WebRTC] Auto-selected video track "{menus[0]}" on video_stream_out_{_slot} (attempt {_video_attempt[0]})')
 							elif _video_attempt[0] < 15:
 								run(_auto_select_video_track, delayFrames=5, fromOP=_wrtc)
 							else:
-								print(f'[W2TD WebRTC] No video tracks on video_stream_out_{_slot} after {_video_attempt[0]} attempts')
+								# print(f'[W2TD WebRTC] No video tracks on video_stream_out_{_slot} after {_video_attempt[0]} attempts')
 							break
 				run(_auto_select_video_track, delayFrames=5, fromOP=wrtc)
 		except Exception as e:
@@ -1520,7 +1520,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 		if receiver_addr is None:
 			# cam_receiver not yet open - store offer for replay when it connects
 			_save_pending_cam_offer(slot, cam_type, sdp)
-			print(f'[W2TD Cam] cam_receiver not connected - offer stored (slot {slot}, {cam_type})')
+			# print(f'[W2TD Cam] cam_receiver not connected - offer stored (slot {slot}, {cam_type})')
 			return
 		# Clear stale pending for this slot before relaying fresh offer
 		_clear_pending_cam_for_slot(slot)
@@ -1531,7 +1531,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 				'sdp': sdp,
 				'camType': cam_type,
 			}))
-			print(f'[W2TD Cam] cam_offer relayed to receiver (slot {slot}, {cam_type})')
+			# print(f'[W2TD Cam] cam_offer relayed to receiver (slot {slot}, {cam_type})')
 		except Exception as e:
 			print(f'[W2TD Cam Error] cam_offer relay error: {e}')
 
@@ -1590,7 +1590,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 				t[row, 'name'] = client_name
 		
 		_wt_update_name(slot, client_name)
-		print(f'[W2TD] Client name updated: slot {slot} -> {client_name}')
+		# print(f'[W2TD] Client name updated: slot {slot} -> {client_name}')
 
 	elif msg_type == 'screen_info':
 		# Screen resolution info from mobile
@@ -1627,7 +1627,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 				t[row, 'screen_height'] = screen_height
 				t[row, 'device_pixel_ratio'] = device_pixel_ratio
 		
-		print(f'[W2TD] Screen info updated: slot {slot} -> CSS: {css_width}x{css_height}, Physical: {physical_width}x{physical_height}, Screen: {screen_width}x{screen_height} (DPR: {device_pixel_ratio})')
+		# print(f'[W2TD] Screen info updated: slot {slot} -> CSS: {css_width}x{css_height}, Physical: {physical_width}x{physical_height}, Screen: {screen_width}x{screen_height} (DPR: {device_pixel_ratio})')
 
 	elif msg_type == 'visibility':
 		state = msg.get('state')
@@ -1653,7 +1653,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			touch = _touch()
 			touch[slot] = 0
 			_save_touch(touch)
-			print(f'[W2TD] Slot {slot} backgrounded — sensor values zeroed')
+			# print(f'[W2TD] Slot {slot} backgrounded — sensor values zeroed')
 		elif state == 'visible':
 			t = _op('sensor_table')
 			if t is not None:
@@ -1663,7 +1663,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 						t[row, 'visibility'] = 1
 					except Exception:
 						pass
-			print(f'[W2TD] Slot {slot} foregrounded — resuming')
+			# print(f'[W2TD] Slot {slot} foregrounded — resuming')
 
 	elif msg_type == 'canvas_error':
 		# Runtime error from a CanvasRunner sketch on mobile

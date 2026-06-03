@@ -85,10 +85,10 @@ def _auto_select_audio_chop(webrtcDAT, connectionId):
 		try:
 			relevant = [p.name for p in audio_chop.pars()
 			            if any(k in p.name.lower() for k in ('webrtc', 'connect', 'track', 'stream'))]
-			print(f'[W2TD WebRTC] webrtc_audio_1 relevant pars: {relevant}')
+			# print(f'[W2TD WebRTC] webrtc_audio_1 relevant pars: {relevant}')
 		except Exception:
 			pass
-	print(f'[W2TD WebRTC] webrtc_audio_1 conn={connectionId!r} type={type(connectionId).__name__} par={matched_par} ok={set_ok}')
+	# print(f'[W2TD WebRTC] webrtc_audio_1 conn={connectionId!r} type={type(connectionId).__name__} par={matched_par} ok={set_ok}')
 
 
 def _send_to_client(connectionId, data):
@@ -119,7 +119,7 @@ def onAnswer(webrtcDAT, connectionId, localSdp):
 	"""Called after createAnswer() - set local description and send answer to browser."""
 	webrtcDAT.setLocalDescription(connectionId, 'answer', localSdp, stereo=False)
 	_send_to_client(connectionId, {'type': 'webrtc_answer', 'sdp': localSdp})
-	print(f'[W2TD WebRTC] Answer sent to connectionId={connectionId}')
+	# print(f'[W2TD WebRTC] Answer sent to connectionId={connectionId}')
 
 
 def onIceCandidate(webrtcDAT, connectionId, candidate, lineIndex, sdpMid):
@@ -212,7 +212,7 @@ def _defer_wt_update(webrtcDAT, connectionId, state, slot):
 			try:
 				sync_mod.module.sync()
 			except Exception as e:
-				print(f'[W2TD WebRTC Error] webrtc_table_sync failed: {e}')
+				# print(f'[W2TD WebRTC Error] webrtc_table_sync failed: {e}')
 		if state == 'connected':
 			_auto_select_audio_chop(webrtcDAT, connectionId)
 			# Also auto-select TX track on Audio Stream Out CHOP (retry mechanism)
@@ -234,10 +234,10 @@ def _defer_wt_update(webrtcDAT, connectionId, state, slot):
 								menus = getattr(p, 'menuNames', []) or []
 								if track_name in menus:
 									setattr(out_chop.par, par_name, track_name)
-									print(f'[W2TD WebRTC] Auto-selected TX track "{track_name}" on webrtc_audio_out_{s} (connected, attempt {_tx_attempt[0]})')
+									# print(f'[W2TD WebRTC] Auto-selected TX track "{track_name}" on webrtc_audio_out_{s} (connected, attempt {_tx_attempt[0]})')
 								elif menus:
 									setattr(out_chop.par, par_name, menus[0])
-									print(f'[W2TD WebRTC] Auto-selected TX track "{menus[0]}" on webrtc_audio_out_{s} (connected, attempt {_tx_attempt[0]})')
+									# print(f'[W2TD WebRTC] Auto-selected TX track "{menus[0]}" on webrtc_audio_out_{s} (connected, attempt {_tx_attempt[0]})')
 								elif _tx_attempt[0] < 15:
 									run(_auto_select_tx, delayFrames=5, fromOP=_wrtcDAT)
 								break
@@ -249,7 +249,7 @@ def _defer_wt_update(webrtcDAT, connectionId, state, slot):
 
 def onConnectionStateChange(webrtcDAT, connectionId, state):
 	"""Called when the overall connection state changes."""
-	print(f'[W2TD WebRTC] connectionId={connectionId} state={state}')
+	# print(f'[W2TD WebRTC] connectionId={connectionId} state={state}')
 	slot = _slot_for_conn_id(connectionId) if state in ('failed', 'closed', 'disconnected') else None
 	# Defer webrtc_table update, sync, and auto_select to next frame -> avoids cook dependency loop
 	_defer_wt_update(webrtcDAT, connectionId, state, slot)
@@ -264,4 +264,4 @@ def onConnectionStateChange(webrtcDAT, connectionId, state):
 
 def onIceConnectionStateChange(webrtcDAT, connectionId, state):
 	"""Called when the ICE connection state changes."""
-	print(f'[W2TD WebRTC] ICE connectionId={connectionId} iceState={state}')
+	# print(f'[W2TD WebRTC] ICE connectionId={connectionId} iceState={state}')

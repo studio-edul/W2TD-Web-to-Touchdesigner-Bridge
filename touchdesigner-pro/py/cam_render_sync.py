@@ -228,7 +228,7 @@ def _destroy_all_cam_nodes(container):
 			if node:
 				try:
 					node.destroy()
-					print(f'[Cam Render Sync] Destroyed {prefix}{idx_str} (camera disabled)')
+					# print(f'[Cam Render Sync] Destroyed {prefix}{idx_str} (camera disabled)')
 				except Exception:
 					pass
 	for slot in prev_slots:
@@ -236,7 +236,7 @@ def _destroy_all_cam_nodes(container):
 		if n:
 			try:
 				n.destroy()
-				print(f'[Cam Render Sync] Destroyed camera_slot{slot} (camera disabled)')
+				# print(f'[Cam Render Sync] Destroyed camera_slot{slot} (camera disabled)')
 			except Exception:
 				pass
 		op('/').store(f'w2td_web_render_slot_{slot}', None)
@@ -246,7 +246,7 @@ def _destroy_all_cam_nodes(container):
 	if layout1:
 		try:
 			layout1.destroy()
-			print('[Cam Render Sync] Destroyed layout1 (camera disabled)')
+			# print('[Cam Render Sync] Destroyed layout1 (camera disabled)')
 		except Exception:
 			pass
 	op('/').store('w2td_cam_render_last_slots', ())
@@ -271,7 +271,7 @@ def sync(table_dat=None):
 		_destroy_all_cam_nodes(container)
 		shown = op('/').fetch('w2td_cam_render_disabled_logged', False)
 		if not shown:
-			print('[Cam Render Sync] Camera disabled (Rearcamera=0, Frontcamera=0) — skipping node creation')
+			# print('[Cam Render Sync] Camera disabled (Rearcamera=0, Frontcamera=0) — skipping node creation')
 			op('/').store('w2td_cam_render_disabled_logged', True)
 		return
 	op('/').store('w2td_cam_render_disabled_logged', False)
@@ -323,7 +323,7 @@ def sync(table_dat=None):
 				pass
 			try:
 				existing[name].destroy()
-				print(f'[Cam Render Sync] Destroyed {name}')
+				# print(f'[Cam Render Sync] Destroyed {name}')
 			except Exception as e:
 				print(f'[Cam Render Sync] Error destroying {name}: {e}')
 
@@ -336,7 +336,7 @@ def sync(table_dat=None):
 		if top is None:
 			try:
 				top = container.create('webrenderTOP', name)
-				print(f'[Cam Render Sync] Created {name}')
+				# print(f'[Cam Render Sync] Created {name}')
 			except Exception as e:
 				print(f'[Cam Render Sync] Error creating {name}: {e}')
 				continue
@@ -372,7 +372,7 @@ def sync(table_dat=None):
 		if t_top is None:
 			try:
 				t_top = container.create('transformTOP', t_name)
-				print(f'[Cam Render Sync] Created {t_name}')
+				# print(f'[Cam Render Sync] Created {t_name}')
 			except Exception as e:
 				print(f'[Cam Render Sync] Error creating {t_name}: {e}')
 				t_top = None
@@ -397,7 +397,7 @@ def sync(table_dat=None):
 		if c_top is None:
 			try:
 				c_top = container.create('cropTOP', c_name)
-				print(f'[Cam Render Sync] Created {c_name}')
+				# print(f'[Cam Render Sync] Created {c_name}')
 			except Exception as e:
 				print(f'[Cam Render Sync] Error creating {c_name}: {e}')
 				c_top = None
@@ -443,7 +443,7 @@ def sync(table_dat=None):
 		if n_top is None:
 			try:
 				n_top = container.create('nullTOP', n_name)
-				print(f'[Cam Render Sync] Created {n_name}')
+				# print(f'[Cam Render Sync] Created {n_name}')
 			except Exception as e:
 				print(f'[Cam Render Sync] Error creating {n_name}: {e}')
 				n_top = None
@@ -466,7 +466,7 @@ def sync(table_dat=None):
 				layout1 = container.create('layoutTOP', 'layout1')
 				layout1.nodeX = top.nodeX + 600
 				layout1.nodeY = 0
-				print('[Cam Render Sync] Created layout1')
+				# print('[Cam Render Sync] Created layout1')
 				# Connect layout1 -> out1
 				out1 = container.op('out1')
 				if out1:
@@ -494,7 +494,7 @@ def sync(table_dat=None):
 	if slots:
 		prev = tuple(op('/').fetch('w2td_cam_render_last_slots', ()))
 		if tuple(slots) != prev:
-			print(f'[Cam Render Sync] {len(slots)} web render TOPs synced (slots {slots})')
+			# print(f'[Cam Render Sync] {len(slots)} web render TOPs synced (slots {slots})')
 			op('/').store('w2td_cam_render_last_slots', tuple(slots))
 		# Set layout1 resolution based on cropped output size
 		try:
@@ -531,7 +531,7 @@ def sync(table_dat=None):
 		if layout1:
 			try:
 				layout1.destroy()
-				print('[Cam Render Sync] Destroyed layout1 (no connections)')
+				# print('[Cam Render Sync] Destroyed layout1 (no connections)')
 			except Exception as e:
 				print(f'[Cam Render Sync] Error destroying layout1: {e}')
 
