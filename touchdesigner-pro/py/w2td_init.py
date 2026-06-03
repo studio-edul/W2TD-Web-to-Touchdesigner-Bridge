@@ -495,7 +495,7 @@ def generate():
 
 		host = tunnel_url.replace('https://', '').replace('http://', '').strip()
 		short_host = host.replace('.trycloudflare.com', '') if host.endswith('.trycloudflare.com') else host
-		GITHUB_PAGES_URL = 'https://w2td-pro-dev.studio-edul.com/'
+		GITHUB_PAGES_URL = 'https://w2td-pro.studio-edul.com/'
 		qr_url = GITHUB_PAGES_URL + '?td=' + host
 		_write_config('Url', qr_url)
 

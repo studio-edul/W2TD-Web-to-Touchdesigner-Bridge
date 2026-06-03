@@ -3,7 +3,7 @@ import os
 import time
 
 W2TD_VERSION = '1.0.0'
-GITHUB_PAGES_URL = 'https://w2td-dev.studio-edul.com/'
+GITHUB_PAGES_URL = 'https://w2td.studio-edul.com/'
 MAX_CLIENTS = 20
 ACK_INTERVAL = 1.0  # seconds between data_ack signals per slot
 STALE_TIMEOUT_DEFAULT = 30.0  # default seconds; overridden by w2td_config 'Disconnecttimeout'
