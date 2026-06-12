@@ -74,6 +74,7 @@ def _ensure_user_site_in_path():
 			# print(f'[W2TD] Added user site-packages to sys.path: {user_site}')
 	except Exception as e:
 		# print(f'[W2TD] Could not add user site-packages to sys.path: {e}')
+		pass
 
 
 def _init_tables():
@@ -160,8 +161,10 @@ def _init_webrtc_ice():
 			# print(f'[W2TD] WebRTC DAT ICE TURN configured: {turn_srv}')
 		else:
 			# print('[W2TD] WebRTC DAT ICE initialization complete (No TURN server set)')
+			pass
 	else:
 		# print('[W2TD] WebRTC DAT ICE initialization complete')
+		pass
 
 
 def _set_par(op_node, primary, value, fallbacks=()):

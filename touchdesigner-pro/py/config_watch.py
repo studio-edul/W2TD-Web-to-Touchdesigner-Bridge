@@ -186,6 +186,7 @@ def _do_broadcast():
 						print(f'[W2TD] Error setting crop_top_{i} values: {e}')
 			if updated:
 				# print(f'[W2TD] web_render_top resolution -> {sq}x{sq}, transform rotate -> {rotate_deg} ({updated} TOPs)')
+				pass
 	except Exception:
 		pass
 	# If videoout=js, send canvas_code directly (no module access — avoids compilation errors)
@@ -224,6 +225,7 @@ def _do_broadcast():
 			sync_dat.module.sync()
 	except Exception as e:
 		# print(f'[W2TD Config Watch] sync trigger failed: {e}')
+		pass
 
 
 def _debounced_broadcast():
