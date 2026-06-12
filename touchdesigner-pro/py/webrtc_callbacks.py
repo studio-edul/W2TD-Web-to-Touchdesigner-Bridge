@@ -213,6 +213,7 @@ def _defer_wt_update(webrtcDAT, connectionId, state, slot):
 				sync_mod.module.sync()
 			except Exception as e:
 				# print(f'[W2TD WebRTC Error] webrtc_table_sync failed: {e}')
+				pass
 		if state == 'connected':
 			_auto_select_audio_chop(webrtcDAT, connectionId)
 			# Also auto-select TX track on Audio Stream Out CHOP (retry mechanism)

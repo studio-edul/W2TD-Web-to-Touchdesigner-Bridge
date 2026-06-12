@@ -211,6 +211,7 @@ def _auto_select_video_track(vout, track_name, attempt=1, max_attempts=15):
 		run(_retry, delayFrames=5, fromOP=_vout)
 	else:
 		# print(f'[W2TD Video Sync] Warning: could not auto-select video track on {vout.name} after {max_attempts} attempts')
+		pass
 
 
 # ── 메인 sync ─────────────────────────────────────────────────────────────────
@@ -377,8 +378,10 @@ def sync():
 
 	if rows:
 		# print(f'[W2TD Video Sync] {len(rows)} slot(s) synced, {len(newly_created)} new')
+		pass
 	else:
 		# print('[W2TD Video Sync] No connections — all video TX nodes removed')
+		pass
 
 
 def onTableChange(dat, prevDAT, info):

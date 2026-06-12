@@ -341,6 +341,7 @@ def sync():
 	# ── RX: Audio Stream In CHOPs ─────────────────────────────────────────────
 	if not mic_rx:
 		# print('[W2TD WebRTC Sync RX] Microphone disabled — skipping Audio Stream In node creation')
+		pass
 	existing = {}
 	for chop in (container.ops('webrtc_audio_*') if hasattr(container, 'ops') else []):
 		if chop.name.startswith('webrtc_audio_') and chop.name[14:].isdigit():
@@ -430,8 +431,10 @@ def sync():
 
 	if rows:
 		# print(f'[W2TD WebRTC Sync RX] {len(rows)} audio stream in chops synced')
+		pass
 	else:
 		# print('[W2TD WebRTC Sync RX] No connections - all audio stream in chops removed')
+		pass
 
 	# ── TX: Audio Stream Out (TD -> Mobile) ───────────────────────────────────
 	audio_tx = _read_audio_tx_enabled()
@@ -565,6 +568,7 @@ def sync():
 				run(_trigger_offers, delayFrames=3, fromOP=webrtc)
 	elif active_slots:
 		# print('[W2TD WebRTC Sync TX] Warning: active slots but no audio TX nodes created')
+		pass
 
 
 def onTableChange(dat, prevDAT, info):
