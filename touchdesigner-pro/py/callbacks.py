@@ -484,6 +484,7 @@ def _replay_canvas_code(webServerDAT, client, slot):
 			webServerDAT.webSocketSendText(client, json.dumps({'type': 'canvas_code', 'code': code}))
 	except Exception as e:
 		# print(f'[W2TD Canvas Error] replay to slot {slot}: {e}')
+		pass
 
 
 def _handle_cam_receiver_msg(webServerDAT, addr, msg):
@@ -561,6 +562,7 @@ def _handle_cam_receiver_msg(webServerDAT, addr, msg):
 					print(f'[W2TD Cam Error] web_render_top for slot {slot} not found')
 			else:
 				# print(f'[W2TD Cam] Received video resolution: {int(w)}x{int(h)} (slot {slot}, web_render not yet synced)')
+				pass
 
 # ------------------------------------------------------------------------------
 
@@ -723,6 +725,7 @@ def broadcast_config(webServerDAT):
 		_op('w2td_init').module._init_webrtc_ice()
 	except Exception as e:
 		# print(f'[W2TD Error] Failed to update WebRTC ICE on config broadcast: {e}')
+			pass
 
 
 def send_haptic_to_client(webServerDAT, slot, pattern):
@@ -1167,6 +1170,7 @@ def onWebSocketClose(webServerDAT, client):
 				pass
 		if slots:
 			# print(f'[W2TD Cam] cam_receiver_ready broadcast -> {len(slots)} remaining clients (after disconnect)')
+			pass
 	except Exception:
 		pass
 
@@ -1252,6 +1256,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			webServerDAT.webSocketSendText(addr, config_msg)
 		except Exception as e:
 			# print(f'[W2TD Cam Error] config send to cam_receiver failed: {e}')
+				pass
 		return
 
 	slots = _slots()
@@ -1376,6 +1381,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 
 	elif msg_type == 'hello':
 		# print(f'[W2TD] Hello from slot {slot} - OK')
+			pass
 
 	elif msg_type == 'webrtc_offer':
 		sdp = msg.get('sdp')
@@ -1463,6 +1469,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 							run(_auto_select_tx_track, delayFrames=5, fromOP=_wrtc)
 						else:
 							# print(f'[W2TD WebRTC] No tracks on webrtc_audio_out_{_slot} after {_attempt[0]} attempts')
+								pass
 						break
 			run(_auto_select_tx_track, delayFrames=5, fromOP=wrtc)
 			# Auto-select WebRTC Track on Video Stream Out TOP (only when videoout == 'td')
@@ -1488,6 +1495,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 								run(_auto_select_video_track, delayFrames=5, fromOP=_wrtc)
 							else:
 								# print(f'[W2TD WebRTC] No video tracks on video_stream_out_{_slot} after {_video_attempt[0]} attempts')
+									pass
 							break
 				run(_auto_select_video_track, delayFrames=5, fromOP=wrtc)
 		except Exception as e:
