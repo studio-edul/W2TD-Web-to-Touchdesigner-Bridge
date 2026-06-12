@@ -993,9 +993,15 @@ const W2TD_VERSION = '1.0.0';
     if (wakeLock) { wakeLock.release(); wakeLock = null; }
   }
 
+  let _broadcastingBeforeHidden = false;
+
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && wakeLock === null) {
-      requestWakeLock();
+    if (document.visibilityState === 'hidden') {
+      _broadcastingBeforeHidden = broadcasting;
+      if (broadcasting) stopBroadcast();
+    } else {
+      if (wakeLock === null) requestWakeLock();
+      if (_broadcastingBeforeHidden && WSClient.isConnected()) _startDataBroadcast();
     }
   });
 
