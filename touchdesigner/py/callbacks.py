@@ -864,6 +864,10 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 		screen_height = screen_info.get('screenHeight', 0)
 		device_pixel_ratio = screen_info.get('devicePixelRatio', 1.0)
 		
+		try:
+			cur_visibility = int(t[row, 'visibility'])
+		except Exception:
+			cur_visibility = 1
 		t.replaceRow(row, [
 			slot, 1, client_name,
 			g('ax', 0), g('ay', 0), g('az', 0),
@@ -875,6 +879,7 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			physical_width, physical_height,
 			screen_width, screen_height,
 			device_pixel_ratio,
+			cur_visibility,
 		])
 		# Send ack signal to indicate data received (rate-limited to 1/sec)
 		_send_data_ack(webServerDAT, addr, slot)
