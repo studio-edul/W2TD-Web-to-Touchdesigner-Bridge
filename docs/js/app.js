@@ -22,8 +22,6 @@ const W2TD_VERSION = '1.0.0';
   let audioAutoGain = false;
   let iceServersFromConfig = null;   // from w2td_config ice_servers (JSON)
   let iceTransportPolicyFromConfig = null;  // 'relay' | 'all' | null
-  let showTouchPoints = true;
-
   function _isTunnelConnection() {
     const addr = (els.tdAddress && els.tdAddress.value || '').toLowerCase();
     const noProt = addr.replace(/^(wss?|https?):\/\//, '');
@@ -61,7 +59,6 @@ const W2TD_VERSION = '1.0.0';
     els.touchPad = $('touch-pad');
     els.touchCanvas = $('touch-canvas');
     els.btnExitTouch = $('btn-exit-touch');
-    els.btnToggleTouchPoints = $('btn-toggle-touch-points');
     els.debugInfo = $('debug-info');
     els.userStartOverlay = $('user-start-overlay');
     els.btnUserStart = $('btn-user-start');
@@ -97,9 +94,6 @@ const W2TD_VERSION = '1.0.0';
             SensorModule.setSensorSelected(key, val);
           }
         }
-        if (s.showTouchPoints !== undefined) {
-          showTouchPoints = s.showTouchPoints;
-        }
       } catch (e) { /* ignore */ }
     }
     // Auto-populate device name if empty
@@ -113,7 +107,6 @@ const W2TD_VERSION = '1.0.0';
       tdAddress: els.tdAddress.value,
       clientName: els.clientName ? els.clientName.value : '',
       sensorSelection: SensorModule.getSelected(),
-      showTouchPoints: showTouchPoints,
     }));
   }
 
@@ -202,10 +195,6 @@ const W2TD_VERSION = '1.0.0';
     if (cfg.ice_transport_policy != null) {
       iceTransportPolicyFromConfig = cfg.ice_transport_policy === 'relay' ? 'relay' : null;
     }
-    if (cfg.show_dots != null) {
-      showTouchPoints = !!parseInt(cfg.show_dots);
-      updateTouchPointsToggleUI();
-    }
     if (cfg.cam_resolution != null) {
       WebRTCModule.setResolution(cfg.cam_resolution);
       _updateCamResolutionUI();
@@ -252,9 +241,6 @@ const W2TD_VERSION = '1.0.0';
         touchPadActive = false;
         els.touchPad.classList.add('hidden');
         els.btnExitTouch.classList.remove('hidden');
-        if (els.btnToggleTouchPoints) {
-          els.btnToggleTouchPoints.classList.add('hidden');
-        }
         _disableTouchLock();
         TouchModule.destroy();
       }
@@ -297,7 +283,6 @@ const W2TD_VERSION = '1.0.0';
     touchPadActive = true;
     els.touchPad.classList.remove('hidden');
     els.btnExitTouch.classList.add('hidden'); // no exit in minimal mode
-    // btnToggleTouchPoints stays hidden in user mode; visibility controlled by show_dots config
     _enableTouchLock();
     resizeTouchCanvas();
 
@@ -327,13 +312,9 @@ const W2TD_VERSION = '1.0.0';
 
     // Events on touchPad (not touchCanvas) so display:none on canvas doesn't break touch tracking
     TouchModule.init(els.touchPad, (snapshot) => {
-      if (showTouchPoints) {
-        Visualization.drawTouches(els.touchCanvas, snapshot.touches, false);
-      }
+      Visualization.drawTouches(els.touchCanvas, snapshot.touches, false);
       handleTouchData(snapshot);
     });
-    updateTouchPointsToggleUI();
-    _applyTouchDotsVisibility();
   }
 
   function init() {
@@ -392,11 +373,14 @@ const W2TD_VERSION = '1.0.0';
     els.btnEnableSensors.addEventListener('click', handleEnableSensors);
     els.btnFullscreenTouch.addEventListener('click', enterTouchPad);
     els.btnExitTouch.addEventListener('click', exitTouchPad);
+    els.btnExitTouch.addEventListener('touchstart', (e) => e.stopPropagation());
+    els.btnExitTouch.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      exitTouchPad();
+    });
     if (els.btnCameraMonitor) els.btnCameraMonitor.addEventListener('click', enterCameraMonitor);
     if (els.btnExitCameraMonitor) els.btnExitCameraMonitor.addEventListener('click', exitCameraMonitor);
-    if (els.btnToggleTouchPoints) {
-      els.btnToggleTouchPoints.addEventListener('click', toggleTouchPoints);
-    }
     // Mic state changes → re-render sensor list
     WebRTCModule.onStateChange((state) => {
       renderSensorList();
@@ -844,20 +828,12 @@ const W2TD_VERSION = '1.0.0';
     if (els.mainUI) els.mainUI.classList.add('hidden');
     els.touchPad.classList.remove('hidden');
     els.btnExitTouch.classList.remove('hidden'); // always visible in dev_mode=1
-    if (els.btnToggleTouchPoints) {
-      els.btnToggleTouchPoints.classList.remove('hidden'); // show toggle button
-    }
     resizeTouchCanvas();
 
-    // Events on touchPad (not touchCanvas) so display:none on canvas doesn't break touch tracking
     TouchModule.init(els.touchPad, (snapshot) => {
-      if (showTouchPoints) {
-        Visualization.drawTouches(els.touchCanvas, snapshot.touches, devMode);
-      }
+      Visualization.drawTouches(els.touchCanvas, snapshot.touches, devMode);
       handleTouchData(snapshot);
     });
-    updateTouchPointsToggleUI();
-    _applyTouchDotsVisibility();
     _enableTouchLock();
     haptic();
   }
@@ -866,9 +842,6 @@ const W2TD_VERSION = '1.0.0';
     touchPadActive = false;
     els.touchPad.classList.add('hidden');
     if (els.mainUI) els.mainUI.classList.remove('hidden');
-    if (els.btnToggleTouchPoints) {
-      els.btnToggleTouchPoints.classList.add('hidden'); // hide toggle button
-    }
     TouchModule.destroy();
     _disableTouchLock();
     startVizTouch();
@@ -1020,9 +993,15 @@ const W2TD_VERSION = '1.0.0';
     if (wakeLock) { wakeLock.release(); wakeLock = null; }
   }
 
+  let _broadcastingBeforeHidden = false;
+
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && wakeLock === null) {
-      requestWakeLock();
+    if (document.visibilityState === 'hidden') {
+      _broadcastingBeforeHidden = broadcasting;
+      if (broadcasting) stopBroadcast();
+    } else {
+      if (wakeLock === null) requestWakeLock();
+      if (_broadcastingBeforeHidden && WSClient.isConnected()) _startDataBroadcast();
     }
   });
 
@@ -1264,55 +1243,6 @@ const W2TD_VERSION = '1.0.0';
     if (!dot || !dot.classList.contains('connected')) return;
     dot.classList.add('ack-pulse');
     setTimeout(() => dot.classList.remove('ack-pulse'), 500);
-  }
-
-  /**
-   * Toggle touch points visibility in touchpad mode
-   */
-  function toggleTouchPoints() {
-    showTouchPoints = !showTouchPoints;
-    saveSettings();
-    updateTouchPointsToggleUI();
-    haptic();
-    _applyTouchDotsVisibility();
-  }
-
-  /**
-   * Apply show_dots state to the touch canvas.
-   * Uses display:none so touch events still fire on touchPad.
-   */
-  function _applyTouchDotsVisibility() {
-    if (!els.touchCanvas) return;
-    if (!showTouchPoints) {
-      els.touchCanvas.style.display = 'none';
-      const ctx = els.touchCanvas.getContext('2d');
-      ctx.clearRect(0, 0, els.touchCanvas.width, els.touchCanvas.height);
-    } else {
-      els.touchCanvas.style.display = '';
-      if (touchPadActive) {
-        const snap = TouchModule.getSnapshot();
-        if (snap && snap.touches.length > 0) {
-          Visualization.drawTouches(els.touchCanvas, snap.touches, devMode);
-        }
-      }
-    }
-  }
-
-  /**
-   * Update touch points toggle button UI state
-   */
-  function updateTouchPointsToggleUI() {
-    if (!els.btnToggleTouchPoints) return;
-
-    if (showTouchPoints) {
-      els.btnToggleTouchPoints.classList.add('active');
-      els.btnToggleTouchPoints.textContent = 'Show Dots';
-      els.btnToggleTouchPoints.setAttribute('title', 'Hide dots');
-    } else {
-      els.btnToggleTouchPoints.classList.remove('active');
-      els.btnToggleTouchPoints.textContent = 'Show Dots';
-      els.btnToggleTouchPoints.setAttribute('title', 'Show dots');
-    }
   }
 
   document.addEventListener('DOMContentLoaded', init);

@@ -25,17 +25,24 @@ const TouchModule = (() => {
     enabled = true;
   }
 
+  function _isControl(el) {
+    return el && (el.tagName === 'BUTTON' || el.closest('.touch-pad-controls'));
+  }
+
   function handleTouchStart(e) {
+    if (_isControl(e.target)) return;
     e.preventDefault();
     updateTouches(e.touches, 'start');
   }
 
   function handleTouchMove(e) {
+    if (_isControl(e.target)) return;
     e.preventDefault();
     updateTouches(e.touches, 'move');
   }
 
   function handleTouchEnd(e) {
+    if (_isControl(e.target)) return;
     e.preventDefault();
     // Find ended touches
     const currentIds = new Set();

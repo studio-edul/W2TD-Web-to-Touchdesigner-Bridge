@@ -90,16 +90,15 @@ Columns: `key` | `value`. Changes are debounced and broadcast automatically by `
 | `Motion` `Orientation` `Geolocation` `Touch` | `1` / `1` / `0` / `1` | Per-sensor enable |
 | `Rearcamera` `Frontcamera` `Microphone` | `0` / `0` / `1` | Per-stream auto-enable |
 | `Echocancellation` `Noisesuppression` `Audiogain` | `0` | Mic processing (`0` = raw) |
-| `Showdots` | `1` | Draw touch points on touch pad |
 | `Resolution` | `Non-Commercial` | Camera square: `Non-Commercial` (1280×1280), `FHD` (1920×1920) |
 | `Screenmode` | `Portrait` | Camera: `Portrait`, `Landscape` |
 | `Port` | `9980` | Web server port |
 | `Fixedurl` | _(optional)_ | Named Cloudflare tunnel URL — skip random tunnel |
 | `Turnserver` `Turnusername` `Turnpassword` | _(optional)_ | Custom TURN server |
 | `ice_transport_policy` | _(optional)_ | `relay` = force TURN only |
-| `Backgroundcolor` | `1` | _(Pro)_ Enable background-color push |
-| `Flashlight` | `1` | _(Pro)_ Enable flashlight control |
-| `Hapticfeedback` | `1` | _(Pro)_ Enable haptic from CHOP |
+| `Backgroundcolor` | `1` | Enable background-color push |
+| `Flashlight` | `1` | Enable flashlight control |
+| `Hapticfeedback` | `1` | Enable haptic from CHOP |
 | `Video` | `1` | _(Pro)_ Enable per-slot video downlink TX |
 | `Videoout` | `none` | _(Pro)_ Mobile display mode: `none` = off, `color` = background color control, `js` = live JS canvas sketch, `td` = TD video stream. Also accepted as `Video` key. Changes are broadcast live (no reconnect needed). |
 | `Jsfile` | _(optional)_ | _(Pro)_ Absolute path to a `.js` sketch file. When `Videoout=js`, `config_watch` reads this file and sends `canvas_code` to all clients on config change. |
@@ -227,13 +226,13 @@ Client slot assignments are stored via `op('/').store/fetch` and survive script 
 { "type": "ack", "slot": 1, "td_version": "1.0.0" }
 { "type": "rejected", "reason": "Server is currently full..." }
 
-{ "type": "config", "sample_rate": 30, "dev_mode": 1, "show_dots": 1,
+{ "type": "config", "sample_rate": 30, "dev_mode": 1,
   "audio_tx": 1, "video_tx": 1, "cam_resolution": "non-commercial", ... }
 
 { "type": "haptic", "pattern": [200, 100, 200] }   // vibration pattern
 { "type": "haptic", "state": 1 }                   // continuous vibration on/off
-{ "type": "bg_color", "color": "#ff0000", "duration": 0 }    // Pro
-{ "type": "flashlight", "state": 1 }                          // Pro (rear cam required)
+{ "type": "bg_color", "color": "#ff0000", "duration": 0 }
+{ "type": "flashlight", "state": 1 }                          // rear cam required
 
 { "type": "webrtc_answer", "sdp": "..." }        // answer to mobile offer
 { "type": "webrtc_offer",  "sdp": "..." }        // TD-initiated offer (audio/video downlink renegotiation)
@@ -263,9 +262,9 @@ op('web_server_dat').module.send_haptic_to_all(op('web_server_dat'), pattern=[20
 op('web_server_dat').module.broadcast_haptic_from_chop(op('web_server_dat'))
 ```
 
-## TD Background Color API (Pro)
+## TD Background Color API
 
-Requires `Videoout = color` in `w2td_config`. Color is applied as a full-screen background on the mobile.
+Color is applied as a full-screen background on the mobile. Pro requires `Videoout = color` in `w2td_config`.
 
 ```python
 # Send color to a specific slot
@@ -316,7 +315,6 @@ Inside `W2TD_Pro`, add an `In DAT` named `js_code_in` and a `DAT Execute` pointi
 **Example sketches:**
 
 - `touchdesigner-examples/canvas_sketches/sensor_test.js` — sensor test ball with inertia, holofoil (5 Canvas 2D layers driven by orientation), and heartbeat
-- `touchdesigner-pro/sketches/particle.js` — 3000-particle system with orientation-based gravity removal and noise turbulence. Requires both `Motion = 1` and `Orientation = 1`.
 
 **Reloading JS sketches from disk**: Set `Jsfile` in `w2td_config` to the `.js` file path (or directory). After editing the file, call from TD Textport:
 ```python
@@ -324,7 +322,7 @@ op('web_server_dat').module.reload_jsfile(op('web_server_dat'))
 ```
 This re-reads the file and broadcasts the new code to all connected clients instantly.
 
-## TD Flashlight API (Pro)
+## TD Flashlight API
 
 Rear camera must be active on the mobile device.
 
@@ -365,10 +363,10 @@ On the mobile side:
 - **Camera** — WebRTC → per-slot Web Render TOP (rear/front, mutually exclusive per device), with transform + crop + layout compositing
 - **Audio downlink** _(Pro)_ — TD Audio Stream Out CHOP → WebRTC → mobile speaker (per-slot routing via `w2td_audio_bus`)
 - **Video downlink** _(Pro)_ — TD Video Stream Out TOP → WebRTC → mobile `<video>` (source: `video_slot{N}` TOP; dev_mode=1: monitor overlay, dev_mode=0: fullscreen background). Requires `Videoout = td`. Managed by `webrtc_video_sync.py` (separate from audio sync).
-- **Background color** _(Pro)_ — broadcast via `w2td_background` or `w2td_color` (r/g/b) or per-slot via `w2td_bg_color_bus` (channels `slot{N}_r/g/b`). Requires `Videoout = color`. Last color is saved to localStorage and instantly applied on mode switch.
+- **Background color** — broadcast via `w2td_background` or `w2td_color` (r/g/b) or per-slot via `w2td_bg_color_bus` (channels `slot{N}_r/g/b`). Pro requires `Videoout = color`. Last color is saved to localStorage and instantly applied on mode switch.
 - **Live JS canvas sketch** _(Pro)_ — inject JavaScript into mobile canvas from a Text DAT or `Jsfile` path. Sensor data (motion, orientation, touch) available inside the sketch via `getSensors()`. Auto-broadcast on edit via `canvas_code_dat_exec.py` or `config_watch.py` (when `Videoout=js` + `Jsfile` set). Requires `Videoout = js`.
 - **Haptic feedback** — pattern-based or continuous, driven by `w2td_haptic` CHOP or Python API (available in both Free and Pro)
-- **Flashlight** _(Pro)_ — driven by `w2td_flashlight` CHOP (channels `slot{N}` or `all`)
+- **Flashlight** — driven by `w2td_flashlight` CHOP (channels `slot{N}` or `all`)
 - **WebSocket Heartbeat** — auto-reconnect on connection loss
 - **Data Ack** — visual confirmation of TD reception (rate-limited 1 Hz)
 - **Device name** — user-defined or auto-detected from User-Agent
@@ -409,9 +407,11 @@ touchdesigner/py/            ← Free TD scripts (W2TD base COMP)
   w2td_init.py               ← onCreate installs packages; onStart starts tunnel + QR
   webrtc_callbacks.py        ← WebRTC DAT callbacks
   webrtc_table_sync.py       ← Audio Stream In CHOP sync
-  config_watch.py            ← Debounced broadcast on w2td_config change
+  config_watch.py            ← Debounced broadcast on w2td_config change (delegates to callbacks.py)
   cam_render_sync.py         ← Per-slot Web Render TOP + transform/crop/layout
-  w2td_zombie_checker.py     ← Cleans up stale slots
+  background_chop_exec.py    ← w2td_background / w2td_bg_color_bus → bg_color msgs
+  haptic_chop_exec.py        ← w2td_haptic → haptic state msgs
+  flashlight_chop_exec.py    ← w2td_flashlight → flashlight msgs
 
 touchdesigner-pro/py/        ← Pro TD scripts (W2TD_Pro base COMP)
   callbacks.py               ← + webrtc_reoffer/reanswer handlers, canvas_code/bg_color/flashlight API
@@ -425,14 +425,6 @@ touchdesigner-pro/py/        ← Pro TD scripts (W2TD_Pro base COMP)
   update_execs.py            ← Dev utility (touch Execute DAT files to reload)
   w2td_zombie_checker.py     ← Cleans up stale slots
   (config_watch, cam_render_sync, w2td_init same as free but with W2TD_Pro base)
-
-touchdesigner-pro/py_korail/ ← Korail project scripts (Script CHOP / GLSL)
-  line_chop.py               ← Velocity-integral sliding-window CHOP (sensor-active + visibility gate)
-  line_glsl.frag             ← Line render GLSL fragment
-  line_glsl_split.frag       ← Split line render GLSL fragment
-
-touchdesigner-pro/sketches/  ← Canvas runner sketch files (.js)
-  particle.js                ← Particle system with orientation-based gravity removal
 
 touchdesigner-examples/      ← Example projects
   canvas_sketches/
@@ -456,6 +448,85 @@ dev-tools/load-test/
 - Automatically adapts to the server's `config` (sample rate, enabled sensors)
 - Staggered connection: clients connect at configurable intervals to avoid connection spikes
 - Deploy as a standalone HTML file — no dependencies, works from `file://` or any HTTPS host
+
+---
+
+## TD Textport Logs
+
+정상 동작 시 Textport에 출력되는 로그는 핵심 이벤트만 표시됩니다. 내부 디버그 로그는 주석 처리되어 있으며, 필요 시 해당 `.py` 파일에서 `# print(` → `print(`로 복원할 수 있습니다.
+
+### Startup
+
+```
+[W2TD] onCreate triggered - installing packages...
+[W2TD Setup] All packages installed.
+[W2TD] onStart — SSL, 테이블 초기화, WebRTC ICE, 터널/QR 생성
+[W2TD] Starting Cloudflare tunnel...
+[W2TD] Cloudflare URL: https://xxx.trycloudflare.com
+[W2TD] QR URL: https://w2td-pro.studio-edul.com/?td=xxx
+```
+
+### Runtime
+
+```
+[W2TD] Connected -> slot 1 | ws://... | 1/20 active
+[W2TD] Disconnected -> slot 1 | ws://... | 0/20 active
+[W2TD] Stale slot 2 released (...) — no msg in 30s
+[W2TD Zombie] Slot 3 (...) silent for 60s - releasing
+```
+
+### Errors
+
+문제 발생 시에만 출력. prefix: `[W2TD Error]`, `[W2TD ... Error]`
+
+```
+[W2TD Error] sensor_table DAT not found - create a Table DAT named "sensor_table"
+[W2TD Error] pycloudflared not installed.
+[W2TD Error] Cloudflare tunnel failed: ...
+[W2TD WebRTC Error] Offer handling error: ...
+[W2TD Cam Error] cam_offer relay error: ...
+```
+
+### TD 노드에 에러 표시하기 (Script Error)
+
+Textport 대신 네트워크 에디터에서 노드에 직접 에러를 표시할 수 있습니다. 노드 아래에 빨간색(에러) 또는 노란색(경고) 삼각형 아이콘이 나타나며, 마우스를 올리면 메시지가 표시됩니다.
+
+```python
+# 에러 표시 (빨간 삼각형)
+me.addScriptError('sensor_table not found')
+
+# 경고 표시 (노란 삼각형)
+me.addWarning('Tunnel connection slow')
+
+# 에러 해제 (정상 복구 시)
+me.clearScriptErrors()
+
+# 다른 노드에 에러 표시
+op('web_server_dat').addScriptError('Connection failed')
+op('web_server_dat').clearScriptErrors()
+```
+
+**적용 예시 — `callbacks.py`에서 노드 에러 표시:**
+
+기존 에러 로그를 노드 표시로 전환하려면 `print()`와 함께 `addScriptError()`를 호출합니다:
+
+```python
+# Before (Textport only)
+print('[W2TD Error] sensor_table DAT not found')
+
+# After (Textport + node badge)
+msg = 'sensor_table DAT not found'
+print(f'[W2TD Error] {msg}')
+me.addScriptError(msg)
+```
+
+정상 복구 시점(예: 테이블이 정상 생성된 직후)에 `me.clearScriptErrors()`를 호출하면 에러 배지가 사라집니다.
+
+**`me` vs `op('...')`:**
+- `me` — 현재 스크립트가 실행 중인 DAT 자신에 에러 표시
+- `op('web_server_dat')` — 지정한 다른 노드에 에러 표시
+
+**참고:** `addScriptError()`는 누적됩니다. 같은 메시지를 반복 호출하면 중복 표시되므로, 반복 호출 전에 `clearScriptErrors()`로 초기화하거나 조건부로 호출하는 것을 권장합니다.
 
 ---
 

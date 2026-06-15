@@ -11,6 +11,34 @@ W2TD_BASE = 'W2TD'
 W2TD_AUDIO = f'{W2TD_BASE}/webrtc_audio_container'
 
 
+# ── W2TD Logger ──────────────────────────────────────────────────
+_LOG_MAX = 200
+
+def _get_logger():
+    try:
+        p = me.parent()
+        while p:
+            if p.name in ('W2TD', 'W2TD_Pro'):
+                return p.parent().op('logger')
+            p = p.parent()
+    except Exception:
+        pass
+    return None
+
+def _log_error(msg):
+    import datetime
+    line = f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {msg}"
+    print(line)
+    dat = _get_logger()
+    if dat is None:
+        return
+    existing = dat.text.splitlines() if dat.text.strip() else []
+    existing.insert(0, line)
+    if len(existing) > _LOG_MAX:
+        existing = existing[:_LOG_MAX]
+    dat.text = '\n'.join(existing)
+# ─────────────────────────────────────────────────────────────────
+
 def _w2td_base():
 	try:
 		p = parent(2)
@@ -64,7 +92,7 @@ def _auto_select_audio_chop(webrtcDAT, connectionId):
 	"""When WebRTC connects, auto-set webrtc_audio_1 Connection."""
 	audio_chop = _op_audio_chop('webrtc_audio_1')
 	if audio_chop is None:
-		print('[W2TD WebRTC Error] webrtc_audio_1 not found - create Audio Stream In CHOP named "webrtc_audio_1"')
+		_log_error('[W2TD WebRTC Error] webrtc_audio_1 not found - create Audio Stream In CHOP named "webrtc_audio_1"')
 		return
 	# TD version differences: try all known Connection parameter names.
 	# Note: getTracks() is not a valid TD Python API - connection-only is sufficient.
@@ -79,34 +107,34 @@ def _auto_select_audio_chop(webrtcDAT, connectionId):
 				matched_par = par_name
 				break
 			except Exception as e:
-				print(f'[W2TD WebRTC Error] Set {par_name} failed: {e}')
+				_log_error(f'[W2TD WebRTC Error] Set {par_name} failed: {e}')
 	if not set_ok:
 		# Dump all par names containing webrtc/connect/track so we can find the correct one
 		try:
 			relevant = [p.name for p in audio_chop.pars()
 			            if any(k in p.name.lower() for k in ('webrtc', 'connect', 'track', 'stream'))]
-			print(f'[W2TD WebRTC] webrtc_audio_1 relevant pars: {relevant}')
+			# print(f'[W2TD WebRTC] webrtc_audio_1 relevant pars: {relevant}')
 		except Exception:
 			pass
-	print(f'[W2TD WebRTC] webrtc_audio_1 conn={connectionId!r} type={type(connectionId).__name__} par={matched_par} ok={set_ok}')
+	# print(f'[W2TD WebRTC] webrtc_audio_1 conn={connectionId!r} type={type(connectionId).__name__} par={matched_par} ok={set_ok}')
 
 
 def _send_to_client(connectionId, data):
 	"""Send a JSON message back to the mobile client via Web Server DAT."""
 	ws = _op_web()
 	if ws is None:
-		print('[W2TD WebRTC Error] Web Server DAT not found - create web_server_dat under W2TD')
+		_log_error('[W2TD WebRTC Error] Web Server DAT not found - create web_server_dat under W2TD')
 		return
 
 	addr = op('/').fetch(f'w2td_webrtc_addr_{connectionId}', None)
 	if addr is None:
-		print(f'[W2TD WebRTC Error] No client addr for connectionId={connectionId}')
+		_log_error(f'[W2TD WebRTC Error] No client addr for connectionId={connectionId}')
 		return
 
 	try:
 		ws.webSocketSendText(addr, json.dumps(data))
 	except Exception as e:
-		print(f'[W2TD WebRTC Error] Send failed for connectionId={connectionId}: {e}')
+		_log_error(f'[W2TD WebRTC Error] Send failed for connectionId={connectionId}: {e}')
 
 
 def onOffer(webrtcDAT, connectionId, localSdp):
@@ -119,7 +147,7 @@ def onAnswer(webrtcDAT, connectionId, localSdp):
 	"""Called after createAnswer() - set local description and send answer to browser."""
 	webrtcDAT.setLocalDescription(connectionId, 'answer', localSdp, stereo=False)
 	_send_to_client(connectionId, {'type': 'webrtc_answer', 'sdp': localSdp})
-	print(f'[W2TD WebRTC] Answer sent to connectionId={connectionId}')
+	# print(f'[W2TD WebRTC] Answer sent to connectionId={connectionId}')
 
 
 def onIceCandidate(webrtcDAT, connectionId, candidate, lineIndex, sdpMid):
@@ -211,7 +239,8 @@ def _defer_wt_update(webrtcDAT, connectionId, state, slot):
 			try:
 				sync_mod.module.sync()
 			except Exception as e:
-				print(f'[W2TD WebRTC Error] webrtc_table_sync failed: {e}')
+				# print(f'[W2TD WebRTC Error] webrtc_table_sync failed: {e}')
+				pass
 		if state == 'connected':
 			_auto_select_audio_chop(webrtcDAT, connectionId)
 
@@ -220,7 +249,7 @@ def _defer_wt_update(webrtcDAT, connectionId, state, slot):
 
 def onConnectionStateChange(webrtcDAT, connectionId, state):
 	"""Called when the overall connection state changes."""
-	print(f'[W2TD WebRTC] connectionId={connectionId} state={state}')
+	# print(f'[W2TD WebRTC] connectionId={connectionId} state={state}')
 	slot = _slot_for_conn_id(connectionId) if state in ('failed', 'closed', 'disconnected') else None
 	# Defer webrtc_table update, sync, and auto_select to next frame -> avoids cook dependency loop
 	_defer_wt_update(webrtcDAT, connectionId, state, slot)
@@ -235,4 +264,4 @@ def onConnectionStateChange(webrtcDAT, connectionId, state):
 
 def onIceConnectionStateChange(webrtcDAT, connectionId, state):
 	"""Called when the ICE connection state changes."""
-	print(f'[W2TD WebRTC] ICE connectionId={connectionId} iceState={state}')
+	# print(f'[W2TD WebRTC] ICE connectionId={connectionId} iceState={state}')

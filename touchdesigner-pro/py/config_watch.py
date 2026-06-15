@@ -124,8 +124,8 @@ def _do_broadcast():
 			sent += 1
 		except Exception:
 			pass
-	print(f'[W2TD] Config broadcast -> {sent} clients')
-	# Update web_render_top resolution + transform_top rotation inside webrtc_video_container
+	# print(f'[W2TD] Config broadcast -> {sent} clients')
+	# # Update web_render_top resolution + transform_top rotation inside webrtc_video_container
 	_dim_map = {'non-commercial': 1280, 'fhd': 1920}
 	try:
 		res_str = ''
@@ -185,7 +185,8 @@ def _do_broadcast():
 					except Exception as e:
 						print(f'[W2TD] Error setting crop_top_{i} values: {e}')
 			if updated:
-				print(f'[W2TD] web_render_top resolution -> {sq}x{sq}, transform rotate -> {rotate_deg} ({updated} TOPs)')
+				# print(f'[W2TD] web_render_top resolution -> {sq}x{sq}, transform rotate -> {rotate_deg} ({updated} TOPs)')
+				pass
 	except Exception:
 		pass
 	# If videoout=js, send canvas_code directly (no module access — avoids compilation errors)
@@ -211,7 +212,7 @@ def _do_broadcast():
 						web.webSocketSendText(_addr, _code_msg)
 					except Exception:
 						pass
-				print(f'[W2TD Config Watch] canvas_code sent ({len(_code)} chars)')
+				# print(f'[W2TD Config Watch] canvas_code sent ({len(_code)} chars)')
 	except Exception as e:
 		print(f'[W2TD Config Watch] canvas_code send failed: {e}')
 
@@ -223,7 +224,8 @@ def _do_broadcast():
 		if sync_dat and hasattr(sync_dat, 'module') and hasattr(sync_dat.module, 'sync'):
 			sync_dat.module.sync()
 	except Exception as e:
-		print(f'[W2TD Config Watch] sync trigger failed: {e}')
+		# print(f'[W2TD Config Watch] sync trigger failed: {e}')
+		pass
 
 
 def _debounced_broadcast():

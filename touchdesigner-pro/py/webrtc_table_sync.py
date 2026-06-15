@@ -116,7 +116,7 @@ def _read_rows():
 	t = _get_table()
 	if t is None or t.numRows < 2:
 		return []
-	print(f'[W2TD WebRTC Sync] webrtc_table numRows={t.numRows}')
+	# print(f'[W2TD WebRTC Sync] webrtc_table numRows={t.numRows}')
 	seen = {}
 	for r in range(1, t.numRows):
 		try:
@@ -340,7 +340,8 @@ def sync():
 
 	# ── RX: Audio Stream In CHOPs ─────────────────────────────────────────────
 	if not mic_rx:
-		print('[W2TD WebRTC Sync RX] Microphone disabled — skipping Audio Stream In node creation')
+		# print('[W2TD WebRTC Sync RX] Microphone disabled — skipping Audio Stream In node creation')
+		pass
 	existing = {}
 	for chop in (container.ops('webrtc_audio_*') if hasattr(container, 'ops') else []):
 		if chop.name.startswith('webrtc_audio_') and chop.name[14:].isdigit():
@@ -365,7 +366,7 @@ def sync():
 	for name in to_delete:
 		try:
 			existing[name].destroy()
-			print(f'[W2TD WebRTC Sync] Destroyed {name}')
+			# print(f'[W2TD WebRTC Sync] Destroyed {name}')
 		except Exception as e:
 			print(f'[W2TD WebRTC Sync] Error Destroy {name} failed: {e}')
 
@@ -375,7 +376,7 @@ def sync():
 		if chop is None:
 			try:
 				chop = container.create('audiostreaminCHOP', name)
-				print(f'[W2TD WebRTC Sync] Created {name}')
+				# print(f'[W2TD WebRTC Sync] Created {name}')
 			except Exception as e:
 				print(f'[W2TD WebRTC Sync] Error Create {name} failed: {e}')
 				continue
@@ -429,14 +430,16 @@ def sync():
 						pass
 
 	if rows:
-		print(f'[W2TD WebRTC Sync RX] {len(rows)} audio stream in chops synced')
+		# print(f'[W2TD WebRTC Sync RX] {len(rows)} audio stream in chops synced')
+		pass
 	else:
-		print('[W2TD WebRTC Sync RX] No connections - all audio stream in chops removed')
+		# print('[W2TD WebRTC Sync RX] No connections - all audio stream in chops removed')
+		pass
 
 	# ── TX: Audio Stream Out (TD -> Mobile) ───────────────────────────────────
 	audio_tx = _read_audio_tx_enabled()
 	audio_bus = _get_audio_bus() if audio_tx else None
-	print(f'[W2TD WebRTC Sync TX] audio_tx={audio_tx} audio_bus={audio_bus}')
+	# print(f'[W2TD WebRTC Sync TX] audio_tx={audio_tx} audio_bus={audio_bus}')
 	if audio_bus is None:
 		return
 
@@ -467,13 +470,13 @@ def sync():
 		if sel:
 			try:
 				sel.destroy()
-				print(f'[W2TD WebRTC Sync TX] Destroyed select_slot{slot}')
+				# print(f'[W2TD WebRTC Sync TX] Destroyed select_slot{slot}')
 			except Exception as e:
 				print(f'[W2TD WebRTC Sync TX] Error Destroy select_slot{slot}: {e}')
 		if out:
 			try:
 				out.destroy()
-				print(f'[W2TD WebRTC Sync TX] Destroyed webrtc_audio_out_{slot}')
+				# print(f'[W2TD WebRTC Sync TX] Destroyed webrtc_audio_out_{slot}')
 			except Exception as e:
 				print(f'[W2TD WebRTC Sync TX] Error Destroy webrtc_audio_out_{slot}: {e}')
 
@@ -490,7 +493,7 @@ def sync():
 		if sel is None:
 			try:
 				sel = w2td_audio_c.create('selectCHOP', select_name)
-				print(f'[W2TD WebRTC Sync TX] Created {select_name}')
+				# # print(f'[W2TD WebRTC Sync TX] Created {select_name}')
 			except Exception as e:
 				print(f'[W2TD WebRTC Sync TX] Error Create {select_name}: {e}')
 				sel = None
@@ -521,7 +524,7 @@ def sync():
 			if is_new_audio:
 				try:
 					out = w2td_audio_c.create('audiostreamoutCHOP', out_name)
-					print(f'[W2TD WebRTC Sync TX] Created {out_name}')
+					# # print(f'[W2TD WebRTC Sync TX] Created {out_name}')
 				except Exception as e:
 					print(f'[W2TD WebRTC Sync TX] Error Create {out_name}: {e}')
 					out = None
@@ -544,7 +547,7 @@ def sync():
 					newly_created_slots.append(slot)
 
 	if tx_count:
-		print(f'[W2TD WebRTC Sync TX] {tx_count} audio out nodes synced')
+		# print(f'[W2TD WebRTC Sync TX] {tx_count} audio out nodes synced')
 		if newly_created_slots:
 			webrtc = _get_webrtc()
 			if webrtc:
@@ -557,14 +560,15 @@ def sync():
 							try:
 								track_name = f'audio_out_{s}'
 								webrtc.addTrack(cid, track_name, 'audio')
-								print(f'[W2TD WebRTC Sync TX] addTrack("{track_name}", audio) for slot {s}')
+								# print(f'[W2TD WebRTC Sync TX] addTrack("{track_name}", audio) for slot {s}')
 								webrtc.createOffer(cid)
-								print(f'[W2TD WebRTC Sync TX] TD createOffer for slot {s}, conn_id={cid}')
+								# print(f'[W2TD WebRTC Sync TX] TD createOffer for slot {s}, conn_id={cid}')
 							except Exception as ex:
 								print(f'[W2TD WebRTC Sync TX] addTrack/createOffer error for slot {s}: {ex}')
 				run(_trigger_offers, delayFrames=3, fromOP=webrtc)
 	elif active_slots:
-		print('[W2TD WebRTC Sync TX] Warning: active slots but no audio TX nodes created')
+		# print('[W2TD WebRTC Sync TX] Warning: active slots but no audio TX nodes created')
+		pass
 
 
 def onTableChange(dat, prevDAT, info):

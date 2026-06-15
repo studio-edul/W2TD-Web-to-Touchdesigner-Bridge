@@ -15,6 +15,34 @@ NODE_OFFSET_Y = 100
 _CAM_TOP_DIM_MAP = {'non-commercial': 1280, 'fhd': 1920}
 
 
+# ── W2TD Logger ──────────────────────────────────────────────────
+_LOG_MAX = 200
+
+def _get_logger():
+    try:
+        p = me.parent()
+        while p:
+            if p.name in ('W2TD', 'W2TD_Pro'):
+                return p.parent().op('logger')
+            p = p.parent()
+    except Exception:
+        pass
+    return None
+
+def _log_error(msg):
+    import datetime
+    line = f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {msg}"
+    print(line)
+    dat = _get_logger()
+    if dat is None:
+        return
+    existing = dat.text.splitlines() if dat.text.strip() else []
+    existing.insert(0, line)
+    if len(existing) > _LOG_MAX:
+        existing = existing[:_LOG_MAX]
+    dat.text = '\n'.join(existing)
+# ─────────────────────────────────────────────────────────────────
+
 def _find_config():
 	"""Find w2td_config Table DAT using video container's W2TD parent + fallbacks."""
 	# Primary: navigate via webrtc_video_container -> W2TD parent (most reliable)
@@ -197,7 +225,7 @@ def sync(table_dat=None):
 	if container is None:
 		shown = op('/').fetch('w2td_cam_render_container_err', False)
 		if not shown:
-			print('[Cam Render Sync] Error: webrtc_video_container not found - create W2TD/webrtc_video_container (Container COMP) and place DAT Execute inside it')
+			_log_error('[Cam Render Sync] Error: webrtc_video_container not found - create W2TD/webrtc_video_container (Container COMP) and place DAT Execute inside it')
 			op('/').store('w2td_cam_render_container_err', True)
 		return
 
@@ -249,9 +277,9 @@ def sync(table_dat=None):
 				pass
 			try:
 				existing[name].destroy()
-				print(f'[Cam Render Sync] Destroyed {name}')
+				# print(f'[Cam Render Sync] Destroyed {name}')
 			except Exception as e:
-				print(f'[Cam Render Sync] Error destroying {name}: {e}')
+				_log_error(f'[Cam Render Sync] Error destroying {name}: {e}')
 
 	# Create/update nodes: web_render_top -> transform_top -> crop_top -> camera_slot{N} (null TOP) -> layout1
 	for i, name in enumerate(target_names):
@@ -262,9 +290,9 @@ def sync(table_dat=None):
 		if top is None:
 			try:
 				top = container.create('webrenderTOP', name)
-				print(f'[Cam Render Sync] Created {name}')
+				# print(f'[Cam Render Sync] Created {name}')
 			except Exception as e:
-				print(f'[Cam Render Sync] Error creating {name}: {e}')
+				_log_error(f'[Cam Render Sync] Error creating {name}: {e}')
 				continue
 		slot = slot_list[i] if i < len(slot_list) else idx
 		url = f'{base_url}/cam_receiver.html?port={port}&slot={slot}&res={res_key}'
@@ -289,7 +317,7 @@ def sync(table_dat=None):
 			top.nodeX = 0
 			top.nodeY = -i * NODE_OFFSET_Y
 		except Exception as e:
-			print(f'[Cam Render Sync] Error setting {name} params: {e}')
+			_log_error(f'[Cam Render Sync] Error setting {name} params: {e}')
 		op('/').store(f'w2td_web_render_slot_{slot}', top.path)
 
 		# --- transform_top ---
@@ -298,15 +326,15 @@ def sync(table_dat=None):
 		if t_top is None:
 			try:
 				t_top = container.create('transformTOP', t_name)
-				print(f'[Cam Render Sync] Created {t_name}')
+				# print(f'[Cam Render Sync] Created {t_name}')
 			except Exception as e:
-				print(f'[Cam Render Sync] Error creating {t_name}: {e}')
+				_log_error(f'[Cam Render Sync] Error creating {t_name}: {e}')
 				t_top = None
 		if t_top:
 			try:
 				t_top.par.rotate = rotate_deg
 			except Exception as e:
-				print(f'[Cam Render Sync] Error setting {t_name} rotate: {e}')
+				_log_error(f'[Cam Render Sync] Error setting {t_name} rotate: {e}')
 			try:
 				t_top.nodeX = top.nodeX + 150
 				t_top.nodeY = -i * NODE_OFFSET_Y
@@ -315,7 +343,7 @@ def sync(table_dat=None):
 			try:
 				top.outputConnectors[0].connect(t_top.inputConnectors[0])
 			except Exception as e:
-				print(f'[Cam Render Sync] Error connecting {name} -> {t_name}: {e}')
+				_log_error(f'[Cam Render Sync] Error connecting {name} -> {t_name}: {e}')
 
 		# --- crop_top ---
 		c_name = f'crop_top_{idx}'
@@ -323,9 +351,9 @@ def sync(table_dat=None):
 		if c_top is None:
 			try:
 				c_top = container.create('cropTOP', c_name)
-				print(f'[Cam Render Sync] Created {c_name}')
+				# print(f'[Cam Render Sync] Created {c_name}')
 			except Exception as e:
-				print(f'[Cam Render Sync] Error creating {c_name}: {e}')
+				_log_error(f'[Cam Render Sync] Error creating {c_name}: {e}')
 				c_top = None
 		if c_top:
 			try:
@@ -341,7 +369,7 @@ def sync(table_dat=None):
 				c_top.par.croptopunit    = 0
 				c_top.par.cropbottomunit = 0
 			except Exception as e:
-				print(f'[Cam Render Sync] Error setting {c_name} crop units: {e}')
+				_log_error(f'[Cam Render Sync] Error setting {c_name} crop units: {e}')
 			try:
 				if screenmode == 'landscape':
 					# After -90 transform: black bars appear on top/bottom
@@ -356,12 +384,12 @@ def sync(table_dat=None):
 					c_top.par.croptop    = sq
 					c_top.par.cropbottom = 0
 			except Exception as e:
-				print(f'[Cam Render Sync] Error setting {c_name} crop values: {e}')
+				_log_error(f'[Cam Render Sync] Error setting {c_name} crop values: {e}')
 			try:
 				if t_top:
 					t_top.outputConnectors[0].connect(c_top.inputConnectors[0])
 			except Exception as e:
-				print(f'[Cam Render Sync] Error connecting {t_name} -> {c_name}: {e}')
+				_log_error(f'[Cam Render Sync] Error connecting {t_name} -> {c_name}: {e}')
 
 		# --- null_top (camera_slot{N}) ---
 		n_name = f'camera_slot{slot}'
@@ -369,9 +397,9 @@ def sync(table_dat=None):
 		if n_top is None:
 			try:
 				n_top = container.create('nullTOP', n_name)
-				print(f'[Cam Render Sync] Created {n_name}')
+				# print(f'[Cam Render Sync] Created {n_name}')
 			except Exception as e:
-				print(f'[Cam Render Sync] Error creating {n_name}: {e}')
+				_log_error(f'[Cam Render Sync] Error creating {n_name}: {e}')
 				n_top = None
 		if n_top:
 			try:
@@ -383,7 +411,7 @@ def sync(table_dat=None):
 				if c_top:
 					c_top.outputConnectors[0].connect(n_top.inputConnectors[0])
 			except Exception as e:
-				print(f'[Cam Render Sync] Error connecting {c_name} -> {n_name}: {e}')
+				_log_error(f'[Cam Render Sync] Error connecting {c_name} -> {n_name}: {e}')
 
 		layout_src = n_top or c_top or t_top or top
 		try:
@@ -402,7 +430,7 @@ def sync(table_dat=None):
 	if slots:
 		prev = tuple(op('/').fetch('w2td_cam_render_last_slots', ()))
 		if tuple(slots) != prev:
-			print(f'[Cam Render Sync] {len(slots)} web render TOPs synced (slots {slots})')
+			# print(f'[Cam Render Sync] {len(slots)} web render TOPs synced (slots {slots})')
 			op('/').store('w2td_cam_render_last_slots', tuple(slots))
 		# Set layout1 resolution based on cropped output size
 		try:

@@ -7,12 +7,38 @@
 #
 # Automatically broadcasts config changes to all connected clients.
 # Uses debouncing to prevent excessive broadcasts during rapid edits.
-# Broadcast logic is self-contained (no web_server_dat.module access) to avoid module compilation errors.
-
-import json
+# Delegates config message building to callbacks.py broadcast_config().
 
 W2TD_BASE = 'W2TD'
 
+
+# ── W2TD Logger ──────────────────────────────────────────────────
+_LOG_MAX = 200
+
+def _get_logger():
+    try:
+        p = me.parent()
+        while p:
+            if p.name in ('W2TD', 'W2TD_Pro'):
+                return p.parent().op('logger')
+            p = p.parent()
+    except Exception:
+        pass
+    return None
+
+def _log_error(msg):
+    import datetime
+    line = f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {msg}"
+    print(line)
+    dat = _get_logger()
+    if dat is None:
+        return
+    existing = dat.text.splitlines() if dat.text.strip() else []
+    existing.insert(0, line)
+    if len(existing) > _LOG_MAX:
+        existing = existing[:_LOG_MAX]
+    dat.text = '\n'.join(existing)
+# ─────────────────────────────────────────────────────────────────
 
 def _w2td_base():
 	try:
@@ -60,72 +86,18 @@ def _read_config():
 	return out
 
 
-def _cfg_val(cfg, *keys, default=0):
-	"""Try keys in order; normalize to int."""
-	for k in keys:
-		if k in cfg:
-			try:
-				return int(float(cfg[k]))
-			except (ValueError, TypeError):
-				return default
-	return default
-
-
-def _build_config_msg(cfg):
-	"""Build config JSON dict matching w2td_config key names."""
-	out = {
-		'type': 'config',
-		'sample_rate': _cfg_val(cfg, 'Samplerate', 'samplerate', 'sample_rate', default=30),
-		'wake_lock': _cfg_val(cfg, 'Wakelock', 'wakelock', 'wake_lock', default=1),
-		'haptic': _cfg_val(cfg, 'Haptic', 'haptic', default=1),
-		'sensor_motion': _cfg_val(cfg, 'Motion', 'motion', 'sensor_motion', default=1),
-		'sensor_orientation': _cfg_val(cfg, 'Orientation', 'orientation', 'sensor_orientation', default=1),
-		'sensor_geolocation': _cfg_val(cfg, 'Geolocation', 'geolocation', 'sensor_geolocation', default=1),
-		'sensor_touch': _cfg_val(cfg, 'Touch', 'touch', 'sensor_touch', default=1),
-		'dev_mode': _cfg_val(cfg, 'Devmode', 'devmode', 'dev_mode', default=1),
-		'sensor_rear_camera': _cfg_val(cfg, 'Rearcamera', 'rearcamera', 'sensor_rear_camera', default=0),
-		'sensor_front_camera': _cfg_val(cfg, 'Frontcamera', 'frontcamera', 'sensor_front_camera', default=0),
-		'sensor_microphone': _cfg_val(cfg, 'Microphone', 'microphone', 'sensor_microphone', default=1),
-		'audio_echo_cancellation': _cfg_val(cfg, 'Echocancellation', 'echocancellation', 'audio_echo_cancellation', default=0),
-		'audio_noise_suppression': _cfg_val(cfg, 'Noisesuppression', 'noisesuppression', 'audio_noise_suppression', default=0),
-		'audio_auto_gain': _cfg_val(cfg, 'Audiogain', 'audiogain', 'audio_auto_gain', default=0),
-		'show_dots': _cfg_val(cfg, 'Showdots', 'showdots', 'show_dots', default=1),
-	}
-	ice_srv = (cfg.get('ice_servers') or cfg.get('Ice_servers') or '').strip()
-	if ice_srv:
-		out['ice_servers'] = ice_srv
-	if (cfg.get('ice_transport_policy') or cfg.get('Ice_transport_policy') or '').strip() == 'relay':
-		out['ice_transport_policy'] = 'relay'
-	cam_res = 'non-commercial'
-	for k, v in cfg.items():
-		if k.lower() == 'resolution':
-			cam_res = v.strip().lower()
-			break
-	out['cam_resolution'] = cam_res
-	return out
 
 
 def _do_broadcast():
-	"""Send config to connected clients only."""
+	"""Broadcast config via callbacks.py, then update render TOPs."""
 	web = _op('web_server_dat')
 	if web is None:
 		return
-	cfg = _read_config()
-	msg = json.dumps(_build_config_msg(cfg))
-	slots = op('/').fetch('w2td_client_slots', {})
-	active = set()
 	try:
-		active = set(getattr(web, 'webSocketConnections', []) or [])
-	except Exception:
-		pass
-	valid = [a for a in slots.keys() if str(a) in active]
-	for addr in valid:
-		try:
-			web.webSocketSendText(addr, msg)
-		except Exception:
-			pass
-	if valid or slots:
-		print(f'[W2TD] Config broadcast -> {len(valid)} clients' + (f' ({len(slots) - len(valid)} stale)' if len(slots) > len(valid) else ''))
+		web.module.broadcast_config(web)
+	except Exception as e:
+		_log_error(f'[W2TD Config Watch] broadcast_config failed: {e}')
+	cfg = _read_config()
 	# Update web_render_top resolution + transform_top rotation inside webrtc_video_container
 	_dim_map = {'non-commercial': 1280, 'fhd': 1920}
 	try:
@@ -161,7 +133,7 @@ def _do_broadcast():
 					try:
 						t_top.par.rotate = rotate_deg
 					except Exception as e:
-						print(f'[W2TD] Error setting transform_top_{i} rotate: {e}')
+						_log_error(f'[W2TD] Error setting transform_top_{i} rotate: {e}')
 				c_top = container.op(f'crop_top_{i}')
 				if c_top:
 					crop_px = sq * 7 // 32
@@ -171,7 +143,7 @@ def _do_broadcast():
 						c_top.par.croptopunit    = 0
 						c_top.par.cropbottomunit = 0
 					except Exception as e:
-						print(f'[W2TD] Error setting crop_top_{i} units: {e}')
+						_log_error(f'[W2TD] Error setting crop_top_{i} units: {e}')
 					try:
 						if screenmode_str == 'landscape':
 							c_top.par.cropleft   = 0
@@ -184,9 +156,10 @@ def _do_broadcast():
 							c_top.par.croptop    = sq
 							c_top.par.cropbottom = 0
 					except Exception as e:
-						print(f'[W2TD] Error setting crop_top_{i} values: {e}')
+						_log_error(f'[W2TD] Error setting crop_top_{i} values: {e}')
 			if updated:
-				print(f'[W2TD] web_render_top resolution -> {sq}x{sq}, transform rotate -> {rotate_deg} ({updated} TOPs)')
+				# print(f'[W2TD] web_render_top resolution -> {sq}x{sq}, transform rotate -> {rotate_deg} ({updated} TOPs)')
+				pass
 	except Exception:
 		pass
 

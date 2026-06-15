@@ -14,15 +14,15 @@ def _w2td_base():
 	except NameError:
 		pass
 	for p in ('project1', 'project'):
-		w = op(f'{p}/W2TD_Pro')
+		w = op(f'{p}/W2TD')
 		if w:
 			return w
 	root = op('/')
 	if root and root.children:
-		w = root.children[0].op('W2TD_Pro')
+		w = root.children[0].op('W2TD')
 		if w:
 			return w
-	return op('W2TD_Pro')
+	return op('W2TD')
 
 def _op(path_suffix, fallback_name=None):
 	base = _w2td_base()

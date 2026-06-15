@@ -9,6 +9,34 @@ W2TD_BASE = 'W2TD'
 W2TD_AUDIO = f'{W2TD_BASE}/webrtc_audio_container'
 
 
+# ── W2TD Logger ──────────────────────────────────────────────────
+_LOG_MAX = 200
+
+def _get_logger():
+    try:
+        p = me.parent()
+        while p:
+            if p.name in ('W2TD', 'W2TD_Pro'):
+                return p.parent().op('logger')
+            p = p.parent()
+    except Exception:
+        pass
+    return None
+
+def _log_error(msg):
+    import datetime
+    line = f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {msg}"
+    print(line)
+    dat = _get_logger()
+    if dat is None:
+        return
+    existing = dat.text.splitlines() if dat.text.strip() else []
+    existing.insert(0, line)
+    if len(existing) > _LOG_MAX:
+        existing = existing[:_LOG_MAX]
+    dat.text = '\n'.join(existing)
+# ─────────────────────────────────────────────────────────────────
+
 def _w2td_audio():
 	"""Always return webrtc_audio_container."""
 	try:
@@ -97,7 +125,7 @@ def _read_rows():
 	t = _get_table()
 	if t is None or t.numRows < 2:
 		return []
-	print(f'[W2TD WebRTC Sync] webrtc_table numRows={t.numRows}')
+	# print(f'[W2TD WebRTC Sync] webrtc_table numRows={t.numRows}')
 	seen = {}
 	for r in range(1, t.numRows):
 		try:
@@ -153,7 +181,7 @@ def _set_audio_chop_params(chop, conn_id):
 				setattr(chop.par, par_name, conn_id)
 				break
 			except Exception as e:
-				print(f'[W2TD WebRTC Sync] Error Set {par_name} failed: {e}')
+				_log_error(f'[W2TD WebRTC Sync] Error Set {par_name} failed: {e}')
 	# WebRTC Track (mono: select first/only track)
 	for par_name in ('webrtctrack', 'Webrtctrack', 'track', 'Track'):
 		if hasattr(chop.par, par_name):
@@ -181,10 +209,10 @@ def sync():
 	container = _get_container()
 	merge_chop = _get_merge()
 	if container is None:
-		print('[W2TD WebRTC Sync] Error webrtc_audio_container not found - create under W2TD')
+		_log_error('[W2TD WebRTC Sync] Error webrtc_audio_container not found - create under W2TD')
 		return
 	if merge_chop is None:
-		print('[W2TD WebRTC Sync] Error webrtc_audio_merge not found - create Merge CHOP under W2TD/webrtc_audio_container')
+		_log_error('[W2TD WebRTC Sync] Error webrtc_audio_merge not found - create Merge CHOP under W2TD/webrtc_audio_container')
 		return
 
 	rows = _read_rows()
@@ -217,9 +245,9 @@ def sync():
 	for name in to_delete:
 		try:
 			existing[name].destroy()
-			print(f'[W2TD WebRTC Sync] Destroyed {name}')
+			# print(f'[W2TD WebRTC Sync] Destroyed {name}')
 		except Exception as e:
-			print(f'[W2TD WebRTC Sync] Error Destroy {name} failed: {e}')
+			_log_error(f'[W2TD WebRTC Sync] Error Destroy {name} failed: {e}')
 
 	# Create: only when node doesn't exist (check via container.op), same x, y increases upward (-)
 	NODE_OFFSET_Y = 100
@@ -228,9 +256,9 @@ def sync():
 		if chop is None:
 			try:
 				chop = container.create('audiostreaminCHOP', name)
-				print(f'[W2TD WebRTC Sync] Created {name}')
+				# print(f'[W2TD WebRTC Sync] Created {name}')
 			except Exception as e:
-				print(f'[W2TD WebRTC Sync] Error Create {name} failed: {e}')
+				_log_error(f'[W2TD WebRTC Sync] Error Create {name} failed: {e}')
 				continue
 		try:
 			chop.nodeX = 0
@@ -286,9 +314,11 @@ def sync():
 						pass
 
 	if rows:
-		print(f'[W2TD WebRTC Sync] {len(rows)} audio chops synced')
+		# print(f'[W2TD WebRTC Sync] {len(rows)} audio chops synced')
+		pass
 	else:
-		print('[W2TD WebRTC Sync] No connections - all audio chops removed')
+		# print('[W2TD WebRTC Sync] No connections - all audio chops removed')
+		pass
 
 
 def onTableChange(dat, prevDAT, info):

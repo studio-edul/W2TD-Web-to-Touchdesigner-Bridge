@@ -1,4 +1,4 @@
-﻿import socket
+import socket
 import os
 import subprocess
 import sys
@@ -61,6 +61,22 @@ SENSOR_COLS = [
 ]
 MAX_CLIENTS = 20
 
+
+def _ensure_user_site_in_path():
+	"""Add user site-packages to sys.path if not already present.
+	Fixes Windows issue where TD cannot find packages installed via pip --user.
+	"""
+	try:
+		import site
+		user_site = site.getusersitepackages()
+		if user_site and user_site not in sys.path:
+			sys.path.insert(0, user_site)
+			# print(f'[W2TD] Added user site-packages to sys.path: {user_site}')
+	except Exception as e:
+		# print(f'[W2TD] Could not add user site-packages to sys.path: {e}')
+		pass
+
+
 def _init_tables():
 	global MAX_CLIENTS
 	cfg = _read_config()
@@ -89,14 +105,14 @@ def _init_tables():
 		op('/').store(f'w2td_web_render_slot_{s}', None)
 		op('/').store(f'w2td_cam_res_logged_{s}', False)
 		op('/').store(f'w2td_screen_{s}', {})
-	print(f'[W2TD] Slot state reset (max {MAX_CLIENTS} slots)')
+	# print(f'[W2TD] Slot state reset (max {MAX_CLIENTS} slots)')
 
 	t = _op('sensor_table')
 	if t is not None:
 		t.clear()
 		t.appendRow(SENSOR_COLS)
 		# No pre-populated rows - rows are added on connect, removed on disconnect
-		print(f'[W2TD] sensor_table initialized (dynamic rows, max {MAX_CLIENTS} slots)')
+		# print(f'[W2TD] sensor_table initialized (dynamic rows, max {MAX_CLIENTS} slots)')
 	else:
 		print('[W2TD Error] sensor_table DAT not found - create a Table DAT named "sensor_table"')
 
@@ -104,7 +120,7 @@ def _init_tables():
 	if tt is not None:
 		tt.clear()
 		tt.appendRow(['slot', 'touch_id', 'x', 'y', 'state'])
-		print('[W2TD] touch_table initialized')
+		# print('[W2TD] touch_table initialized')
 	else:
 		print('[W2TD Error] touch_table DAT not found - create a Table DAT named "touch_table"')
 
@@ -112,7 +128,7 @@ def _init_tables():
 	if wt is not None:
 		wt.clear()
 		wt.appendRow(['slot', 'name', 'conn_id', 'state'])
-		print('[W2TD] webrtc_table initialized')
+		# print('[W2TD] webrtc_table initialized')
 	else:
 		print('[W2TD Error] webrtc_table DAT not found - create a Table DAT named "webrtc_table"')
 
@@ -142,11 +158,13 @@ def _init_webrtc_ice():
 			_set_par(w, 'turn0server', turn_srv)
 			_set_par(w, 'turn0username', turn_user, ('turn0user',))
 			_set_par(w, 'turn0credential', turn_pass, ('turn0password', 'turn0pass'))
-			print(f'[W2TD] WebRTC DAT ICE TURN configured: {turn_srv}')
+			# print(f'[W2TD] WebRTC DAT ICE TURN configured: {turn_srv}')
 		else:
-			print('[W2TD] WebRTC DAT ICE initialization complete (No TURN server set)')
+			# print('[W2TD] WebRTC DAT ICE initialization complete (No TURN server set)')
+			pass
 	else:
-		print('[W2TD] WebRTC DAT ICE initialization complete')
+		# print('[W2TD] WebRTC DAT ICE initialization complete')
+		pass
 
 
 def _set_par(op_node, primary, value, fallbacks=()):
@@ -182,7 +200,7 @@ def _write_config(key, value):
 						return
 					except Exception:
 						pass
-		print(f'[W2TD] Could not write {key} to w2td_config or COMP parameter')
+		# print(f'[W2TD] Could not write {key} to w2td_config or COMP parameter')
 
 
 def _find_cloudflared():
@@ -293,7 +311,7 @@ def start_fixed_tunnel():
 			**kwargs
 		)
 		op('/').store('w2td_tunnel_proc', proc)
-		print(f'[W2TD] cloudflared 프로세스 시작 (PID {proc.pid})')
+		# print(f'[W2TD] cloudflared 프로세스 시작 (PID {proc.pid})')
 		print(f'[W2TD] 터널 "{tunnel_name}" 연결 중... 잠시 후 "connected" 로그가 뜨면 정상입니다.')
 		print(f'[W2TD] 고정 URL: {qr_url}')
 		_monitor_tunnel_output(proc, tunnel_name, qr_url)
@@ -309,13 +327,13 @@ def stop_tunnel():
 	"""
 	proc = op('/').fetch('w2td_tunnel_proc', None)
 	if proc is None:
-		print('[W2TD] 실행 중인 터널 프로세스 없음 — 건너뜁니다.')
+		# print('[W2TD] 실행 중인 터널 프로세스 없음 — 건너뜁니다.')
 		return
 	try:
 		pid = proc.pid
 		proc.terminate()
 		op('/').store('w2td_tunnel_proc', None)
-		print(f'[W2TD] cloudflared 터널 종료 완료 (PID {pid})')
+		# print(f'[W2TD] cloudflared 터널 종료 완료 (PID {pid})')
 	except Exception as e:
 		print(f'[W2TD Error] 터널 종료 실패: {e}')
 
@@ -327,9 +345,9 @@ def install_packages():
 	PACKAGES = ['qrcode[pil]', 'pycloudflared', 'scipy']
 	CERTIFI_PACKAGE = 'certifi'
 	
-	print('[W2TD Setup] Starting package installation...')
-	print(f'[W2TD Setup] Python: {sys.executable}')
-	print(f'[W2TD Setup] Platform: {platform.system()}')
+	# print('[W2TD Setup] Starting package installation...')
+	# print(f'[W2TD Setup] Python: {sys.executable}')
+	# print(f'[W2TD Setup] Platform: {platform.system()}')
 	all_ok = True
 	
 	# CREATE_NO_WINDOW is Windows-only
@@ -338,33 +356,36 @@ def install_packages():
 		kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
 	
 	# Install certifi first with --upgrade to fix SSL certificate issues (especially on macOS)
-	print(f'[W2TD Setup] Installing {CERTIFI_PACKAGE} (SSL certificates)...')
+	# print(f'[W2TD Setup] Installing {CERTIFI_PACKAGE} (SSL certificates)...')
 	try:
 		subprocess.check_call(
 			[sys.executable, '-m', 'pip', 'install', '--upgrade', '--quiet', CERTIFI_PACKAGE],
 			**kwargs
 		)
-		print(f'[W2TD Setup] {CERTIFI_PACKAGE} OK')
+		# print(f'[W2TD Setup] {CERTIFI_PACKAGE} OK')
 	except Exception as e:
 		print(f'[W2TD Setup Error] {CERTIFI_PACKAGE} FAILED: {e}')
 		all_ok = False
 	
 	# Install other packages
 	for pkg in PACKAGES:
-		print(f'[W2TD Setup] Installing {pkg}...')
+		# print(f'[W2TD Setup] Installing {pkg}...')
 		try:
 			subprocess.check_call(
 				[sys.executable, '-m', 'pip', 'install', '--quiet', pkg],
 				**kwargs
 			)
-			print(f'[W2TD Setup] {pkg} OK')
+			# print(f'[W2TD Setup] {pkg} OK')
 		except Exception as e:
 			print(f'[W2TD Setup Error] {pkg} FAILED: {e}')
 			all_ok = False
 	
+	# After installation, ensure user site-packages is in sys.path
+	_ensure_user_site_in_path()
+
 	if all_ok:
 		print('[W2TD Setup] All packages installed. You can now use W2TD from any directory.')
-		print('[W2TD Setup] Note: Restart TouchDesigner if SSL certificate errors persist.')
+		# print('[W2TD Setup] Note: Restart TouchDesigner if SSL certificate errors persist.')
 	else:
 		print('[W2TD Setup Error] Some packages failed. Check the log above.')
 
@@ -384,7 +405,7 @@ def _configure_ssl():
 		os.environ['SSL_CERT_FILE'] = cert_path
 		os.environ['REQUESTS_CA_BUNDLE'] = cert_path
 		ssl._create_default_https_context = lambda: ssl.create_default_context(cafile=cert_path)
-		print(f'[W2TD] SSL certificates configured: {cert_path}')
+		# print(f'[W2TD] SSL certificates configured: {cert_path}')
 	except ImportError:
 		print('[W2TD Error] certifi not installed. Run op("w2td_setup").module.install() first.')
 	except Exception as e:
@@ -392,7 +413,8 @@ def _configure_ssl():
 
 
 def onStart():
-	print('[W2TD] onStart triggered')
+	print('[W2TD] onStart — SSL, 테이블 초기화, WebRTC ICE, 터널/QR 생성')
+	_ensure_user_site_in_path()  # 추가: TD 재시작 시 user site-packages 경로 확보
 	_configure_ssl()
 	_init_tables()
 	_init_webrtc_ice()
@@ -400,7 +422,7 @@ def onStart():
 
 
 def onExit():
-	print('[W2TD] 고정 URL 터널 세팅 시작...')
+	# print('[W2TD] 고정 URL 터널 세팅 시작...')
 	start_fixed_tunnel()
 
 
@@ -422,7 +444,7 @@ def _read_config():
 	return out
 
 def generate():
-	print('[W2TD] generate() start')
+	# print('[W2TD] generate() start')
 
 	# Read port from w2td_config (default: 9980)
 	cfg = _read_config()
@@ -431,12 +453,12 @@ def generate():
 		port = int(port_val) if port_val else 9980
 	except (ValueError, TypeError):
 		port = 9980
-	print(f'[W2TD] Using port: {port}')
+	# print(f'[W2TD] Using port: {port}')
 
 	# 1. Import qrcode
 	try:
 		import qrcode
-		print('[W2TD] qrcode import OK')
+		# print('[W2TD] qrcode import OK')
 	except ImportError:
 		print('[W2TD Error] qrcode not installed. Run op("w2td_setup").module.install() first.')
 		return
@@ -518,7 +540,7 @@ def generate():
 	if parent_comp:
 		try:
 			setattr(parent_comp.par, url_par_name, short_host)
-			print(f'[W2TD] Target COMP found: {parent_comp.path}, {url_par_name} set to {short_host}')
+			# print(f'[W2TD] Target COMP found: {parent_comp.path}, {url_par_name} set to {short_host}')
 		except Exception as e:
 			print(f'[W2TD Error] W2TD.par.{url_par_name} set failed on {parent_comp.path}: {e}')
 	else:
@@ -531,7 +553,7 @@ def generate():
 		qr.add_data(qr_url)
 		qr.make(fit=True)
 		img = qr.make_image(fill_color='black', back_color='white')
-		print('[W2TD] QR image generated')
+		# print('[W2TD] QR image generated')
 	except Exception as e:
 		print(f'[W2TD Error] QR generation failed: {e}')
 		return
@@ -539,9 +561,9 @@ def generate():
 	# 4. Save to file
 	try:
 		save_path = os.path.join(project.folder, 'qr.png')
-		print(f'[W2TD] Save path: {save_path}')
+		# print(f'[W2TD] Save path: {save_path}')
 		img.save(save_path)
-		print(f'[W2TD] File saved: {os.path.exists(save_path)}')
+		# print(f'[W2TD] File saved: {os.path.exists(save_path)}')
 	except Exception as e:
 		print(f'[W2TD Error] File save failed: {e}')
 		return
@@ -552,10 +574,10 @@ def generate():
 		if movie_top is None:
 			print('[W2TD Error] qr_movie_top not found - check node name')
 			return
-		print(f'[W2TD] qr_movie_top found: {movie_top}')
+		# print(f'[W2TD] qr_movie_top found: {movie_top}')
 		movie_top.par.file = save_path
 		movie_top.par.reloadpulse.pulse()
-		print('[W2TD] TOP reloaded')
+		# print('[W2TD] TOP reloaded')
 	except Exception as e:
 		print(f'[W2TD Error] TOP reload failed: {e}')
 		return
@@ -575,7 +597,7 @@ def generate():
 		op('/').store('w2td_cam_base_url', f'{scheme}://127.0.0.1:{port}')
 		op('/').store('w2td_web_port', port)
 		op('/').store('w2td_cam_tls', tls_on)
-		print(f'[W2TD] cam base URL stored: {scheme}://{local_ip}:{port}')
+		# print(f'[W2TD] cam base URL stored: {scheme}://{local_ip}:{port}')
 		# Also set URL on legacy single web_render_top if it exists
 		web_render = _op('web_render_top')
 		if web_render is not None:
@@ -583,8 +605,8 @@ def generate():
 			if tls_on:
 				receiver_url += '&tls=1'
 			web_render.par.url = receiver_url
-			print(f'[W2TD] web_render_top URL set: {receiver_url}')
+			# print(f'[W2TD] web_render_top URL set: {receiver_url}')
 	except Exception as e:
 		print(f'[W2TD Error] cam base URL store failed: {e}')
 
-	print('[W2TD] generate() done')
+	# print('[W2TD] generate() done')
