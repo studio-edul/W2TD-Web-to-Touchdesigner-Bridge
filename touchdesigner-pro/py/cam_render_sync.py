@@ -1,4 +1,4 @@
-﻿"""
+"""
 sensor_table -> Web Render TOP sync
 ==================================
 Creates web_render_top_1, web_render_top_2, ... based on connected slots.

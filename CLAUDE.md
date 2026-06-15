@@ -32,6 +32,12 @@ URL 위치 (전체 파일 읽기 불필요):
 - **`git add -f` 절대 금지** — .gitignore 규칙을 우회하지 않는다. `development/` 등 ignore된 파일은 로컬 전용.
 - **`git push --force` 절대 금지.**
 
+## Graphify (코드베이스 Knowledge Graph)
+- 프로젝트 구조 파악, 코드 관계 분석 시 `/graphify .` 활용.
+- 이미 그래프가 생성된 경우(`graphify-out/graph.json` 존재) `/graphify query "질문"` 으로 바로 조회.
+- 코드 변경 후 `--update` 플래그로 증분 업데이트 가능.
+- 참고: https://github.com/safishamsi/graphify
+
 ## Commands
 - `/commit [message]` — 브랜치 URL 검증 후 커밋 (@.claude/commands/commit.md)
 - `/update-docs` — README + DEV_DOCS 동기화 (@.claude/commands/update-docs.md)

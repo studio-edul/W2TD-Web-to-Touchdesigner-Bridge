@@ -1,4 +1,4 @@
-﻿import socket
+import socket
 import os
 import subprocess
 import sys

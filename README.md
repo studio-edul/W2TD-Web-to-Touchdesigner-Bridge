@@ -96,9 +96,9 @@ Columns: `key` | `value`. Changes are debounced and broadcast automatically by `
 | `Fixedurl` | _(optional)_ | Named Cloudflare tunnel URL — skip random tunnel |
 | `Turnserver` `Turnusername` `Turnpassword` | _(optional)_ | Custom TURN server |
 | `ice_transport_policy` | _(optional)_ | `relay` = force TURN only |
-| `Backgroundcolor` | `1` | _(Pro)_ Enable background-color push |
-| `Flashlight` | `1` | _(Pro)_ Enable flashlight control |
-| `Hapticfeedback` | `1` | _(Pro)_ Enable haptic from CHOP |
+| `Backgroundcolor` | `1` | Enable background-color push |
+| `Flashlight` | `1` | Enable flashlight control |
+| `Hapticfeedback` | `1` | Enable haptic from CHOP |
 | `Video` | `1` | _(Pro)_ Enable per-slot video downlink TX |
 | `Videoout` | `none` | _(Pro)_ Mobile display mode: `none` = off, `color` = background color control, `js` = live JS canvas sketch, `td` = TD video stream. Also accepted as `Video` key. Changes are broadcast live (no reconnect needed). |
 | `Jsfile` | _(optional)_ | _(Pro)_ Absolute path to a `.js` sketch file. When `Videoout=js`, `config_watch` reads this file and sends `canvas_code` to all clients on config change. |
@@ -231,8 +231,8 @@ Client slot assignments are stored via `op('/').store/fetch` and survive script 
 
 { "type": "haptic", "pattern": [200, 100, 200] }   // vibration pattern
 { "type": "haptic", "state": 1 }                   // continuous vibration on/off
-{ "type": "bg_color", "color": "#ff0000", "duration": 0 }    // Pro
-{ "type": "flashlight", "state": 1 }                          // Pro (rear cam required)
+{ "type": "bg_color", "color": "#ff0000", "duration": 0 }
+{ "type": "flashlight", "state": 1 }                          // rear cam required
 
 { "type": "webrtc_answer", "sdp": "..." }        // answer to mobile offer
 { "type": "webrtc_offer",  "sdp": "..." }        // TD-initiated offer (audio/video downlink renegotiation)
@@ -262,9 +262,9 @@ op('web_server_dat').module.send_haptic_to_all(op('web_server_dat'), pattern=[20
 op('web_server_dat').module.broadcast_haptic_from_chop(op('web_server_dat'))
 ```
 
-## TD Background Color API (Pro)
+## TD Background Color API
 
-Requires `Videoout = color` in `w2td_config`. Color is applied as a full-screen background on the mobile.
+Color is applied as a full-screen background on the mobile. Pro requires `Videoout = color` in `w2td_config`.
 
 ```python
 # Send color to a specific slot
@@ -322,7 +322,7 @@ op('web_server_dat').module.reload_jsfile(op('web_server_dat'))
 ```
 This re-reads the file and broadcasts the new code to all connected clients instantly.
 
-## TD Flashlight API (Pro)
+## TD Flashlight API
 
 Rear camera must be active on the mobile device.
 
@@ -363,10 +363,10 @@ On the mobile side:
 - **Camera** — WebRTC → per-slot Web Render TOP (rear/front, mutually exclusive per device), with transform + crop + layout compositing
 - **Audio downlink** _(Pro)_ — TD Audio Stream Out CHOP → WebRTC → mobile speaker (per-slot routing via `w2td_audio_bus`)
 - **Video downlink** _(Pro)_ — TD Video Stream Out TOP → WebRTC → mobile `<video>` (source: `video_slot{N}` TOP; dev_mode=1: monitor overlay, dev_mode=0: fullscreen background). Requires `Videoout = td`. Managed by `webrtc_video_sync.py` (separate from audio sync).
-- **Background color** _(Pro)_ — broadcast via `w2td_background` or `w2td_color` (r/g/b) or per-slot via `w2td_bg_color_bus` (channels `slot{N}_r/g/b`). Requires `Videoout = color`. Last color is saved to localStorage and instantly applied on mode switch.
+- **Background color** — broadcast via `w2td_background` or `w2td_color` (r/g/b) or per-slot via `w2td_bg_color_bus` (channels `slot{N}_r/g/b`). Pro requires `Videoout = color`. Last color is saved to localStorage and instantly applied on mode switch.
 - **Live JS canvas sketch** _(Pro)_ — inject JavaScript into mobile canvas from a Text DAT or `Jsfile` path. Sensor data (motion, orientation, touch) available inside the sketch via `getSensors()`. Auto-broadcast on edit via `canvas_code_dat_exec.py` or `config_watch.py` (when `Videoout=js` + `Jsfile` set). Requires `Videoout = js`.
 - **Haptic feedback** — pattern-based or continuous, driven by `w2td_haptic` CHOP or Python API (available in both Free and Pro)
-- **Flashlight** _(Pro)_ — driven by `w2td_flashlight` CHOP (channels `slot{N}` or `all`)
+- **Flashlight** — driven by `w2td_flashlight` CHOP (channels `slot{N}` or `all`)
 - **WebSocket Heartbeat** — auto-reconnect on connection loss
 - **Data Ack** — visual confirmation of TD reception (rate-limited 1 Hz)
 - **Device name** — user-defined or auto-detected from User-Agent
@@ -407,9 +407,11 @@ touchdesigner/py/            ← Free TD scripts (W2TD base COMP)
   w2td_init.py               ← onCreate installs packages; onStart starts tunnel + QR
   webrtc_callbacks.py        ← WebRTC DAT callbacks
   webrtc_table_sync.py       ← Audio Stream In CHOP sync
-  config_watch.py            ← Debounced broadcast on w2td_config change
+  config_watch.py            ← Debounced broadcast on w2td_config change (delegates to callbacks.py)
   cam_render_sync.py         ← Per-slot Web Render TOP + transform/crop/layout
-  w2td_zombie_checker.py     ← Cleans up stale slots
+  background_chop_exec.py    ← w2td_background / w2td_bg_color_bus → bg_color msgs
+  haptic_chop_exec.py        ← w2td_haptic → haptic state msgs
+  flashlight_chop_exec.py    ← w2td_flashlight → flashlight msgs
 
 touchdesigner-pro/py/        ← Pro TD scripts (W2TD_Pro base COMP)
   callbacks.py               ← + webrtc_reoffer/reanswer handlers, canvas_code/bg_color/flashlight API
