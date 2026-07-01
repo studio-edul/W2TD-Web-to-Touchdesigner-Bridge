@@ -442,8 +442,30 @@ const W2TD_VERSION = '1.0.0';
         await requestAllPermissions();
         startSensorsAndBroadcast();
       }, { once: true });
+    } else if (/Android/i.test(navigator.userAgent) && typeof LinearAccelerationSensor !== 'undefined' && navigator.permissions) {
+      // Android + Generic Sensor API 지원: 권한 상태 확인 후 prompt면 TAP TO START로 팝업 트리거
+      navigator.permissions.query({ name: 'accelerometer' }).then(status => {
+        if (status.state === 'prompt') {
+          els.userStartOverlay.classList.remove('hidden');
+          els.btnUserStart.addEventListener('click', async function () {
+            els.userStartOverlay.classList.add('hidden');
+            try {
+              const sensor = new LinearAccelerationSensor({ frequency: 30 });
+              sensor.start(); // 사용자 제스처 컨텍스트에서 권한 팝업 트리거
+              sensor.addEventListener('reading', () => sensor.stop(), { once: true });
+            } catch (e) { /* 팝업 거부 또는 미지원 — DeviceMotion fallback으로 진행 */ }
+            await requestAllPermissions();
+            startSensorsAndBroadcast();
+          }, { once: true });
+        } else {
+          // granted 또는 denied — 바로 진행 (denied는 DeviceMotion이 처리)
+          requestAllPermissions().then(() => startSensorsAndBroadcast());
+        }
+      }).catch(() => {
+        requestAllPermissions().then(() => startSensorsAndBroadcast());
+      });
     } else {
-      // Non-iOS: request permissions sequentially
+      // Non-iOS, Generic Sensor API 미지원: request permissions sequentially
       requestAllPermissions().then(() => {
         startSensorsAndBroadcast();
       });
