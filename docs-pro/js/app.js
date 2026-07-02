@@ -441,14 +441,41 @@ const W2TD_VERSION = '1.0.0';
       els.userStartOverlay.classList.remove('hidden');
       els.btnUserStart.addEventListener('click', async function () {
         els.userStartOverlay.classList.add('hidden');
-        // Android + Generic Sensor API: trigger the OS-level sensor prompt
-        // inside this same user-gesture context, if available.
-        if (/Android/i.test(navigator.userAgent) && typeof LinearAccelerationSensor !== 'undefined') {
+        // Android + Generic Sensor API: check the current 'accelerometer'
+        // permission state before acting on it. A native prompt can only be
+        // triggered while state === 'prompt' — once denied, the browser will
+        // never show it again, so we guide the user to change it manually.
+        if (/Android/i.test(navigator.userAgent) && typeof LinearAccelerationSensor !== 'undefined' && navigator.permissions) {
           try {
-            const sensor = new LinearAccelerationSensor({ frequency: 30 });
-            sensor.start(); // 사용자 제스처 컨텍스트에서 권한 팝업 트리거
-            sensor.addEventListener('reading', () => sensor.stop(), { once: true });
-          } catch (e) { /* 팝업 거부 또는 미지원 — DeviceMotion fallback으로 진행 */ }
+            const status = await navigator.permissions.query({ name: 'accelerometer' });
+            addLog('Accelerometer permission state: ' + status.state, 'info');
+            if (status.state === 'prompt') {
+              await new Promise((resolve) => {
+                let settled = false;
+                const finish = () => { if (!settled) { settled = true; resolve(); } };
+                try {
+                  const sensor = new LinearAccelerationSensor({ frequency: 30 });
+                  sensor.addEventListener('reading', () => { sensor.stop(); finish(); }, { once: true });
+                  sensor.addEventListener('error', (e) => {
+                    addLog('Sensor permission popup failed: ' + (e.error ? e.error.message : e.error), 'warn');
+                    finish();
+                  }, { once: true });
+                  sensor.start(); // 사용자 제스처 컨텍스트에서 권한 팝업 트리거
+                } catch (e) {
+                  addLog('LinearAccelerationSensor error: ' + e.message, 'warn');
+                  finish();
+                }
+                setTimeout(finish, 5000); // safety timeout if neither event fires
+              });
+            } else if (status.state === 'denied') {
+              showToast(
+                '센서 권한이 차단되어 있습니다. 주소창 옆 아이콘 → 권한 → Motion sensors를 허용으로 변경 후 새로고침해주세요.',
+                7000
+              );
+            }
+          } catch (e) {
+            addLog('Permission query unsupported: ' + e.message, 'warn');
+          }
         }
         // Integrated permission request: sensors + mic + wakeLock
         await requestAllPermissions();
