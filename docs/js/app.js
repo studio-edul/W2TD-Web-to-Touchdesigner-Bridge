@@ -294,20 +294,17 @@ const W2TD_VERSION = '1.0.0';
     if (SensorModule.isEnabled()) {
       // Sensors already active (e.g. switching from dev mode) — skip permission flow entirely
       startSensorsAndBroadcast();
-    } else if (SensorModule.needsPermissionRequest()) {
-      // iOS: DeviceMotionEvent.requestPermission() must be in a direct button-click handler.
-      // Show a dedicated START button — this is the most reliable iOS gesture trigger.
+    } else {
+      // Always show the START button regardless of platform — do NOT gate its
+      // visibility on DeviceMotionEvent.requestPermission existing (iOS-only API).
+      // iOS/Android branching happens inside the click handler instead, otherwise
+      // Android gets no button at all (needsPermissionRequest() is false there).
       els.userStartOverlay.classList.remove('hidden');
       els.btnUserStart.addEventListener('click', async function () {
         els.userStartOverlay.classList.add('hidden');
         await requestAllPermissions();
         startSensorsAndBroadcast();
       }, { once: true });
-    } else {
-      // Non-iOS: request permissions sequentially
-      requestAllPermissions().then(() => {
-        startSensorsAndBroadcast();
-      });
     }
 
     // Events on touchPad (not touchCanvas) so display:none on canvas doesn't break touch tracking
